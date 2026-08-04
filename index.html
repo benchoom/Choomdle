@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHOOMDLE — Le Wordle du Cyberpunk TCG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<!-- Google Identity Services — nécessite un vrai Client ID + domaine autorisé (voir GOOGLE_CLIENT_ID plus bas) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --bg:#08080d; --bg2:#0f0f18; --panel:#14141f; --panel2:#1a1a29; --line:#2a2a3d;
+    --yellow:#f4e409; --cyan:#26e5e5; --magenta:#ff2e63; --green:#39d97a; --orange:#ff8c3a;
+    --muted:#767b90; --text:#e8e9f0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 3px),
+      radial-gradient(ellipse at top, #12121e 0%, var(--bg) 55%);
+    color:var(--text); font-family:'JetBrains Mono', monospace;
+    min-height:100vh; padding:24px 16px 60px; position:relative; overflow-x:hidden;
+  }
+  body::before{
+    content:""; position:fixed; inset:0;
+    background:linear-gradient(180deg, transparent 0%, rgba(38,229,229,0.02) 50%, transparent 100%);
+    pointer-events:none; animation:scan 7s linear infinite; z-index:1;
+  }
+  @keyframes scan{ 0%{ background-position:0 -100vh; } 100%{ background-position:0 100vh; } }
+  .wrap{ max-width:800px; margin:0 auto; position:relative; z-index:2; }
+  .ff-hidden{ display:none !important; }
+
+  header{ text-align:center; margin-bottom:14px; }
+  .eyebrow{ font-size:11px; letter-spacing:.35em; color:var(--cyan); text-transform:uppercase; margin-bottom:8px; opacity:.85; }
+  h1{
+    font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:clamp(34px,8vw,54px); margin:0;
+    letter-spacing:2px; color:var(--yellow); text-shadow:2px 0 0 var(--magenta), -2px 0 0 var(--cyan);
+    position:relative; display:inline-block; animation:glitch 6s infinite;
+  }
+  @keyframes glitch{
+    0%,93%,100%{ text-shadow:2px 0 0 var(--magenta), -2px 0 0 var(--cyan); transform:translate(0,0); }
+    94%{ text-shadow:-3px 0 0 var(--magenta), 3px 0 0 var(--cyan); transform:translate(-1px,1px); }
+    95%{ text-shadow:3px 0 0 var(--magenta), -3px 0 0 var(--cyan); transform:translate(1px,-1px); }
+    96%{ text-shadow:2px 0 0 var(--magenta), -2px 0 0 var(--cyan); transform:translate(0,0); }
+  }
+  .subtitle{ color:var(--muted); font-size:13px; margin-top:10px; letter-spacing:.03em; }
+
+  /* ---- barre de fonctionnalités : 50% plus petite que les onglets de jeu (13px -> ~10px), couleur cyan comme l'eyebrow ---- */
+  .featurebar{
+    display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap;
+    margin:16px 0 6px;
+  }
+  .fbtn{
+    font-family:'Chakra Petch',sans-serif; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+    font-size:10px; color:var(--cyan); background:transparent; border:1px solid rgba(38,229,229,.35);
+    padding:5px 10px; cursor:pointer; transition:.15s;
+  }
+  .fbtn:hover, .fbtn.active{ background:rgba(38,229,229,.12); border-color:var(--cyan); }
+  select.fbtn{ appearance:none; }
+  .eddies-chip{
+    display:inline-flex; align-items:center; gap:5px; font-size:10px; color:var(--yellow);
+    border:1px solid rgba(244,228,9,.35); padding:5px 10px; font-family:'Chakra Petch',sans-serif; font-weight:700;
+  }
+  .eddies-icon{ width:12px; height:12px; }
+  .account-row{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:center; }
+  .account-row input{
+    background:var(--bg2); border:1px solid var(--line); color:var(--text); padding:5px 8px;
+    font-family:'JetBrains Mono',monospace; font-size:10px;
+  }
+
+  nav.tabs{ display:flex; gap:8px; justify-content:center; margin:10px 0 18px; flex-wrap:wrap; }
+  .tab{
+    background:var(--panel); border:1px solid var(--line); color:var(--muted);
+    font-family:'Chakra Petch',sans-serif; font-weight:600; letter-spacing:.08em;
+    font-size:13px; padding:10px 18px; cursor:pointer; text-transform:uppercase;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+    transition:.15s;
+  }
+  .tab:hover{ color:var(--text); border-color:var(--cyan); }
+  .tab.active{ background:var(--yellow); color:#0a0a10; border-color:var(--yellow); }
+  .tab-eddies{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'Chakra Petch',sans-serif; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    font-size:13px; padding:10px 18px; color:var(--yellow); background:var(--panel); border:1px solid var(--yellow);
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+    margin-left:16px; /* + le gap:8px du conteneur = 24px, soit 3x l'écart normal entre onglets */
+  }
+  .tab-eddies .eddies-icon{ width:14px; height:14px; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--line); padding:18px; margin-bottom:16px;
+    clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);
+  }
+  .statusline{
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
+    font-size:12px; color:var(--muted); margin-bottom:14px; letter-spacing:.03em;
+  }
+  .statusline .stat{ color:var(--cyan); } .statusline .stat b{ color:var(--yellow); font-size:15px; }
+
+  .searchrow{ position:relative; }
+  input.guessInput{
+    width:100%; background:var(--bg2); border:1px solid var(--line); color:var(--text);
+    font-family:'JetBrains Mono',monospace; font-size:15px; padding:13px 14px; outline:none;
+  }
+  input.guessInput:focus{ border-color:var(--cyan); }
+  .suggestions{
+    position:absolute; top:100%; left:0; right:0; background:var(--bg2);
+    border:1px solid var(--line); border-top:none; max-height:220px; overflow-y:auto; z-index:10; display:none;
+  }
+  .suggestions div{ padding:9px 14px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+  .suggestions div:hover, .suggestions div.hi{ background:var(--panel2); color:var(--cyan); }
+  .suggestions div small{ color:var(--muted); margin-left:6px; }
+  .hint{ font-size:11px; color:var(--muted); margin-top:8px; }
+
+  .gridwrap{ overflow-x:auto; }
+  table.guesses{ width:100%; border-collapse:collapse; margin-top:6px; font-size:13px; min-width:600px; }
+  table.guesses th{
+    font-family:'Chakra Petch',sans-serif; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); font-size:11px; font-weight:600; padding:6px 4px; text-align:center;
+  }
+  table.guesses td{ padding:4px; text-align:center; }
+  .cell{
+    padding:10px 6px; font-weight:700; border:1px solid var(--line); background:var(--bg2);
+    color:var(--text); position:relative; animation:flip .4s ease;
+  }
+  @keyframes flip{ 0%{ transform:rotateX(90deg); opacity:0; } 100%{ transform:rotateX(0); opacity:1; } }
+  .cell.name{ text-align:left; font-family:'Chakra Petch',sans-serif; font-weight:600; }
+  .cell.match{ background:rgba(57,217,122,.18); border-color:var(--green); color:var(--green); }
+  .cell.partial{ background:rgba(255,140,58,.15); border-color:var(--orange); color:var(--orange); }
+  .cell.miss{ background:rgba(255,46,99,.08); border-color:var(--magenta); color:#ff9db2; }
+  .arrow{ font-size:11px; margin-left:3px; }
+
+  .banner{
+    text-align:center; padding:16px; margin-top:14px; font-family:'Chakra Petch',sans-serif;
+    font-weight:700; letter-spacing:.05em; display:none;
+  }
+  .banner.win{ display:block; background:rgba(57,217,122,.1); border:1px solid var(--green); color:var(--green); }
+  .banner.fail{ display:block; background:rgba(255,46,99,.08); border:1px solid var(--magenta); color:#ff9db2; }
+  .banner .sub{ display:block; font-weight:400; font-size:12px; color:var(--muted); margin-top:6px; font-family:'JetBrains Mono',monospace; letter-spacing:0; }
+  .banner .rw{ color:var(--yellow); }
+  .legend-quote{
+    text-align:center; font-family:'Chakra Petch',sans-serif; font-style:italic; font-weight:600;
+    font-size:22px; color:var(--cyan); padding:26px 10px; letter-spacing:.02em;
+  }
+
+  .blitzbar, .chromebar, .breachbar{ display:flex; align-items:center; gap:14px; margin-bottom:10px; flex-wrap:wrap; }
+  .timerbox{ font-family:'Chakra Petch',sans-serif; font-size:26px; font-weight:700; color:var(--magenta); min-width:70px; }
+  .scorebox{ color:var(--cyan); font-size:13px; } .scorebox b{ color:var(--yellow); font-size:18px; }
+  .bigbtn{
+    font-family:'Chakra Petch',sans-serif; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    background:var(--yellow); color:#0a0a10; border:none; padding:11px 20px; cursor:pointer; font-size:13px;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  }
+  .bigbtn:hover{ background:var(--cyan); }
+  .bigbtn:disabled{ opacity:.4; cursor:not-allowed; }
+
+  /* Chrome Check */
+  .duel{ display:flex; align-items:center; justify-content:center; gap:18px; margin:20px 0; flex-wrap:wrap; text-align:center; }
+  .duelcard{
+    background:var(--bg2); border:1px solid var(--line); padding:16px 20px; min-width:180px;
+    font-family:'Chakra Petch',sans-serif; font-weight:600; font-size:15px;
+  }
+  .duelop{ font-family:'Chakra Petch',sans-serif; font-size:20px; color:var(--yellow); }
+  .duelattr{ font-size:11px; color:var(--cyan); letter-spacing:.08em; text-transform:uppercase; margin-top:4px; }
+  .tfrow{ display:flex; gap:12px; justify-content:center; }
+  .tfbtn{
+    font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:16px; letter-spacing:.06em;
+    padding:14px 30px; cursor:pointer; border:2px solid var(--line); background:var(--panel2); color:var(--text);
+  }
+  .tfbtn.t{ border-color:var(--green); } .tfbtn.t:hover{ background:rgba(57,217,122,.15); }
+  .tfbtn.f{ border-color:var(--magenta); } .tfbtn.f:hover{ background:rgba(255,46,99,.15); }
+  .flash-correct{ animation:flashg .3s; } .flash-wrong{ animation:flashr .3s; }
+  @keyframes flashg{ 0%{ background:rgba(57,217,122,.4); } 100%{ background:transparent; } }
+  @keyframes flashr{ 0%{ background:rgba(255,46,99,.4); } 100%{ background:transparent; } }
+
+  /* Netrunner Breach glitch */
+  .glitchflash{ animation:glitchf .25s; }
+  @keyframes glitchf{ 0%{ filter:hue-rotate(90deg) contrast(1.6); } 100%{ filter:none; } }
+
+  /* Community podiums */
+  .podiumgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:10px; }
+  .podiumbox{ background:var(--bg2); border:1px solid var(--line); padding:12px; }
+  .podiumbox h4{ margin:0 0 8px; font-family:'Chakra Petch',sans-serif; font-size:12px; letter-spacing:.06em; color:var(--cyan); text-transform:uppercase; }
+  .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); }
+  .podiumrow:last-child{ border-bottom:none; }
+  .podiumrow .val{ color:var(--yellow); font-weight:700; }
+
+  footer{ text-align:center; color:var(--muted); font-size:11px; margin-top:30px; line-height:1.7; }
+  ::-webkit-scrollbar{ width:8px; height:8px; } ::-webkit-scrollbar-thumb{ background:var(--line); }
+  @media (prefers-reduced-motion: reduce){ *{ animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow" data-i18n="eyebrow">Netdeck // Breach Protocol</div>
+    <h1>CHOOMDLE</h1>
+    <div class="subtitle" data-i18n="subtitle">Devine la carte Cyberpunk TCG du jour — fan-made, non affilié à CD Projekt Red / WeirdCo</div>
+
+    <div class="featurebar">
+      <select id="langSelect" class="fbtn"></select>
+      <button class="fbtn" data-panel="community" data-i18n="fbtn_community">Communauté</button>
+      <button class="fbtn" data-panel="stats" data-i18n="fbtn_stats">Mes Stats</button>
+      <button class="fbtn" data-panel="feedback" data-i18n="fbtn_feedback">Feedback</button>
+      <div class="account-row" id="accountRow">
+        <span class="fbtn" id="accountStatus" data-i18n="acc_not_connected">Non connecté</span>
+  <!--        <input id="pseudoInput" type="text" data-i18n-ph="acc_pseudo_ph" placeholder="Choisis un pseudo"> -->
+        <button class="fbtn" id="createAccountBtn" data-i18n="acc_create">Créer un compte gratuit</button>
+        <button class="fbtn" id="googleBtn" data-i18n="acc_google">Se connecter avec Google</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-panel="classic" data-i18n="tab_classic">Classic</button>
+    <button class="tab" data-panel="legend" data-i18n="tab_legend">Legend</button>
+    <button class="tab" data-panel="blitz" data-i18n="tab_blitz">Blitz</button>
+    <button class="tab" data-panel="endless" data-i18n="tab_endless">Endless</button>
+    <button class="tab" data-panel="chrome" data-i18n="tab_chrome">Chrome Check</button>
+    <!-- Netrunner Breach désactivé pour le moment — remettre la classe ci-dessous à rien pour réactiver -->
+    <button class="tab ff-hidden" data-panel="breach" data-i18n="tab_breach">Netrunner Breach</button>
+    <span class="tab-eddies" id="eddiesChip">
+      <svg class="eddies-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" font-family="Chakra Petch, sans-serif" font-weight="700" fill="currentColor">€$</text></svg>
+      <span id="eddiesTotal">0</span>
+    </span>
+  </nav>
+
+  <!-- CLASSIC -->
+  <div class="panel" id="panel-classic">
+    <div class="statusline">
+      <span><span data-i18n="classic_daily">Défi du jour</span> · <span id="dailyDate"></span></span>
+      <span class="stat"><span data-i18n="classic_streak">Série</span> <b id="streakVal">0</b> 🔥 · <span data-i18n="classic_best">Meilleure</span> <b id="bestStreakVal">0</b></span>
+    </div>
+    <div class="searchrow">
+      <input class="guessInput" id="guessInput" type="text" data-i18n-ph="classic_input_ph" placeholder="Tape le nom d'une carte..." autocomplete="off">
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+    <div class="hint" data-i18n="classic_hint">Compare TYPE · FACTION · COÛT (€$) · PUISSANCE · RAM. Orange = au moins une faction commune (sans dire laquelle).</div>
+    <div class="gridwrap">
+      <table class="guesses">
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <tbody id="classicBody"></tbody>
+      </table>
+    </div>
+    <div class="banner" id="classicBanner"></div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="panel" id="panel-legend" style="display:none">
+    <div class="statusline">
+      <span><span data-i18n="legend_daily">Défi Legend du jour</span> · <span id="legendDate"></span></span>
+    </div>
+    <div class="legend-quote" id="legendQuote">« ... »</div>
+    <div class="searchrow" style="display:flex;gap:8px;">
+      <input class="guessInput" id="guessInputLegend" type="text" data-i18n-ph="legend_input_ph" placeholder="Écris le nom exact de la légende..." autocomplete="off" style="flex:1;">
+      <button class="bigbtn" id="submitLegendBtn" data-i18n="legend_submit">Valider</button>
+    </div>
+    <div class="hint" data-i18n="legend_hint">Une seule tentative : orthographe exacte requise, aucune suggestion affichée.</div>
+    <div class="banner" id="legendBanner"></div>
+  </div>
+
+  <!-- BLITZ -->
+  <div class="panel" id="panel-blitz" style="display:none">
+    <div class="blitzbar">
+      <div class="timerbox" id="blitzTimer">90s</div>
+      <div class="scorebox"><span data-i18n="blitz_score">Score</span> <b id="blitzScore">0</b></div>
+      <button class="bigbtn" id="startBlitzBtn" data-i18n="blitz_start">Lancer le Blitz</button>
+    </div>
+    <div class="searchrow">
+      <input class="guessInput" id="guessInputBlitz" type="text" data-i18n-ph="blitz_input_ph" placeholder="90 secondes pour enchaîner un max de cartes..." autocomplete="off" disabled>
+      <div class="suggestions" id="suggestionsBlitz"></div>
+    </div>
+    <div class="gridwrap">
+      <table class="guesses">
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <tbody id="blitzBody"></tbody>
+      </table>
+    </div>
+    <div class="banner" id="blitzBanner"></div>
+  </div>
+
+  <!-- ENDLESS -->
+  <div class="panel" id="panel-endless" style="display:none">
+    <div class="statusline">
+      <span data-i18n="endless_label">Mode illimité, sans chrono</span>
+      <span class="stat"><span data-i18n="endless_solved">Cartes résolues (total)</span> <b id="endlessSolved">0</b></span>
+    </div>
+    <div class="searchrow">
+      <input class="guessInput" id="guessInputEndless" type="text" data-i18n-ph="classic_input_ph" placeholder="Tape le nom d'une carte..." autocomplete="off">
+      <div class="suggestions" id="suggestionsEndless"></div>
+    </div>
+    <div class="gridwrap">
+      <table class="guesses">
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <tbody id="endlessBody"></tbody>
+      </table>
+    </div>
+    <div class="banner" id="endlessBanner"></div>
+  </div>
+
+  <!-- CHROME CHECK -->
+  <div class="panel" id="panel-chrome" style="display:none">
+    <div class="chromebar">
+      <div class="timerbox" id="chromeTimer">40s</div>
+      <div class="scorebox"><span data-i18n="blitz_score">Score</span> <b id="chromeScore">0</b></div>
+      <button class="bigbtn" id="startChromeBtn" data-i18n="chrome_start">Lancer Chrome Check</button>
+    </div>
+    <div class="hint" data-i18n="chrome_hint">40 secondes, Vrai/Faux. Une mauvaise réponse fait perdre 5 secondes.</div>
+    <div class="duel" id="chromeDuel" style="display:none">
+      <div class="duelcard" id="chromeCardA"></div>
+      <div class="duelop" id="chromeOp">?</div>
+      <div class="duelcard" id="chromeCardB"></div>
+    </div>
+    <div class="tfrow" id="chromeAnswers" style="display:none;margin-top:16px">
+      <button class="tfbtn t" id="chromeTrue" data-i18n="chrome_true">VRAI</button>
+      <button class="tfbtn f" id="chromeFalse" data-i18n="chrome_false">FAUX</button>
+    </div>
+    <div class="banner" id="chromeBanner"></div>
+  </div>
+
+  <!-- NETRUNNER BREACH -->
+  <div class="panel" id="panel-breach" style="display:none">
+    <div class="breachbar">
+      <div class="scorebox"><span data-i18n="breach_attempts">Tentatives</span> <b id="breachAttempts">6</b>/6</div>
+      <button class="bigbtn" id="startBreachBtn" data-i18n="breach_new">Nouveau Breach</button>
+    </div>
+    <div class="hint" data-i18n="breach_hint">6 tentatives max pour percer le protocole. Chaque échec corrompt l'affichage. Plus tu réussis vite, plus la prime en eddies est haute.</div>
+    <div class="searchrow">
+      <input class="guessInput" id="guessInputBreach" type="text" data-i18n-ph="breach_input_ph" placeholder="Entre un nom de carte pour tenter la brèche..." autocomplete="off" disabled>
+      <div class="suggestions" id="suggestionsBreach"></div>
+    </div>
+    <div class="gridwrap">
+      <table class="guesses">
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <tbody id="breachBody"></tbody>
+      </table>
+    </div>
+    <div class="banner" id="breachBanner"></div>
+  </div>
+
+  <!-- COMMUNITY -->
+  <div class="panel" id="panel-community" style="display:none">
+    <div class="statusline">
+      <span data-i18n="community_title">Récap de la communauté Choomdle</span>
+      <button class="bigbtn" id="publishStatsBtn" data-i18n="community_publish">Publier mes stats</button>
+    </div>
+    <div class="hint" data-i18n="community_hint" style="margin-bottom:6px;">Classement basé sur les eddies et séries publiés volontairement par les joueurs (pseudo visible de tous).</div>
+    <div class="podiumgrid" id="podiumGrid"></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="panel" id="panel-stats" style="display:none">
+    <div class="statusline"><span data-i18n="stats_title">Mes statistiques</span></div>
+    <div id="statsSummary" style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:16px;"></div>
+    <div class="hint" data-i18n="stats_dist" style="margin-bottom:6px;">Répartition du nombre d'essais pour les Classic résolus :</div>
+    <div id="statsDistribution"></div>
+  </div>
+
+  <!-- FEEDBACK -->
+  <div class="panel" id="panel-feedback" style="display:none">
+    <div class="statusline"><span data-i18n="feedback_title">Donne ton avis sur Choomdle</span></div>
+    <textarea id="feedbackText" rows="3" data-i18n-ph="feedback_ph" placeholder="Une idée de mode, un bug, une carte manquante..." style="width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--text);font-family:'JetBrains Mono',monospace;padding:10px;"></textarea>
+    <button class="bigbtn" id="sendFeedbackBtn" data-i18n="feedback_send" style="margin-top:8px;">Envoyer</button>
+    <span id="feedbackConfirm" style="margin-left:10px;color:var(--green);font-size:12px;"></span>
+  </div>
+
+  <footer data-i18n="footer">
+    Base de cartes : Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Projet de fan non officiel, sans image de carte ni texte de règle reproduit. Une nouvelle carte Classic chaque jour à 00:00 UTC.
+  </footer>
+</div>
+
+<script>
+// ======================= CARTES =======================
+const CARDS = [
+{n:"6th Street Recruits",t:"Unit",f:["6th Street","Ganger"],c:4,p:6,r:1},
+{n:"Adam Smasher — Ender of Legends",t:"Legend",f:["Arasaka","Merc"],c:9,p:9,r:2},
+{n:"Adam Smasher — Metal Over Meat",t:"Unit",f:["Arasaka","Merc"],c:9,p:15,r:6},
+{n:"Afterparty at Lizzie's",t:"Program",f:["Braindance","Mox"],c:1,p:null,r:1},
+{n:"All is Lost",t:"Program",f:["Zetatech"],c:1,p:null,r:2},
+{n:"Alt Cunningham — Mother of Daemons",t:"Unit",f:["Merc","Netrunner"],c:7,p:8,r:3},
+{n:"Alt Cunningham — Soulkiller Architect",t:"Legend",f:["Merc","Netrunner"],c:null,p:null,r:2},
+{n:"Armored Minotaur",t:"Unit",f:["Arasaka","Militech","Drone"],c:6,p:9,r:4},
+{n:"Augmented Negotiators",t:"Unit",f:["Arasaka","Corpo"],c:3,p:2,r:1},
+{n:"Appetite for Destruction",t:"Program",f:["Ganger"],c:3,p:null,r:4},
+{n:"Bonnie and Clyde",t:"Program",f:["Braindance"],c:3,p:null,r:3},
+{n:"Bootleg Black Sapphire Show",t:"Program",f:["Braindance"],c:5,p:null,r:4},
+{n:"Caliber — Totentanz's Top Dog",t:"Unit",f:["Ganger","Maelstrom"],c:5,p:5,r:2},
+{n:"Carnage at the Colosseum",t:"Program",f:["Braindance","Extreme"],c:6,p:null,r:3},
+{n:"Chrome Reverie",t:"Program",f:["Braindance"],c:3,p:null,r:1},
+{n:"Corpo Security",t:"Unit",f:["Corpo"],c:2,p:2,r:1},
+{n:"Corporate Surveillance",t:"Program",f:["Corpo"],c:2,p:null,r:1},
+{n:"Cyberpsychosis",t:"Program",f:["Quickhack"],c:3,p:null,r:2},
+{n:"Delamain Cab",t:"Unit",f:["Vehicle"],c:4,p:7,r:3},
+{n:"Dexter DeShawn — One Last Chance",t:"Unit",f:["Fixer"],c:3,p:4,r:2},
+{n:"Dum Dum — Maelstrom Triggerman",t:"Legend",f:["Ganger","Maelstrom"],c:null,p:null,r:2},
+{n:"Dying Night — V's Pistol",t:"Gear",f:["Merc","Weapon"],c:2,p:2,r:2},
+{n:"El Sombrerón — La Venganza Lenta",t:"Unit",f:["Ganger","Valentino"],c:5,p:4,r:4},
+{n:"Emergency Atlus",t:"Unit",f:["Trauma Team","Vehicle","Zetatech"],c:3,p:4,r:1},
+{n:"Evelyn Parker — Beautiful Enigma",t:"Legend",f:["Doll"],c:null,p:null,r:2},
+{n:"Evelyn Parker — Scheming Siren",t:"Unit",f:["Doll"],c:2,p:0,r:3},
+{n:"Field Operator",t:"Unit",f:["Arasaka","Corpo","Techie"],c:3,p:2,r:2},
+{n:"Floor It",t:"Program",f:["Merc","Quickhack"],c:1,p:null,r:2},
+{n:"Gilded Matón",t:"Unit",f:["Ganger","Valentino"],c:4,p:3,r:2},
+{n:"Gorilla Arms",t:"Gear",f:["Cyberware"],c:4,p:3,r:3},
+{n:"Goro Takemura — Hands Unclean",t:"Legend",f:["Arasaka","Corpo"],c:5,p:7,r:2},
+{n:"Goro Takemura — Losing His Way",t:"Unit",f:["Arasaka","Corpo"],c:4,p:4,r:3},
+{n:"Goro Takemura — Vengeful Bodyguard",t:"Legend",f:["Arasaka","Corpo"],c:null,p:null,r:2},
+{n:"Hanako Arasaka — Daughter of the Emperor",t:"Legend",f:["Arasaka","Corpo","Netrunner"],c:null,p:null,r:2},
+{n:"Hanako Arasaka — In a Gilded Cage",t:"Unit",f:["Arasaka","Corpo","Netrunner"],c:4,p:1,r:2},
+{n:"Industrial Assembly",t:"Program",f:["Arasaka","Braindance"],c:1,p:null,r:1},
+{n:"Jackie Welles — Mama's Favorite",t:"Legend",f:["Merc"],c:6,p:8,r:2},
+{n:"Jackie Welles — Pour One Out For Me",t:"Legend",f:["Merc"],c:null,p:null,r:2},
+{n:"Jackie Welles — Ride or Die Choom",t:"Unit",f:["Merc","Valentino"],c:6,p:8,r:2},
+{n:"Japantown Jonin",t:"Unit",f:["Tyger Claws"],c:2,p:0,r:2},
+{n:"Johnny Silverhand — Rocking Renegade",t:"Legend",f:["Merc","Rocker","Samurai"],c:null,p:null,r:2},
+{n:"Kerry Eurodyne — Axe, Attitude, Audience",t:"Legend",f:["Rocker","Samurai"],c:null,p:null,r:2},
+{n:"Kerry Eurodyne — The Last Rockerboy",t:"Unit",f:["Rocker","Samurai"],c:4,p:5,r:1},
+{n:"Kiroshi Optics",t:"Gear",f:["Cyberware"],c:1,p:1,r:1},
+{n:"La Llorona — Ghost of the Past",t:"Unit",f:["Ganger","Valentino"],c:3,p:3,r:1},
+{n:"Live with the Aftermath",t:"Program",f:["Plan"],c:3,p:null,r:3},
+{n:"Lizzy Wizzy — Delicate Weapon",t:"Unit",f:["Rocker"],c:5,p:2,r:2},
+{n:"Lucyna Kushinada",t:"Legend",f:["Overclocking"],c:null,p:0,r:2},
+{n:"Maman Brigitte — Spirit of Death",t:"Unit",f:["Mystic","Netrunner","Voodoo Boys"],c:5,p:3,r:4},
+{n:"Mandibular Upgrade",t:"Gear",f:["Cyberware"],c:1,p:0,r:2},
+{n:"Mantis Blades",t:"Gear",f:["Cyberware"],c:1,p:2,r:1},
+{n:"MaxTac Suppression Team",t:"Unit",f:["NCPD"],c:5,p:7,r:1},
+{n:"Meredith Stout — Stone Cold Corpo",t:"Unit",f:["Corpo","Militech"],c:4,p:5,r:1},
+{n:"Minotaur",t:"Unit",f:["Arasaka","Drone","Militech"],c:7,p:9,r:2},
+{n:"Misty Olszewski — Mender of Broken Spirits",t:"Unit",f:["Mystic"],c:3,p:0,r:2},
+{n:"Modded Kusanagi",t:"Unit",f:["Tyger Claws","Vehicle"],c:6,p:8,r:2},
+{n:"Mox Inciters",t:"Unit",f:["Ganger","Mox"],c:3,p:2,r:2},
+{n:"MT0D12 Flathead",t:"Unit",f:["Drone","Militech"],c:5,p:7,r:3},
+{n:"Nadia — Fighting Through Grief",t:"Unit",f:["Medtech","Trauma Team"],c:6,p:8,r:2},
+{n:"Octant",t:"Unit",f:["Drone","Militech","Zetatech"],c:7,p:8,r:4},
+{n:"Offduty Malfini",t:"Unit",f:["Ganger","Voodoo Boys"],c:4,p:5,r:2},
+{n:"Over the Edge",t:"Program",f:["Merc"],c:3,p:null,r:2},
+{n:"Overwatch — Panam's Gift",t:"Gear",f:["Weapon"],c:4,p:4,r:4},
+{n:"Panam Palmer — Nomad Cavalry",t:"Legend",f:["Aldecado","Merc","Nomad"],c:null,p:null,r:2},
+{n:"Peace Offering",t:"Program",f:["Braindance"],c:1,p:null,r:1},
+{n:"Pepe Najarro — Working Doubles",t:"Unit",f:["Valentino"],c:4,p:6,r:2},
+{n:"Placide — Voodoo Sentinel",t:"Unit",f:["Ganger","Netrunner","Voodoo Boys"],c:8,p:10,r:2},
+{n:"Psycho Squad",t:"Unit",f:["NCPD"],c:4,p:6,r:1},
+{n:"Reboot Optics",t:"Program",f:["Tech"],c:2,p:null,r:2},
+{n:"Riding Nomad",t:"Unit",f:["Nomad"],c:5,p:4,r:4},
+{n:"River Ward — Detective on the Hunt",t:"Legend",f:["NCPD"],c:null,p:null,r:2},
+{n:"Royce — Don't Call Me Simon",t:"Unit",f:["Ganger","Maelstrom"],c:5,p:4,r:2},
+{n:"Royce — Psycho on the Edge",t:"Legend",f:["Ganger","Maelstrom"],c:6,p:6,r:2},
+{n:"Ruthless Lowlife",t:"Unit",f:["Arasaka","Merc"],c:2,p:1,r:1},
+{n:"Saburo Arasaka — Stubborn Patriarch",t:"Legend",f:["Arasaka","Corpo"],c:null,p:0,r:2},
+{n:"Sandayu Oda — Hanako's Guardian",t:"Unit",f:["Arasaka","Corpo"],c:7,p:8,r:2},
+{n:"Sandevistan",t:"Gear",f:["Cyberware"],c:3,p:2,r:3},
+{n:"Satori — Sword of Saburo",t:"Gear",f:["Arasaka","Weapon"],c:2,p:2,r:1},
+{n:"Saul Bright — Stormrider",t:"Unit",f:["Aldecado","Nomad"],c:8,p:14,r:2},
+{n:"Screw — Lovelorn Fool",t:"Unit",f:["Ganger","Maelstrom"],c:5,p:7,r:2},
+{n:"Secondhand Bombus",t:"Unit",f:["Drone","Zetatech"],c:2,p:0,r:2},
+{n:"Sketchy Ripper",t:"Unit",f:["Ganger","Ripperdoc","Scavenger"],c:2,p:0,r:2},
+{n:"Swordwise Huscle",t:"Unit",f:["Merc"],c:3,p:3,r:2},
+{n:"T-Bug — Amateur Philosopher",t:"Unit",f:["Merc","Netrunner"],c:4,p:4,r:2},
+{n:"Take Control",t:"Program",f:["Quickhack"],c:2,p:null,r:2},
+{n:"The Heist",t:"Program",f:["Merc"],c:2,p:null,r:2},
+{n:"The Relic — Experimental Biochip",t:"Gear",f:["Arasaka","Cyberware"],c:5,p:3,r:4},
+{n:"V — Corporate Exile",t:"Legend",f:["Corpo","Merc"],c:5,p:8,r:2},
+{n:"V — StreetKid",t:"Legend",f:["Merc"],c:5,p:6,r:2},
+{n:"Valentino Guerrera",t:"Unit",f:["Ganger","Valentino"],c:3,p:4,r:2},
+{n:"Valentino Street Racer",t:"Unit",f:["Valentino","Vehicle"],c:3,p:3,r:2},
+{n:"Viktor Vektor — Sit Down and Relax",t:"Legend",f:["Ripperdoc"],c:null,p:null,r:2},
+{n:"Viktor Vektor — You Might Feel a Little Pinch",t:"Unit",f:["Ripperdoc"],c:3,p:3,r:2},
+{n:"Wraith Marauders",t:"Unit",f:["Ganger","Nomad","Raffen Shiv"],c:5,p:4,r:2},
+{n:"Yorinobu Arasaka — Embracing Destruction",t:"Legend",f:["Arasaka","Corpo"],c:null,p:null,r:2},
+{n:"Yorinobu Arasaka — Steel Dragon",t:"Unit",f:["Arasaka","Corpo"],c:7,p:9,r:3},
+{n:"Zetatech Faceplate",t:"Gear",f:["Cyberware","Zetatech"],c:2,p:2,r:2},
+];
+
+// ======================= I18N =======================
+// Traductions maison, correctes pour un usage fan/hobby. Une relecture native
+// est recommandée avant mise en ligne publique, surtout pour KO / ZH / JA.
+const I18N = {
+fr:{eyebrow:"Netdeck // Breach Protocol",subtitle:"Devine la carte Cyberpunk TCG du jour — fan-made, non affilié à CD Projekt Red / WeirdCo",tab_classic:"Classic",tab_blitz:"Blitz",tab_endless:"Endless",tab_chrome:"Chrome Check",tab_legend:"Legend",legend_daily:"Défi Legend du jour",legend_input_ph:"Écris le nom exact de la légende...",legend_hint:"Une seule tentative : orthographe exacte requise, aucune suggestion affichée.",legend_win_prefix:"IDENTITÉ CONFIRMÉE —",legend_lose_prefix:"MAUVAISE IDENTITÉ — C'était",legend_submit:"Valider",podium_legend:"Legend",tab_breach:"Netrunner Breach",fbtn_community:"Communauté",fbtn_stats:"Mes Stats",fbtn_feedback:"Feedback",acc_not_connected:"Non connecté",acc_pseudo_ph:"Choisis un pseudo",acc_create:"Créer un compte gratuit",acc_google:"Se connecter avec Google",classic_daily:"Défi du jour",classic_streak:"Série",classic_best:"Meilleure",classic_input_ph:"Tape le nom d'une carte...",classic_hint:"Compare TYPE · FACTION · COÛT (€$) · PUISSANCE · RAM. Orange = au moins une faction commune (sans dire laquelle).",col_card:"Carte",col_type:"Type",col_faction:"Faction",col_cost:"Coût",col_pwr:"PWR",col_ram:"RAM",win_prefix:"BREACH RÉUSSI —",win_tries:"Résolu en {n} essai(s).",reward_earn:"+{n} eddies",blitz_score:"Score",blitz_start:"Lancer le Blitz",blitz_input_ph:"40 secondes pour enchaîner un max de cartes...",blitz_timeup:"TEMPS ÉCOULÉ — Score final :",blitz_answer:"La carte à trouver était",endless_label:"Mode illimité, sans chrono",endless_solved:"Cartes résolues (total)",endless_found:"CARTE TROUVÉE —",endless_next:"Carte suivante",chrome_hint:"40 secondes, Vrai/Faux. Une mauvaise réponse fait perdre 5 secondes.",chrome_start:"Lancer Chrome Check",chrome_true:"VRAI",chrome_false:"FAUX",chrome_timeup:"TEMPS ÉCOULÉ — Score final :",breach_hint:"6 tentatives max pour percer le protocole. Chaque échec corrompt l'affichage. Plus tu réussis vite, plus la prime en eddies est haute.",breach_input_ph:"Entre un nom de carte pour tenter la brèche...",breach_attempts:"Tentatives",breach_failed:"BREACH ÉCHOUÉ — La carte était",breach_success:"BREACH RÉUSSI —",breach_new:"Nouveau Breach",community_title:"Récap de la communauté Choomdle",community_publish:"Publier mes stats",community_hint:"Classement basé sur les eddies et séries publiés volontairement par les joueurs (pseudo visible de tous).",podium_cumul:"Cumulé (total eddies)",podium_classic:"Classic",podium_blitz:"Blitz",podium_endless:"Endless",podium_chrome:"Chrome Check",podium_breach:"Netrunner Breach",stats_title:"Mes statistiques",stats_games:"Parties jouées",stats_wins:"Victoires",stats_winpct:"% de victoires",stats_streak:"Série actuelle",stats_best:"Meilleure série",stats_dist:"Répartition du nombre d'essais pour les Classic résolus :",feedback_title:"Donne ton avis sur Choomdle",feedback_ph:"Une idée de mode, un bug, une carte manquante...",feedback_send:"Envoyer",feedback_ok:"Merci, c'est envoyé !",footer:"Base de cartes : Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Projet de fan non officiel, sans image de carte ni texte de règle reproduit. Une nouvelle carte Classic chaque jour à 00:00 UTC."},
+en:{eyebrow:"Netdeck // Breach Protocol",subtitle:"Guess today's Cyberpunk TCG card — fan-made, not affiliated with CD Projekt Red / WeirdCo",tab_classic:"Classic",tab_blitz:"Blitz",tab_endless:"Endless",tab_chrome:"Chrome Check",tab_legend:"Legend",legend_daily:"Daily Legend challenge",legend_input_ph:"Type the legend's exact name...",legend_hint:"One attempt only: exact spelling required, no suggestions shown.",legend_win_prefix:"IDENTITY CONFIRMED —",legend_lose_prefix:"WRONG IDENTITY — It was",legend_submit:"Submit",podium_legend:"Legend",tab_breach:"Netrunner Breach",fbtn_community:"Community",fbtn_stats:"My Stats",fbtn_feedback:"Feedback",acc_not_connected:"Not signed in",acc_pseudo_ph:"Pick a handle",acc_create:"Create free account",acc_google:"Sign in with Google",classic_daily:"Daily challenge",classic_streak:"Streak",classic_best:"Best",classic_input_ph:"Type a card name...",classic_hint:"Compares TYPE · FACTION · COST (€$) · POWER · RAM. Orange = at least one shared faction (not telling you which).",col_card:"Card",col_type:"Type",col_faction:"Faction",col_cost:"Cost",col_pwr:"PWR",col_ram:"RAM",win_prefix:"BREACH SUCCESSFUL —",win_tries:"Solved in {n} guess(es).",reward_earn:"+{n} eddies",blitz_score:"Score",blitz_start:"Start Blitz",blitz_input_ph:"40 seconds to chain as many cards as possible...",blitz_timeup:"TIME'S UP — Final score:",blitz_answer:"The card was",endless_label:"Unlimited mode, no timer",endless_solved:"Cards solved (total)",endless_found:"CARD FOUND —",endless_next:"Next card",chrome_hint:"40 seconds, True/False. A wrong answer costs you 5 seconds.",chrome_start:"Start Chrome Check",chrome_true:"TRUE",chrome_false:"FALSE",chrome_timeup:"TIME'S UP — Final score:",breach_hint:"6 attempts max to crack the protocol. Every miss corrupts the display. The faster you win, the higher the eddies bounty.",breach_input_ph:"Enter a card name to attempt the breach...",breach_attempts:"Attempts",breach_failed:"BREACH FAILED — The card was",breach_success:"BREACH SUCCESSFUL —",breach_new:"New Breach",community_title:"Choomdle community recap",community_publish:"Publish my stats",community_hint:"Rankings based on eddies and streaks players choose to publish (handle visible to everyone).",podium_cumul:"Cumulative (total eddies)",podium_classic:"Classic",podium_blitz:"Blitz",podium_endless:"Endless",podium_chrome:"Chrome Check",podium_breach:"Netrunner Breach",stats_title:"My stats",stats_games:"Games played",stats_wins:"Wins",stats_winpct:"Win %",stats_streak:"Current streak",stats_best:"Best streak",stats_dist:"Guess-count distribution for solved Classics:",feedback_title:"Give feedback on Choomdle",feedback_ph:"A mode idea, a bug, a missing card...",feedback_send:"Send",feedback_ok:"Thanks, sent!",footer:"Card data: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Unofficial fan project — no card art or rules text reproduced. A new Classic card every day at 00:00 UTC."},
+es:{eyebrow:"Netdeck // Protocolo de Ruptura",subtitle:"Adivina la carta de Cyberpunk TCG del día — proyecto de fans, no afiliado a CD Projekt Red / WeirdCo",tab_classic:"Classic",tab_blitz:"Blitz",tab_endless:"Endless",tab_chrome:"Chrome Check",tab_legend:"Legend",legend_daily:"Reto diario Legend",legend_input_ph:"Escribe el nombre exacto de la leyenda...",legend_hint:"Un solo intento: ortografía exacta, sin sugerencias.",legend_win_prefix:"IDENTIDAD CONFIRMADA —",legend_lose_prefix:"IDENTIDAD ERRÓNEA — Era",legend_submit:"Enviar",podium_legend:"Legend",tab_breach:"Netrunner Breach",fbtn_community:"Comunidad",fbtn_stats:"Mis Stats",fbtn_feedback:"Comentarios",acc_not_connected:"No conectado",acc_pseudo_ph:"Elige un apodo",acc_create:"Crear cuenta gratis",acc_google:"Iniciar sesión con Google",classic_daily:"Reto diario",classic_streak:"Racha",classic_best:"Mejor",classic_input_ph:"Escribe el nombre de una carta...",classic_hint:"Compara TIPO · FACCIÓN · COSTE (€$) · POTENCIA · RAM. Naranja = al menos una facción en común (sin decir cuál).",col_card:"Carta",col_type:"Tipo",col_faction:"Facción",col_cost:"Coste",col_pwr:"PWR",col_ram:"RAM",win_prefix:"BRECHA LOGRADA —",win_tries:"Resuelto en {n} intento(s).",reward_earn:"+{n} eddies",blitz_score:"Puntos",blitz_start:"Iniciar Blitz",blitz_input_ph:"40 segundos para encadenar el máximo de cartas...",blitz_timeup:"TIEMPO AGOTADO — Puntuación final:",blitz_answer:"La carta era",endless_label:"Modo ilimitado, sin reloj",endless_solved:"Cartas resueltas (total)",endless_found:"CARTA ENCONTRADA —",endless_next:"Siguiente carta",chrome_hint:"40 segundos, Verdadero/Falso. Una respuesta incorrecta resta 5 segundos.",chrome_start:"Iniciar Chrome Check",chrome_true:"VERDADERO",chrome_false:"FALSO",chrome_timeup:"TIEMPO AGOTADO — Puntuación final:",breach_hint:"Máximo 6 intentos para romper el protocolo. Cada fallo corrompe la pantalla. Cuanto más rápido ganes, mayor la recompensa en eddies.",breach_input_ph:"Escribe el nombre de una carta para intentar la brecha...",breach_attempts:"Intentos",breach_failed:"BRECHA FALLIDA — La carta era",breach_success:"BRECHA LOGRADA —",breach_new:"Nueva Brecha",community_title:"Resumen de la comunidad Choomdle",community_publish:"Publicar mis stats",community_hint:"Clasificación basada en eddies y rachas que los jugadores deciden publicar (apodo visible para todos).",podium_cumul:"Acumulado (eddies totales)",podium_classic:"Classic",podium_blitz:"Blitz",podium_endless:"Endless",podium_chrome:"Chrome Check",podium_breach:"Netrunner Breach",stats_title:"Mis estadísticas",stats_games:"Partidas jugadas",stats_wins:"Victorias",stats_winpct:"% de victorias",stats_streak:"Racha actual",stats_best:"Mejor racha",stats_dist:"Distribución de intentos en los Classic resueltos:",feedback_title:"Danos tu opinión sobre Choomdle",feedback_ph:"Una idea de modo, un error, una carta que falta...",feedback_send:"Enviar",feedback_ok:"¡Gracias, enviado!",footer:"Datos de cartas: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Proyecto de fans no oficial, sin arte ni texto de reglas reproducido. Carta Classic nueva cada día a las 00:00 UTC."},
+de:{eyebrow:"Netdeck // Breach-Protokoll",subtitle:"Errate die heutige Cyberpunk-TCG-Karte — Fanprojekt, nicht mit CD Projekt Red / WeirdCo verbunden",tab_classic:"Classic",tab_blitz:"Blitz",tab_endless:"Endless",tab_chrome:"Chrome Check",tab_legend:"Legend",legend_daily:"Tägliche Legend-Herausforderung",legend_input_ph:"Gib den exakten Namen der Legende ein...",legend_hint:"Nur ein Versuch: exakte Schreibweise erforderlich, keine Vorschläge.",legend_win_prefix:"IDENTITÄT BESTÄTIGT —",legend_lose_prefix:"FALSCHE IDENTITÄT — Es war",legend_submit:"Absenden",podium_legend:"Legend",tab_breach:"Netrunner Breach",fbtn_community:"Community",fbtn_stats:"Meine Stats",fbtn_feedback:"Feedback",acc_not_connected:"Nicht angemeldet",acc_pseudo_ph:"Nickname wählen",acc_create:"Kostenloses Konto erstellen",acc_google:"Mit Google anmelden",classic_daily:"Tägliche Herausforderung",classic_streak:"Serie",classic_best:"Beste",classic_input_ph:"Kartennamen eingeben...",classic_hint:"Vergleicht TYP · FRAKTION · KOSTEN (€$) · STÄRKE · RAM. Orange = mindestens eine gemeinsame Fraktion (welche bleibt geheim).",col_card:"Karte",col_type:"Typ",col_faction:"Fraktion",col_cost:"Kosten",col_pwr:"PWR",col_ram:"RAM",win_prefix:"BREACH ERFOLGREICH —",win_tries:"Gelöst in {n} Versuch(en).",reward_earn:"+{n} Eddies",blitz_score:"Punkte",blitz_start:"Blitz starten",blitz_input_ph:"40 Sekunden, so viele Karten wie möglich...",blitz_timeup:"ZEIT ABGELAUFEN — Endergebnis:",blitz_answer:"Die Karte war",endless_label:"Unbegrenzter Modus, ohne Timer",endless_solved:"Gelöste Karten (gesamt)",endless_found:"KARTE GEFUNDEN —",endless_next:"Nächste Karte",chrome_hint:"40 Sekunden, Wahr/Falsch. Eine falsche Antwort kostet 5 Sekunden.",chrome_start:"Chrome Check starten",chrome_true:"WAHR",chrome_false:"FALSCH",chrome_timeup:"ZEIT ABGELAUFEN — Endergebnis:",breach_hint:"Max. 6 Versuche, um das Protokoll zu knacken. Jeder Fehlversuch stört die Anzeige. Je schneller du gewinnst, desto höher die Eddies-Prämie.",breach_input_ph:"Kartennamen eingeben, um den Breach zu versuchen...",breach_attempts:"Versuche",breach_failed:"BREACH GESCHEITERT — Die Karte war",breach_success:"BREACH ERFOLGREICH —",breach_new:"Neuer Breach",community_title:"Choomdle-Community-Übersicht",community_publish:"Meine Stats veröffentlichen",community_hint:"Rangliste basiert auf Eddies und Serien, die Spieler freiwillig veröffentlichen (Nickname für alle sichtbar).",podium_cumul:"Gesamt (alle Eddies)",podium_classic:"Classic",podium_blitz:"Blitz",podium_endless:"Endless",podium_chrome:"Chrome Check",podium_breach:"Netrunner Breach",stats_title:"Meine Statistiken",stats_games:"Gespielte Partien",stats_wins:"Siege",stats_winpct:"Sieg-Quote",stats_streak:"Aktuelle Serie",stats_best:"Beste Serie",stats_dist:"Verteilung der Versuche bei gelösten Classics:",feedback_title:"Gib Feedback zu Choomdle",feedback_ph:"Eine Modus-Idee, ein Bug, eine fehlende Karte...",feedback_send:"Senden",feedback_ok:"Danke, gesendet!",footer:"Kartendaten: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Inoffizielles Fanprojekt, ohne reproduzierte Kartenkunst oder Regeltext. Jeden Tag um 00:00 UTC eine neue Classic-Karte."},
+pt:{eyebrow:"Netdeck // Protocolo de Invasão",subtitle:"Adivinhe a carta do Cyberpunk TCG de hoje — projeto de fã, não afiliado à CD Projekt Red / WeirdCo",tab_classic:"Classic",tab_blitz:"Blitz",tab_endless:"Endless",tab_chrome:"Chrome Check",tab_legend:"Legend",legend_daily:"Desafio diário Legend",legend_input_ph:"Digite o nome exato da lenda...",legend_hint:"Uma única tentativa: ortografia exata exigida, sem sugestões.",legend_win_prefix:"IDENTIDADE CONFIRMADA —",legend_lose_prefix:"IDENTIDADE ERRADA — Era",legend_submit:"Enviar",podium_legend:"Legend",tab_breach:"Netrunner Breach",fbtn_community:"Comunidade",fbtn_stats:"Minhas Stats",fbtn_feedback:"Feedback",acc_not_connected:"Não conectado",acc_pseudo_ph:"Escolha um apelido",acc_create:"Criar conta gratuita",acc_google:"Entrar com Google",classic_daily:"Desafio diário",classic_streak:"Sequência",classic_best:"Melhor",classic_input_ph:"Digite o nome de uma carta...",classic_hint:"Compara TIPO · FACÇÃO · CUSTO (€$) · PODER · RAM. Laranja = ao menos uma facção em comum (sem dizer qual).",col_card:"Carta",col_type:"Tipo",col_faction:"Facção",col_cost:"Custo",col_pwr:"PWR",col_ram:"RAM",win_prefix:"INVASÃO BEM-SUCEDIDA —",win_tries:"Resolvido em {n} tentativa(s).",reward_earn:"+{n} eddies",blitz_score:"Pontos",blitz_start:"Iniciar Blitz",blitz_input_ph:"40 segundos para encadear o máximo de cartas...",blitz_timeup:"TEMPO ESGOTADO — Pontuação final:",blitz_answer:"A carta era",endless_label:"Modo ilimitado, sem cronômetro",endless_solved:"Cartas resolvidas (total)",endless_found:"CARTA ENCONTRADA —",endless_next:"Próxima carta",chrome_hint:"40 segundos, Verdadeiro/Falso. Uma resposta errada custa 5 segundos.",chrome_start:"Iniciar Chrome Check",chrome_true:"VERDADEIRO",chrome_false:"FALSO",chrome_timeup:"TEMPO ESGOTADO — Pontuação final:",breach_hint:"Máximo de 6 tentativas para quebrar o protocolo. Cada erro corrompe a tela. Quanto mais rápido você vencer, maior a recompensa em eddies.",breach_input_ph:"Digite o nome de uma carta para tentar a invasão...",breach_attempts:"Tentativas",breach_failed:"INVASÃO FALHOU — A carta era",breach_success:"INVASÃO BEM-SUCEDIDA —",breach_new:"Nova Invasão",community_title:"Resumo da comunidade Choomdle",community_publish:"Publicar minhas stats",community_hint:"Ranking baseado em eddies e sequências que os jogadores publicam voluntariamente (apelido visível a todos).",podium_cumul:"Acumulado (eddies totais)",podium_classic:"Classic",podium_blitz:"Blitz",podium_endless:"Endless",podium_chrome:"Chrome Check",podium_breach:"Netrunner Breach",stats_title:"Minhas estatísticas",stats_games:"Partidas jogadas",stats_wins:"Vitórias",stats_winpct:"% de vitórias",stats_streak:"Sequência atual",stats_best:"Melhor sequência",stats_dist:"Distribuição de tentativas nos Classic resolvidos:",feedback_title:"Dê seu feedback sobre o Choomdle",feedback_ph:"Uma ideia de modo, um bug, uma carta faltando...",feedback_send:"Enviar",feedback_ok:"Obrigado, enviado!",footer:"Dados das cartas: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Projeto de fã não oficial, sem arte de carta ou texto de regras reproduzido. Uma nova carta Classic todo dia às 00:00 UTC."},
+it:{eyebrow:"Netdeck // Protocollo di Breccia",subtitle:"Indovina la carta Cyberpunk TCG del giorno — progetto fan-made, non affiliato a CD Projekt Red / WeirdCo",tab_classic:"Classic",tab_blitz:"Blitz",tab_endless:"Endless",tab_chrome:"Chrome Check",tab_legend:"Legend",legend_daily:"Sfida Legend del giorno",legend_input_ph:"Scrivi il nome esatto della leggenda...",legend_hint:"Un solo tentativo: ortografia esatta richiesta, nessun suggerimento.",legend_win_prefix:"IDENTITÀ CONFERMATA —",legend_lose_prefix:"IDENTITÀ ERRATA — Era",legend_submit:"Invia",podium_legend:"Legend",tab_breach:"Netrunner Breach",fbtn_community:"Community",fbtn_stats:"Le mie Stats",fbtn_feedback:"Feedback",acc_not_connected:"Non connesso",acc_pseudo_ph:"Scegli un nickname",acc_create:"Crea account gratuito",acc_google:"Accedi con Google",classic_daily:"Sfida del giorno",classic_streak:"Serie",classic_best:"Migliore",classic_input_ph:"Digita il nome di una carta...",classic_hint:"Confronta TIPO · FAZIONE · COSTO (€$) · POTENZA · RAM. Arancione = almeno una fazione in comune (senza dire quale).",col_card:"Carta",col_type:"Tipo",col_faction:"Fazione",col_cost:"Costo",col_pwr:"PWR",col_ram:"RAM",win_prefix:"BRECCIA RIUSCITA —",win_tries:"Risolto in {n} tentativo/i.",reward_earn:"+{n} eddies",blitz_score:"Punteggio",blitz_start:"Avvia Blitz",blitz_input_ph:"40 secondi per incatenare più carte possibili...",blitz_timeup:"TEMPO SCADUTO — Punteggio finale:",blitz_answer:"La carta era",endless_label:"Modalità illimitata, senza timer",endless_solved:"Carte risolte (totale)",endless_found:"CARTA TROVATA —",endless_next:"Prossima carta",chrome_hint:"40 secondi, Vero/Falso. Una risposta sbagliata costa 5 secondi.",chrome_start:"Avvia Chrome Check",chrome_true:"VERO",chrome_false:"FALSO",chrome_timeup:"TEMPO SCADUTO — Punteggio finale:",breach_hint:"Massimo 6 tentativi per violare il protocollo. Ogni errore corrompe lo schermo. Più veloce vinci, più alta la ricompensa in eddies.",breach_input_ph:"Digita il nome di una carta per tentare la breccia...",breach_attempts:"Tentativi",breach_failed:"BRECCIA FALLITA — La carta era",breach_success:"BRECCIA RIUSCITA —",breach_new:"Nuova Breccia",community_title:"Riepilogo della community Choomdle",community_publish:"Pubblica le mie stats",community_hint:"Classifica basata su eddies e serie che i giocatori scelgono di pubblicare (nickname visibile a tutti).",podium_cumul:"Cumulativo (eddies totali)",podium_classic:"Classic",podium_blitz:"Blitz",podium_endless:"Endless",podium_chrome:"Chrome Check",podium_breach:"Netrunner Breach",stats_title:"Le mie statistiche",stats_games:"Partite giocate",stats_wins:"Vittorie",stats_winpct:"% di vittorie",stats_streak:"Serie attuale",stats_best:"Miglior serie",stats_dist:"Distribuzione dei tentativi nei Classic risolti:",feedback_title:"Dacci un feedback su Choomdle",feedback_ph:"Un'idea di modalità, un bug, una carta mancante...",feedback_send:"Invia",feedback_ok:"Grazie, inviato!",footer:"Dati carte: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Progetto fan non ufficiale, senza artwork o testo regole riprodotti. Nuova carta Classic ogni giorno alle 00:00 UTC."},
+pl:{eyebrow:"Netdeck // Protokół Włamania",subtitle:"Odgadnij dzisiejszą kartę Cyberpunk TCG — projekt fanowski, niezwiązany z CD Projekt Red / WeirdCo",tab_classic:"Classic",tab_blitz:"Blitz",tab_endless:"Endless",tab_chrome:"Chrome Check",tab_legend:"Legend",legend_daily:"Codzienne wyzwanie Legend",legend_input_ph:"Wpisz dokładną nazwę legendy...",legend_hint:"Tylko jedna próba: wymagana dokładna pisownia, brak podpowiedzi.",legend_win_prefix:"TOŻSAMOŚĆ POTWIERDZONA —",legend_lose_prefix:"BŁĘDNA TOŻSAMOŚĆ — To była",legend_submit:"Zatwierdź",podium_legend:"Legend",tab_breach:"Netrunner Breach",fbtn_community:"Społeczność",fbtn_stats:"Moje statystyki",fbtn_feedback:"Opinia",acc_not_connected:"Niezalogowany",acc_pseudo_ph:"Wybierz nick",acc_create:"Załóż darmowe konto",acc_google:"Zaloguj się przez Google",classic_daily:"Codzienne wyzwanie",classic_streak:"Seria",classic_best:"Najlepsza",classic_input_ph:"Wpisz nazwę karty...",classic_hint:"Porównuje TYP · FRAKCJĘ · KOSZT (€$) · MOC · RAM. Pomarańczowy = przynajmniej jedna wspólna frakcja (bez wskazania, która).",col_card:"Karta",col_type:"Typ",col_faction:"Frakcja",col_cost:"Koszt",col_pwr:"PWR",col_ram:"RAM",win_prefix:"WŁAMANIE UDANE —",win_tries:"Rozwiązano w {n} próbie/próbach.",reward_earn:"+{n} eddies",blitz_score:"Wynik",blitz_start:"Start Blitz",blitz_input_ph:"40 sekund na jak najwięcej kart z rzędu...",blitz_timeup:"KONIEC CZASU — Wynik końcowy:",blitz_answer:"Szukana karta to",endless_label:"Tryb nieograniczony, bez zegara",endless_solved:"Rozwiązane karty (łącznie)",endless_found:"KARTA ZNALEZIONA —",endless_next:"Następna karta",chrome_hint:"40 sekund, Prawda/Fałsz. Błędna odpowiedź kosztuje 5 sekund.",chrome_start:"Start Chrome Check",chrome_true:"PRAWDA",chrome_false:"FAŁSZ",chrome_timeup:"KONIEC CZASU — Wynik końcowy:",breach_hint:"Maksymalnie 6 prób na złamanie protokołu. Każdy błąd zakłóca ekran. Im szybciej wygrasz, tym wyższa premia w eddies.",breach_input_ph:"Wpisz nazwę karty, aby spróbować włamania...",breach_attempts:"Próby",breach_failed:"WŁAMANIE NIEUDANE — Szukana karta to",breach_success:"WŁAMANIE UDANE —",breach_new:"Nowe Włamanie",community_title:"Podsumowanie społeczności Choomdle",community_publish:"Opublikuj moje statystyki",community_hint:"Ranking oparty na eddies i seriach dobrowolnie publikowanych przez graczy (nick widoczny dla wszystkich).",podium_cumul:"Łącznie (suma eddies)",podium_classic:"Classic",podium_blitz:"Blitz",podium_endless:"Endless",podium_chrome:"Chrome Check",podium_breach:"Netrunner Breach",stats_title:"Moje statystyki",stats_games:"Rozegrane gry",stats_wins:"Zwycięstwa",stats_winpct:"% zwycięstw",stats_streak:"Aktualna seria",stats_best:"Najlepsza seria",stats_dist:"Rozkład liczby prób w rozwiązanych Classic:",feedback_title:"Podziel się opinią o Choomdle",feedback_ph:"Pomysł na tryb, błąd, brakująca karta...",feedback_send:"Wyślij",feedback_ok:"Dzięki, wysłano!",footer:"Dane kart: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Nieoficjalny projekt fanowski, bez grafik kart ani tekstu zasad. Nowa karta Classic każdego dnia o 00:00 UTC."},
+ko:{eyebrow:"넷덱 // 브리치 프로토콜",subtitle:"오늘의 사이버펑크 TCG 카드를 맞혀보세요 — 팬 제작, CD Projekt Red / WeirdCo와 무관",tab_classic:"클래식",tab_blitz:"블리츠",tab_endless:"엔드리스",tab_chrome:"크롬 체크",tab_legend:"Legend",legend_daily:"오늘의 Legend 도전",legend_input_ph:"레전드의 정확한 이름을 입력하세요...",legend_hint:"단 한 번의 시도: 정확한 철자가 필요하며 제안은 표시되지 않습니다.",legend_win_prefix:"신원 확인 완료 —",legend_lose_prefix:"잘못된 신원 — 정답은",legend_submit:"제출",podium_legend:"Legend",tab_breach:"넷러너 브리치",fbtn_community:"커뮤니티",fbtn_stats:"내 통계",fbtn_feedback:"피드백",acc_not_connected:"로그인 안 됨",acc_pseudo_ph:"닉네임 선택",acc_create:"무료 계정 만들기",acc_google:"Google로 로그인",classic_daily:"오늘의 도전",classic_streak:"연속 기록",classic_best:"최고 기록",classic_input_ph:"카드 이름을 입력하세요...",classic_hint:"타입 · 팩션 · 비용(€$) · 파워 · RAM 비교. 주황색 = 공통 팩션이 하나 이상 있음(어느 것인지는 알려주지 않음).",col_card:"카드",col_type:"타입",col_faction:"팩션",col_cost:"비용",col_pwr:"PWR",col_ram:"RAM",win_prefix:"브리치 성공 —",win_tries:"{n}번 만에 해결.",reward_earn:"+{n} eddies",blitz_score:"점수",blitz_start:"블리츠 시작",blitz_input_ph:"40초 동안 최대한 많은 카드를 맞히세요...",blitz_timeup:"시간 종료 — 최종 점수:",blitz_answer:"정답 카드는",endless_label:"제한 없는 모드, 타이머 없음",endless_solved:"해결한 카드 (누적)",endless_found:"카드 발견 —",endless_next:"다음 카드",chrome_hint:"40초, 참/거짓. 오답 시 5초가 차감됩니다.",chrome_start:"크롬 체크 시작",chrome_true:"참",chrome_false:"거짓",chrome_timeup:"시간 종료 — 최종 점수:",breach_hint:"프로토콜을 뚫을 수 있는 시도는 최대 6번. 실패할 때마다 화면이 손상됩니다. 빨리 성공할수록 eddies 보상이 커집니다.",breach_input_ph:"브리치를 시도할 카드 이름을 입력하세요...",breach_attempts:"시도 횟수",breach_failed:"브리치 실패 — 정답 카드는",breach_success:"브리치 성공 —",breach_new:"새 브리치",community_title:"Choomdle 커뮤니티 요약",community_publish:"내 통계 게시",community_hint:"플레이어가 자발적으로 공개한 eddies와 연속 기록 기반 순위입니다 (닉네임은 모두에게 공개됩니다).",podium_cumul:"누적 (총 eddies)",podium_classic:"클래식",podium_blitz:"블리츠",podium_endless:"엔드리스",podium_chrome:"크롬 체크",podium_breach:"넷러너 브리치",stats_title:"내 통계",stats_games:"플레이한 게임 수",stats_wins:"승리",stats_winpct:"승률",stats_streak:"현재 연속 기록",stats_best:"최고 연속 기록",stats_dist:"해결한 클래식의 시도 횟수 분포:",feedback_title:"Choomdle에 대한 의견을 남겨주세요",feedback_ph:"모드 아이디어, 버그, 빠진 카드...",feedback_send:"보내기",feedback_ok:"감사합니다, 전송되었습니다!",footer:"카드 데이터: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). 비공식 팬 프로젝트이며 카드 이미지나 규칙 텍스트를 그대로 사용하지 않습니다. 매일 00:00 UTC에 새로운 클래식 카드가 공개됩니다."},
+zh:{eyebrow:"网络甲板 // 突破协议",subtitle:"猜出今天的赛博朋克TCG卡牌 — 粉丝制作，与 CD Projekt Red / WeirdCo 无关",tab_classic:"经典模式",tab_blitz:"闪电模式",tab_endless:"无尽模式",tab_chrome:"芯片测试",tab_legend:"Legend",legend_daily:"每日 Legend 挑战",legend_input_ph:"输入传奇卡牌的准确名称...",legend_hint:"只有一次机会：需要准确拼写，不显示任何提示。",legend_win_prefix:"身份确认 —",legend_lose_prefix:"身份错误 — 正确答案是",legend_submit:"提交",podium_legend:"Legend",tab_breach:"电网骇客突破",fbtn_community:"社区",fbtn_stats:"我的数据",fbtn_feedback:"反馈",acc_not_connected:"未登录",acc_pseudo_ph:"选择一个昵称",acc_create:"创建免费账户",acc_google:"使用 Google 登录",classic_daily:"每日挑战",classic_streak:"连胜",classic_best:"最佳",classic_input_ph:"输入卡牌名称...",classic_hint:"比较 类型 · 阵营 · 费用(€$) · 力量 · RAM。橙色 = 至少共享一个阵营（不会告诉你是哪个）。",col_card:"卡牌",col_type:"类型",col_faction:"阵营",col_cost:"费用",col_pwr:"力量",col_ram:"RAM",win_prefix:"突破成功 —",win_tries:"用 {n} 次猜中。",reward_earn:"+{n} eddies",blitz_score:"分数",blitz_start:"开始闪电模式",blitz_input_ph:"40秒内尽可能多地猜中卡牌...",blitz_timeup:"时间到 — 最终得分：",blitz_answer:"答案是",endless_label:"无限模式，无计时",endless_solved:"已解出卡牌（累计）",endless_found:"找到卡牌 —",endless_next:"下一张卡牌",chrome_hint:"40秒，判断真/假。答错扣5秒。",chrome_start:"开始芯片测试",chrome_true:"真",chrome_false:"假",chrome_timeup:"时间到 — 最终得分：",breach_hint:"最多6次尝试破解协议。每次失败都会扰乱画面。越快成功，eddies奖励越高。",breach_input_ph:"输入卡牌名称尝试突破...",breach_attempts:"尝试次数",breach_failed:"突破失败 — 答案是",breach_success:"突破成功 —",breach_new:"新的突破",community_title:"Choomdle 社区总览",community_publish:"发布我的数据",community_hint:"排名基于玩家自愿公开的 eddies 和连胜记录（昵称对所有人可见）。",podium_cumul:"累计（总 eddies）",podium_classic:"经典模式",podium_blitz:"闪电模式",podium_endless:"无尽模式",podium_chrome:"芯片测试",podium_breach:"电网骇客突破",stats_title:"我的数据",stats_games:"已玩局数",stats_wins:"胜场",stats_winpct:"胜率",stats_streak:"当前连胜",stats_best:"最佳连胜",stats_dist:"已解出经典模式的猜测次数分布：",feedback_title:"给 Choomdle 提反馈",feedback_ph:"模式建议、漏洞、缺失的卡牌...",feedback_send:"发送",feedback_ok:"谢谢，已发送！",footer:"卡牌数据来自 Cyberpunk Trading Card Game（WeirdCo × CD Projekt Red）。非官方粉丝项目，未复制卡牌插图或规则文本。每天 00:00 UTC 更新经典模式卡牌。"},
+ja:{eyebrow:"ネットデッキ // ブリーチ・プロトコル",subtitle:"今日のサイバーパンクTCGカードを当てよう — ファン制作、CD Projekt Red / WeirdCoとは無関係",tab_classic:"クラシック",tab_blitz:"ブリッツ",tab_endless:"エンドレス",tab_chrome:"クロームチェック",tab_legend:"Legend",legend_daily:"本日のLegendチャレンジ",legend_input_ph:"レジェンドの正確な名前を入力...",legend_hint:"1回のみの挑戦：正確な表記が必要で、候補は表示されません。",legend_win_prefix:"アイデンティティ確認 —",legend_lose_prefix:"不正解 — 正解は",legend_submit:"送信",podium_legend:"Legend",tab_breach:"ネットランナー・ブリーチ",fbtn_community:"コミュニティ",fbtn_stats:"マイ統計",fbtn_feedback:"フィードバック",acc_not_connected:"未ログイン",acc_pseudo_ph:"ニックネームを選択",acc_create:"無料アカウント作成",acc_google:"Googleでログイン",classic_daily:"デイリーチャレンジ",classic_streak:"連続記録",classic_best:"最高記録",classic_input_ph:"カード名を入力...",classic_hint:"タイプ・ファクション・コスト(€$)・パワー・RAMを比較。オレンジ = 少なくとも1つの共通ファクションあり（どれかは非公開）。",col_card:"カード",col_type:"タイプ",col_faction:"ファクション",col_cost:"コスト",col_pwr:"パワー",col_ram:"RAM",win_prefix:"ブリーチ成功 —",win_tries:"{n}回で解決。",reward_earn:"+{n} eddies",blitz_score:"スコア",blitz_start:"ブリッツ開始",blitz_input_ph:"40秒でできるだけ多くのカードを当てよう...",blitz_timeup:"タイムアップ — 最終スコア：",blitz_answer:"正解のカードは",endless_label:"無制限モード、タイマーなし",endless_solved:"解決したカード（累計）",endless_found:"カード発見 —",endless_next:"次のカード",chrome_hint:"40秒、正誤クイズ。誤答すると5秒減ります。",chrome_start:"クロームチェック開始",chrome_true:"正しい",chrome_false:"間違い",chrome_timeup:"タイムアップ — 最終スコア：",breach_hint:"プロトコル突破は最大6回まで。失敗するたびに画面が乱れます。速く成功するほどeddies報酬が高くなります。",breach_input_ph:"ブリーチを試すカード名を入力...",breach_attempts:"試行回数",breach_failed:"ブリーチ失敗 — 正解のカードは",breach_success:"ブリーチ成功 —",breach_new:"新しいブリーチ",community_title:"Choomdleコミュニティまとめ",community_publish:"自分の統計を公開",community_hint:"プレイヤーが自発的に公開したeddiesと連続記録に基づくランキング（ニックネームは全員に表示されます）。",podium_cumul:"累計（総eddies）",podium_classic:"クラシック",podium_blitz:"ブリッツ",podium_endless:"エンドレス",podium_chrome:"クロームチェック",podium_breach:"ネットランナー・ブリーチ",stats_title:"マイ統計",stats_games:"プレイ回数",stats_wins:"勝利数",stats_winpct:"勝率",stats_streak:"現在の連続記録",stats_best:"最高連続記録",stats_dist:"解決したクラシックの試行回数分布：",feedback_title:"Choomdleへのフィードバック",feedback_ph:"モードのアイデア、バグ、不足しているカードなど...",feedback_send:"送信",feedback_ok:"ありがとうございます、送信されました！",footer:"カードデータ：Cyberpunk Trading Card Game（WeirdCo × CD Projekt Red）。非公式ファンプロジェクトであり、カードイラストやルールテキストは再現していません。毎日00:00 UTCに新しいクラシックカードが登場します。"}
+};
+const LANG_LABELS = { fr:"Français", en:"English", es:"Español", de:"Deutsch", pt:"Português", it:"Italiano", pl:"Polski", ko:"한국어", zh:"中文", ja:"日本語" };
+let currentLang = "fr";
+
+function initLangSelect(){
+  const sel = document.getElementById('langSelect');
+  Object.keys(LANG_LABELS).forEach(code=>{
+    const opt = document.createElement('option'); opt.value = code; opt.textContent = LANG_LABELS[code];
+    sel.appendChild(opt);
+  });
+  sel.value = "fr";
+  sel.addEventListener('change', ()=>applyLanguage(sel.value));
+}
+function applyLanguage(code){
+  currentLang = code;
+  const dict = I18N[code] || I18N.fr;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    if(dict[key]!==undefined) el.textContent = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-ph');
+    if(dict[key]!==undefined) el.placeholder = dict[key];
+  });
+  document.documentElement.lang = code;
+  try{ window.storage && window.storage.set('choomdle:lang', code); }catch(e){}
+}
+function t(key){ return (I18N[currentLang]||I18N.fr)[key] || key; }
+
+// ======================= HELPERS =======================
+function fmtVal(v){ return v===null || v===undefined ? "—" : v; }
+function seededIndex(dateStr, len){ let h=0; for(let i=0;i<dateStr.length;i++){ h=(h*31+dateStr.charCodeAt(i))>>>0; } return h % len; }
+function todayUTCString(){ const d=new Date(); return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1)+"-"+d.getUTCDate(); }
+function yesterdayUTCString(){ const d=new Date(); d.setUTCDate(d.getUTCDate()-1); return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1)+"-"+d.getUTCDate(); }
+function randCard(){ return CARDS[Math.floor(Math.random()*CARDS.length)]; }
+
+// Barème de récompense (÷10) : 100 eddies au 1er essai, -10 par essai supplémentaire, plancher 10.
+function computeReward(tries){ return Math.max(10, 100 - (tries-1)*10); }
+
+function compareCard(guess, secret){
+  const res = {};
+  res.type = guess.t === secret.t ? "match" : "miss";
+  const shared = guess.f.filter(x=>secret.f.includes(x));
+  res.faction = shared.length === guess.f.length && shared.length === secret.f.length ? "match" : shared.length > 0 ? "partial" : "miss";
+  ["c","p","r"].forEach(k=>{
+    const gv = guess[k], sv = secret[k];
+    if(gv === null && sv === null){ res[k] = {state:"match", arrow:""}; }
+    else if(gv === null || sv === null){ res[k] = {state:"miss", arrow:""}; }
+    else if(gv === sv){ res[k] = {state:"match", arrow:""}; }
+    else { res[k] = {state:"miss", arrow: gv < sv ? "↑" : "↓"}; }
+  });
+  return res;
+}
+function makeCell(cls, content, arrow){ return '<td><div class="cell '+cls+'">'+content+(arrow?'<span class="arrow">'+arrow+'</span>':'')+'</div></td>'; }
+function renderRow(guess, secret){
+  const r = compareCard(guess, secret);
+  let row = '<tr><td><div class="cell name">'+guess.n+'</div></td>';
+  row += makeCell(r.type, guess.t);
+  row += makeCell(r.faction, guess.f.join(" · "));
+  row += makeCell(r.c.state, fmtVal(guess.c), r.c.arrow);
+  row += makeCell(r.p.state, fmtVal(guess.p), r.p.arrow);
+  row += makeCell(r.r.state, fmtVal(guess.r), r.r.arrow);
+  row += '</tr>';
+  const win = r.type==="match" && r.faction==="match" && r.c.state==="match" && r.p.state==="match" && r.r.state==="match";
+  return {row, win};
+}
+function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
+  inputEl.addEventListener('input', ()=>{
+    const q = inputEl.value.trim().toLowerCase();
+    suggEl.innerHTML = "";
+    if(!q){ suggEl.style.display="none"; return; }
+    const excl = excludeNames ? excludeNames() : [];
+    const matches = CARDS.filter(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n)).slice(0,8);
+    if(!matches.length){ suggEl.style.display="none"; return; }
+    matches.forEach(c=>{
+      const div = document.createElement('div');
+      div.innerHTML = c.n + ' <small>'+c.t+'</small>';
+      div.addEventListener('click', ()=>{ onPick(c); inputEl.value=""; suggEl.style.display="none"; });
+      suggEl.appendChild(div);
+    });
+    suggEl.style.display = "block";
+  });
+  inputEl.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      const q = inputEl.value.trim().toLowerCase();
+      const excl = excludeNames ? excludeNames() : [];
+      const exact = CARDS.find(c=>c.n.toLowerCase()===q && !excl.includes(c.n));
+      const first = CARDS.find(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
+      const pick = exact || first;
+      if(pick){ onPick(pick); inputEl.value=""; suggEl.style.display="none"; }
+    }
+  });
+  document.addEventListener('click', (e)=>{ if(e.target !== inputEl) suggEl.style.display="none"; });
+}
+
+// ======================= STORAGE =======================
+async function loadStats(){
+  try{
+    const res = await window.storage.get('choomdle:stats');
+    return res ? JSON.parse(res.value) : defaultStats();
+  }catch(e){ return defaultStats(); }
+}
+function defaultStats(){
+  return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
+    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0}, lastLegendPlayed:null, legendResult:null};
+}
+async function saveStats(stats){ try{ await window.storage.set('choomdle:stats', JSON.stringify(stats)); }catch(e){} }
+async function addEddies(game, amount){
+  const s = await loadStats();
+  s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
+  s.eddies[game] = (s.eddies[game]||0) + amount;
+  await saveStats(s);
+  refreshEddiesUI();
+  return s;
+}
+function eddiesTotal(s){ const e = s.eddies||{}; return Object.values(e).reduce((a,b)=>a+(b||0),0); }
+function refreshEddiesUI(){ loadStats().then(s=>{ document.getElementById('eddiesTotal').textContent = eddiesTotal(s); }); }
+
+// ======================= ACCOUNT (pseudo + Google scaffold) =======================
+// GOOGLE_CLIENT_ID : remplace par ton propre Client ID OAuth (Google Cloud Console)
+// une fois le site hébergé sur un vrai domaine autorisé. Sans ça, le bouton
+// Google reste un scaffold visuel qui explique la marche à suivre.
+const GOOGLE_CLIENT_ID = "REMPLACE-MOI.apps.googleusercontent.com";
+
+async function initAccount(){
+  try{
+    const res = await window.storage.get('choomdle:account');
+    if(res){
+      const acc = JSON.parse(res.value);
+      setLoggedInUI(acc.pseudo);
+    }
+  }catch(e){}
+  document.getElementById('createAccountBtn').addEventListener('click', async ()=>{
+    const pseudo = document.getElementById('pseudoInput').value.trim();
+    if(!pseudo) return;
+    try{
+      await window.storage.set('choomdle:account', JSON.stringify({pseudo, method:"local", created: Date.now()}));
+      setLoggedInUI(pseudo);
+    }catch(e){}
+  });
+  document.getElementById('googleBtn').addEventListener('click', ()=>{
+    if(GOOGLE_CLIENT_ID.startsWith("REMPLACE")){
+      alert("Connexion Google : crée un Client ID OAuth dans Google Cloud Console, héberge le site sur un domaine autorisé, puis remplace GOOGLE_CLIENT_ID dans le code. En attendant, utilise le pseudo simple à gauche.");
+      return;
+    }
+    if(window.google && window.google.accounts){
+      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential });
+      google.accounts.id.prompt();
+    }
+  });
+}
+function setLoggedInUI(pseudo){
+  document.getElementById('accountStatus').textContent = (I18N[currentLang]||I18N.fr).acc_not_connected.replace(/.*/, "") || "";
+  document.getElementById('accountStatus').textContent = "✓ " + pseudo;
+  document.getElementById('pseudoInput').style.display = 'none';
+  document.getElementById('createAccountBtn').style.display = 'none';
+  document.getElementById('googleBtn').style.display = 'none';
+}
+// Décodage client-side du JWT Google (pas de vérification serveur : suffisant
+// pour un pseudo/leaderboard hobby, pas pour de l'auth sécurisée).
+function handleGoogleCredential(response){
+  try{
+    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    const pseudo = payload.name || payload.email || "Choomer";
+    window.storage.set('choomdle:account', JSON.stringify({pseudo, method:"google", created: Date.now()}));
+    setLoggedInUI(pseudo);
+  }catch(e){}
+}
+async function getPseudo(){
+  try{ const res = await window.storage.get('choomdle:account'); return res ? JSON.parse(res.value).pseudo : "Anonyme"; }
+  catch(e){ return "Anonyme"; }
+}
+
+// ======================= COMMUNITY (podiums par jeu + cumulé) =======================
+async function publishStats(){
+  const pseudo = await getPseudo();
+  const s = await loadStats();
+  try{
+    await window.storage.set('community:'+pseudo, JSON.stringify({
+      pseudo, streak: s.streak, bestStreak: s.bestStreak, endlessSolved: s.endlessSolved||0,
+      eddies: s.eddies||{}, eddiesTotal: eddiesTotal(s)
+    }), true);
+    renderCommunity();
+  }catch(e){}
+}
+async function loadCommunityRows(){
+  const list = await window.storage.list('community:', true);
+  if(!list || !list.keys || !list.keys.length) return [];
+  const rows = [];
+  for(const k of list.keys){
+    try{ const r = await window.storage.get(k, true); if(r) rows.push(JSON.parse(r.value)); }catch(e){}
+  }
+  return rows;
+}
+function podiumHTML(title, rows, keyFn){
+  const sorted = rows.slice().sort((a,b)=>keyFn(b)-keyFn(a));
+  const medals = ["🥇","🥈","🥉"];
+  let html = '<div class="podiumbox"><h4>'+title+'</h4>';
+  if(!sorted.length){ html += '<div class="podiumrow"><span>—</span></div>'; }
+  sorted.slice(0,8).forEach((r,i)=>{
+    html += '<div class="podiumrow"><span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
+  });
+  html += '</div>';
+  return html;
+}
+async function renderCommunity(){
+  const grid = document.getElementById('podiumGrid');
+  grid.innerHTML = '<div class="podiumbox">…</div>';
+  try{
+    const rows = await loadCommunityRows();
+    grid.innerHTML =
+      podiumHTML(t('podium_cumul'), rows, r=>r.eddiesTotal||0) +
+      podiumHTML(t('podium_classic'), rows, r=>(r.eddies&&r.eddies.classic)||0) +
+      podiumHTML(t('podium_legend'), rows, r=>(r.eddies&&r.eddies.legend)||0) +
+      podiumHTML(t('podium_blitz'), rows, r=>(r.eddies&&r.eddies.blitz)||0) +
+      podiumHTML(t('podium_endless'), rows, r=>(r.eddies&&r.eddies.endless)||0) +
+      podiumHTML(t('podium_chrome'), rows, r=>(r.eddies&&r.eddies.chrome)||0) +
+      podiumHTML(t('podium_breach'), rows, r=>(r.eddies&&r.eddies.breach)||0);
+  }catch(e){
+    grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
+  }
+}
+
+// ======================= PERSONAL STATS PANEL =======================
+async function renderStatsPanel(){
+  const s = await loadStats();
+  const played = s.gamesPlayed || 0, wins = s.wins || 0;
+  const winPct = played ? Math.round((wins/played)*100) : 0;
+  document.getElementById('statsSummary').innerHTML = [
+    [t('stats_games'), played], [t('stats_wins'), wins], [t('stats_winpct'), winPct+'%'],
+    [t('stats_streak'), s.streak||0], [t('stats_best'), s.bestStreak||0]
+  ].map(([label,val])=>
+    '<div><div style="font-size:22px;color:var(--yellow);font-family:\'Chakra Petch\',sans-serif;font-weight:700">'+val+'</div><div style="font-size:11px;color:var(--muted)">'+label+'</div></div>'
+  ).join('');
+  const dist = s.guessDistribution || {};
+  const maxCount = Math.max(1, ...Object.values(dist));
+  let bars = '';
+  for(let i=1;i<=8;i++){
+    const count = dist[i]||0;
+    const widthPct = Math.max(4, Math.round((count/maxCount)*100));
+    bars += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px;"><span style="width:14px;color:var(--muted)">'+i+'</span><div style="background:var(--cyan);height:16px;width:'+widthPct+'%;min-width:2px;"></div><span style="color:var(--muted)">'+count+'</span></div>';
+  }
+  document.getElementById('statsDistribution').innerHTML = bars;
+}
+
+// ======================= FEEDBACK =======================
+function initFeedback(){
+  document.getElementById('sendFeedbackBtn').addEventListener('click', async ()=>{
+    const text = document.getElementById('feedbackText').value.trim();
+    if(!text) return;
+    const pseudo = await getPseudo();
+    try{
+      await window.storage.set('feedback:'+Date.now()+'-'+Math.random().toString(36).slice(2), JSON.stringify({pseudo, text, date: new Date().toISOString()}), true);
+      document.getElementById('feedbackConfirm').textContent = t('feedback_ok');
+      document.getElementById('feedbackText').value = "";
+    }catch(e){ document.getElementById('feedbackConfirm').textContent = "…"; }
+  });
+}
+
+// ======================= CLASSIC =======================
+let classicSecret, classicGuesses = [], classicSolved = false;
+const classicBody = document.getElementById('classicBody');
+const classicInput = document.getElementById('guessInput');
+const classicSugg = document.getElementById('suggestions');
+const classicBanner = document.getElementById('classicBanner');
+
+function initClassic(){
+  const today = todayUTCString();
+  document.getElementById('dailyDate').textContent = today + " UTC";
+  classicSecret = CARDS[seededIndex(today, CARDS.length)];
+  classicGuesses = []; classicSolved = false;
+  classicBody.innerHTML = ""; classicBanner.className = "banner"; classicBanner.innerHTML = "";
+  refreshStreakUI();
+}
+function refreshStreakUI(){
+  loadStats().then(s=>{
+    document.getElementById('streakVal').textContent = s.streak;
+    document.getElementById('bestStreakVal').textContent = s.bestStreak;
+  });
+}
+setupAutocomplete(classicInput, classicSugg, (card)=>{
+  if(classicSolved) return;
+  const {row, win} = renderRow(card, classicSecret);
+  classicBody.insertAdjacentHTML('beforeend', row);
+  classicGuesses.push(card.n);
+  if(win){
+    classicSolved = true;
+    const reward = computeReward(classicGuesses.length);
+    classicBanner.className = "banner win";
+    classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', classicGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+    loadStats().then(s=>{
+      const today = todayUTCString();
+      if(s.lastWin !== today){
+        s.streak = (s.lastWin === yesterdayUTCString()) ? s.streak+1 : 1;
+        s.bestStreak = Math.max(s.bestStreak, s.streak);
+        s.lastWin = today;
+        s.gamesPlayed = (s.gamesPlayed||0)+1;
+        s.wins = (s.wins||0)+1;
+        s.guessDistribution = s.guessDistribution || {};
+        s.guessDistribution[classicGuesses.length] = (s.guessDistribution[classicGuesses.length]||0)+1;
+        s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
+        s.eddies.classic += reward;
+        saveStats(s).then(()=>{ refreshStreakUI(); refreshEddiesUI(); });
+      }
+    });
+  }
+}, ()=>classicGuesses);
+
+// ======================= LEGEND (défi quotidien, une seule tentative) =======================
+// On exclut les Legends sans sous-titre (ex: "Lucyna Kushinada") : pas de texte à afficher.
+const LEGEND_CARDS = CARDS.filter(c=>c.t==="Legend" && c.n.includes(" — "));
+function splitLegend(card){ const idx = card.n.indexOf(" — "); return { main: card.n.slice(0, idx), sub: card.n.slice(idx+3) }; }
+function rewardText(n){ return (n>=0?'+':'') + n + ' eddies'; }
+let legendSecret, legendDone = false;
+function initLegend(){
+  const today = todayUTCString();
+  document.getElementById('legendDate').textContent = today + " UTC";
+  legendSecret = LEGEND_CARDS[seededIndex(today+"-legend", LEGEND_CARDS.length)];
+  const parts = splitLegend(legendSecret);
+  document.getElementById('legendQuote').textContent = '« ' + parts.sub + ' »';
+  legendDone = false;
+  const input = document.getElementById('guessInputLegend'), btn = document.getElementById('submitLegendBtn'), banner = document.getElementById('legendBanner');
+  input.value = ""; input.disabled = false; btn.disabled = false;
+  banner.className = "banner"; banner.innerHTML = "";
+  loadStats().then(s=>{
+    if(s.lastLegendPlayed === today){
+      legendDone = true; input.disabled = true; btn.disabled = true;
+      if(s.legendResult === 'win'){
+        banner.className = "banner win";
+        banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>';
+      } else {
+        banner.className = "banner fail";
+        banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>';
+      }
+    }
+  });
+}
+function submitLegend(){
+  if(legendDone) return;
+  const input = document.getElementById('guessInputLegend'), btn = document.getElementById('submitLegendBtn'), banner = document.getElementById('legendBanner');
+  const guess = input.value.trim();
+  if(!guess) return;
+  const parts = splitLegend(legendSecret);
+  const correct = guess.toLowerCase() === parts.main.trim().toLowerCase();
+  legendDone = true; input.disabled = true; btn.disabled = true;
+  const today = todayUTCString();
+  loadStats().then(s=>{
+    s.lastLegendPlayed = today;
+    s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0};
+    if(correct){
+      s.legendResult = 'win';
+      s.eddies.legend = (s.eddies.legend||0) + 50;
+      banner.className = "banner win";
+      banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>';
+    } else {
+      s.legendResult = 'lose';
+      s.eddies.legend = (s.eddies.legend||0) - 25;
+      banner.className = "banner fail";
+      banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>';
+    }
+    saveStats(s).then(refreshEddiesUI);
+  });
+}
+document.getElementById('submitLegendBtn').addEventListener('click', submitLegend);
+document.getElementById('guessInputLegend').addEventListener('keydown', e=>{ if(e.key==='Enter') submitLegend(); });
+
+// ======================= BLITZ =======================
+let blitzSecret, blitzTimeLeft = 90, blitzTimer = null, blitzScore = 0, blitzGuesses = [], blitzActive=false;
+const blitzBody = document.getElementById('blitzBody');
+const blitzInput = document.getElementById('guessInputBlitz');
+const blitzSugg = document.getElementById('suggestionsBlitz');
+const blitzBanner = document.getElementById('blitzBanner');
+function newBlitzCard(){ blitzSecret = randCard(); blitzGuesses = []; }
+function startBlitz(){
+  blitzScore = 0; blitzTimeLeft = 90; blitzActive = true;
+  blitzBody.innerHTML=""; blitzBanner.className="banner"; blitzBanner.innerHTML="";
+  document.getElementById('blitzScore').textContent = blitzScore;
+  document.getElementById('blitzTimer').textContent = blitzTimeLeft+"s";
+  blitzInput.disabled = false; blitzInput.value=""; blitzInput.focus();
+  newBlitzCard();
+  clearInterval(blitzTimer);
+  blitzTimer = setInterval(()=>{
+    blitzTimeLeft--;
+    document.getElementById('blitzTimer').textContent = blitzTimeLeft+"s";
+    if(blitzTimeLeft<=0){
+      clearInterval(blitzTimer); blitzActive = false; blitzInput.disabled = true;
+      blitzBanner.className = "banner win";
+      blitzBanner.innerHTML = t('blitz_timeup')+' '+blitzScore+'<span class="sub">'+t('blitz_answer')+' '+blitzSecret.n+'.</span>';
+    }
+  },1000);
+}
+document.getElementById('startBlitzBtn').addEventListener('click', startBlitz);
+setupAutocomplete(blitzInput, blitzSugg, (card)=>{
+  if(!blitzActive) return;
+  const {row, win} = renderRow(card, blitzSecret);
+  blitzBody.insertAdjacentHTML('beforeend', row);
+  blitzGuesses.push(card.n);
+  if(win){
+    const reward = computeReward(blitzGuesses.length);
+    blitzScore++;
+    document.getElementById('blitzScore').textContent = blitzScore;
+    addEddies('blitz', reward);
+    newBlitzCard();
+  }
+}, ()=>blitzGuesses);
+
+// ======================= ENDLESS =======================
+let endlessSecret, endlessGuesses = [];
+const endlessBody = document.getElementById('endlessBody');
+const endlessInput = document.getElementById('guessInputEndless');
+const endlessSugg = document.getElementById('suggestionsEndless');
+const endlessBanner = document.getElementById('endlessBanner');
+function newEndlessCard(){
+  endlessSecret = randCard(); endlessGuesses = [];
+  endlessBody.innerHTML = ""; endlessBanner.className = "banner"; endlessBanner.innerHTML = "";
+}
+newEndlessCard();
+setupAutocomplete(endlessInput, endlessSugg, (card)=>{
+  const {row, win} = renderRow(card, endlessSecret);
+  endlessBody.insertAdjacentHTML('beforeend', row);
+  endlessGuesses.push(card.n);
+  if(win){
+    const reward = computeReward(endlessGuesses.length);
+    endlessBanner.className = "banner win";
+    endlessBanner.innerHTML = t('endless_found')+' '+endlessSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', endlessGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span> <button class="bigbtn" id="playAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
+    loadStats().then(s=>{
+      s.endlessSolved = (s.endlessSolved||0)+1;
+      s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
+      s.eddies.endless += reward;
+      saveStats(s).then(()=>{
+        document.getElementById('endlessSolved').textContent = s.endlessSolved;
+        refreshEddiesUI();
+      });
+    });
+    setTimeout(()=>{ const btn = document.getElementById('playAgain'); if(btn) btn.addEventListener('click', newEndlessCard); },0);
+  }
+}, ()=>endlessGuesses);
+
+// ======================= CHROME CHECK (Vrai/Faux, 90s, -5s si erreur) =======================
+let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null;
+function chromeNewQuestion(){
+  const attrs = ["c","p","r"];
+  let a, b, attr, av, bv, tries=0;
+  do{
+    a = randCard(); b = randCard(); attr = attrs[Math.floor(Math.random()*attrs.length)];
+    av = a[attr]; bv = b[attr]; tries++;
+  } while((a.n===b.n || av===null || bv===null) && tries<50);
+  chromeCurrent = { a, b, attr, truth: av > bv };
+  const labelMap = {c:t('col_cost'), p:t('col_pwr'), r:t('col_ram')};
+  document.getElementById('chromeCardA').textContent = a.n;
+  document.getElementById('chromeCardB').textContent = b.n;
+  document.getElementById('chromeOp').innerHTML = '>&nbsp;<div class="duelattr">'+labelMap[attr]+'</div>';
+}
+function startChrome(){
+  chromeScore=0; chromeTimeLeft=40; chromeActive=true;
+  document.getElementById('chromeScore').textContent = chromeScore;
+  document.getElementById('chromeTimer').textContent = chromeTimeLeft+"s";
+  document.getElementById('chromeDuel').style.display='flex';
+  document.getElementById('chromeAnswers').style.display='flex';
+  document.getElementById('chromeBanner').className='banner'; document.getElementById('chromeBanner').innerHTML='';
+  chromeNewQuestion();
+  clearInterval(chromeTimer);
+  chromeTimer = setInterval(()=>{
+    chromeTimeLeft--;
+    document.getElementById('chromeTimer').textContent = Math.max(0,chromeTimeLeft)+"s";
+    if(chromeTimeLeft<=0) endChrome();
+  },1000);
+}
+function endChrome(){
+  clearInterval(chromeTimer); chromeActive=false;
+  document.getElementById('chromeDuel').style.display='none';
+  document.getElementById('chromeAnswers').style.display='none';
+  document.getElementById('chromeBanner').className='banner win';
+  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore;
+}
+function chromeAnswer(userSaysTrue){
+  if(!chromeActive) return;
+  const correct = userSaysTrue === chromeCurrent.truth;
+  const duel = document.getElementById('chromeDuel');
+  if(correct){
+    chromeScore++; document.getElementById('chromeScore').textContent = chromeScore;
+    addEddies('chrome', 15);
+    duel.classList.remove('flash-wrong'); duel.classList.add('flash-correct');
+  }else{
+    chromeTimeLeft = Math.max(0, chromeTimeLeft-5);
+    document.getElementById('chromeTimer').textContent = chromeTimeLeft+"s";
+    duel.classList.remove('flash-correct'); duel.classList.add('flash-wrong');
+  }
+  setTimeout(()=>duel.classList.remove('flash-correct','flash-wrong'),300);
+  if(chromeTimeLeft<=0){ endChrome(); return; }
+  chromeNewQuestion();
+}
+document.getElementById('startChromeBtn').addEventListener('click', startChrome);
+document.getElementById('chromeTrue').addEventListener('click', ()=>chromeAnswer(true));
+document.getElementById('chromeFalse').addEventListener('click', ()=>chromeAnswer(false));
+
+// ======================= NETRUNNER BREACH (6 tentatives, glitch, prime dégressive) =======================
+let breachSecret, breachGuesses=[], breachActive=false, breachAttemptsLeft=6;
+const breachBody = document.getElementById('breachBody');
+const breachInput = document.getElementById('guessInputBreach');
+const breachSugg = document.getElementById('suggestionsBreach');
+const breachBanner = document.getElementById('breachBanner');
+function startBreach(){
+  breachSecret = randCard(); breachGuesses = []; breachAttemptsLeft = 6; breachActive = true;
+  breachBody.innerHTML=""; breachBanner.className="banner"; breachBanner.innerHTML="";
+  document.getElementById('breachAttempts').textContent = breachAttemptsLeft;
+  breachInput.disabled = false; breachInput.value=""; breachInput.focus();
+}
+document.getElementById('startBreachBtn').addEventListener('click', startBreach);
+setupAutocomplete(breachInput, breachSugg, (card)=>{
+  if(!breachActive) return;
+  const {row, win} = renderRow(card, breachSecret);
+  breachBody.insertAdjacentHTML('beforeend', row);
+  breachGuesses.push(card.n);
+  if(win){
+    breachActive = false; breachInput.disabled = true;
+    const reward = computeReward(breachGuesses.length);
+    breachBanner.className = "banner win";
+    breachBanner.innerHTML = t('breach_success')+' '+breachSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', breachGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+    addEddies('breach', reward);
+  } else {
+    breachAttemptsLeft--;
+    document.getElementById('breachAttempts').textContent = breachAttemptsLeft;
+    document.querySelector('#panel-breach .gridwrap').classList.add('glitchflash');
+    setTimeout(()=>document.querySelector('#panel-breach .gridwrap').classList.remove('glitchflash'),250);
+    if(breachAttemptsLeft<=0){
+      breachActive = false; breachInput.disabled = true;
+      breachBanner.className = "banner fail";
+      breachBanner.innerHTML = t('breach_failed')+' '+breachSecret.n;
+    }
+  }
+}, ()=>breachGuesses);
+
+// ======================= NAVIGATION =======================
+const ALL_PANELS = ['classic','legend','blitz','endless','chrome','breach','community','stats','feedback'];
+function showPanel(name){
+  ALL_PANELS.forEach(p=>{
+    const el = document.getElementById('panel-'+p);
+    if(el) el.style.display = (p===name) ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.panel===name));
+  document.querySelectorAll('.fbtn[data-panel]').forEach(b=>b.classList.toggle('active', b.dataset.panel===name));
+  if(name==='community') renderCommunity();
+  if(name==='stats') renderStatsPanel();
+}
+document.querySelectorAll('.tab[data-panel], .fbtn[data-panel]').forEach(btn=>{
+  btn.addEventListener('click', ()=>showPanel(btn.dataset.panel));
+});
+
+// ======================= FEATURES (toutes actives) =======================
+const FEATURES = { i18n:true, accounts:true, community:true, personalStats:true, feedback:true };
+function applyFeatureFlags(){
+  // tout est true par défaut désormais ; repasse un flag à false ci-dessus pour le recacher.
+  if(!FEATURES.i18n) document.getElementById('langSelect').classList.add('ff-hidden');
+  if(!FEATURES.accounts) document.getElementById('accountRow').classList.add('ff-hidden');
+  if(!FEATURES.community) document.querySelector('.fbtn[data-panel="community"]').classList.add('ff-hidden');
+  if(!FEATURES.personalStats) document.querySelector('.fbtn[data-panel="stats"]').classList.add('ff-hidden');
+  if(!FEATURES.feedback) document.querySelector('.fbtn[data-panel="feedback"]').classList.add('ff-hidden');
+}
+
+// ======================= INIT =======================
+initClassic();
+initLegend();
+initLangSelect();
+initAccount();
+initFeedback();
+refreshEddiesUI();
+document.getElementById('publishStatsBtn').addEventListener('click', publishStats);
+applyFeatureFlags();
+</script>
+</body>
+</html>
