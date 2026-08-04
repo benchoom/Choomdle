@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CHOOMDLE — Le Wordle du Cyberpunk TCG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
-<!-- Google Identity Services — nécessite un vrai Client ID + domaine autorisé (voir GOOGLE_CLIENT_ID plus bas) -->
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
     --bg:#08080d; --bg2:#0f0f18; --panel:#14141f; --panel2:#1a1a29; --line:#2a2a3d;
@@ -206,7 +206,7 @@
       <button class="fbtn" data-panel="feedback" data-i18n="fbtn_feedback">Feedback</button>
       <div class="account-row" id="accountRow">
         <span class="fbtn" id="accountStatus" data-i18n="acc_not_connected">Non connecté</span>
-  <!--        <input id="pseudoInput" type="text" data-i18n-ph="acc_pseudo_ph" placeholder="Choisis un pseudo"> -->
+        <input id="pseudoInput" type="text" data-i18n-ph="acc_pseudo_ph" placeholder="Choisis un pseudo">
         <button class="fbtn" id="createAccountBtn" data-i18n="acc_create">Créer un compte gratuit</button>
         <button class="fbtn" id="googleBtn" data-i18n="acc_google">Se connecter avec Google</button>
       </div>
@@ -582,8 +582,51 @@ function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
   document.addEventListener('click', (e)=>{ if(e.target !== inputEl) suggEl.style.display="none"; });
 }
 
-// ======================= STORAGE =======================
+// ======================= SUPABASE =======================
+// Remplace ces deux valeurs (Supabase -> Project Settings -> API) puis tout se branche
+// automatiquement. Tant qu'elles ne sont pas remplacées, le site continue de fonctionner
+// en local (comme avant) sans rien casser.
+const SUPABASE_URL = "https://btaidgywgabzzzfnuxhv.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0YWlkZ3l3Z2Fienp6Zm51eGh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4Mzc2NzYsImV4cCI6MjEwMTQxMzY3Nn0.A-qysep6zcWCamCc3YAiBZiRF8aTmSeAV2pDsZX1qwg";
+const supabaseReady = !SUPABASE_URL.startsWith("REMPLACE") && !!window.supabase;
+const supabaseClient = supabaseReady ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let currentSession = null;
+let currentPseudo = null;
+
+// Conversion entre le format interne (JS) et les colonnes de la table `stats`.
+// Note : les eddies de Netrunner Breach (désactivé) ne sont pas encore en base ;
+// ils restent en local uniquement pour l'instant.
+function statsRowToLocal(row){
+  const meta = row.meta || {};
+  return {
+    streak: row.streak||0, bestStreak: row.best_streak||0,
+    lastWin: meta.lastWin||null, endlessSolved: meta.endlessSolved||0,
+    gamesPlayed: row.games_played||0, wins: row.wins||0,
+    guessDistribution: row.guess_distribution||{},
+    lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
+    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0 }
+  };
+}
+function localToStatsRow(s, uid){
+  return {
+    user_id: uid, streak: s.streak||0, best_streak: s.bestStreak||0,
+    games_played: s.gamesPlayed||0, wins: s.wins||0,
+    guess_distribution: s.guessDistribution||{},
+    eddies_classic: (s.eddies&&s.eddies.classic)||0, eddies_legend: (s.eddies&&s.eddies.legend)||0,
+    eddies_blitz: (s.eddies&&s.eddies.blitz)||0, eddies_endless: (s.eddies&&s.eddies.endless)||0,
+    eddies_chrome: (s.eddies&&s.eddies.chrome)||0,
+    meta: { lastWin: s.lastWin||null, endlessSolved: s.endlessSolved||0, lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
+  };
+}
+
+// ======================= STATS (Supabase si connecté, sinon stockage local) =======================
 async function loadStats(){
+  if(supabaseReady && currentSession){
+    try{
+      const { data, error } = await supabaseClient.from('stats').select('*').eq('user_id', currentSession.user.id).maybeSingle();
+      if(!error && data) return statsRowToLocal(data);
+    }catch(e){}
+  }
   try{
     const res = await window.storage.get('choomdle:stats');
     return res ? JSON.parse(res.value) : defaultStats();
@@ -593,10 +636,15 @@ function defaultStats(){
   return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
     eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0}, lastLegendPlayed:null, legendResult:null};
 }
-async function saveStats(stats){ try{ await window.storage.set('choomdle:stats', JSON.stringify(stats)); }catch(e){} }
+async function saveStats(stats){
+  try{ await window.storage.set('choomdle:stats', JSON.stringify(stats)); }catch(e){}
+  if(supabaseReady && currentSession){
+    try{ await supabaseClient.from('stats').upsert(localToStatsRow(stats, currentSession.user.id)); }catch(e){}
+  }
+}
 async function addEddies(game, amount){
   const s = await loadStats();
-  s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
+  s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0};
   s.eddies[game] = (s.eddies[game]||0) + amount;
   await saveStats(s);
   refreshEddiesUI();
@@ -605,65 +653,91 @@ async function addEddies(game, amount){
 function eddiesTotal(s){ const e = s.eddies||{}; return Object.values(e).reduce((a,b)=>a+(b||0),0); }
 function refreshEddiesUI(){ loadStats().then(s=>{ document.getElementById('eddiesTotal').textContent = eddiesTotal(s); }); }
 
-// ======================= ACCOUNT (pseudo + Google scaffold) =======================
-// GOOGLE_CLIENT_ID : remplace par ton propre Client ID OAuth (Google Cloud Console)
-// une fois le site hébergé sur un vrai domaine autorisé. Sans ça, le bouton
-// Google reste un scaffold visuel qui explique la marche à suivre.
-const GOOGLE_CLIENT_ID = "REMPLACE-MOI.apps.googleusercontent.com";
-
-async function initAccount(){
+// ======================= ACCOUNT (pseudo via connexion anonyme Supabase, ou Google) =======================
+// "Créer un compte gratuit" = connexion anonyme Supabase (aucun mot de passe) + pseudo enregistré.
+// "Se connecter avec Google" = Supabase gère tout le flux OAuth (redirection puis retour ici).
+async function initSupabaseAuth(){
+  if(!supabaseReady) return;
+  const { data } = await supabaseClient.auth.getSession();
+  currentSession = data.session;
+  if(currentSession) await onLoggedIn();
+  supabaseClient.auth.onAuthStateChange(async (event, session)=>{
+    currentSession = session;
+    if(session) await onLoggedIn();
+  });
+}
+async function onLoggedIn(){
+  const uid = currentSession.user.id;
   try{
-    const res = await window.storage.get('choomdle:account');
-    if(res){
-      const acc = JSON.parse(res.value);
-      setLoggedInUI(acc.pseudo);
+    const { data: profile } = await supabaseClient.from('profiles').select('pseudo').eq('id', uid).maybeSingle();
+    if(profile && profile.pseudo){
+      currentPseudo = profile.pseudo;
+    } else {
+      const suggested = currentSession.user.user_metadata && currentSession.user.user_metadata.full_name;
+      currentPseudo = suggested || document.getElementById('pseudoInput').value.trim() || "Choomer";
+      await supabaseClient.from('profiles').upsert({ id: uid, pseudo: currentPseudo });
     }
+    setLoggedInUI(currentPseudo);
+    refreshEddiesUI(); refreshStreakUI();
   }catch(e){}
+}
+async function initAccount(){
+  // Repli local tant que Supabase n'est pas configuré (placeholders non remplacés)
+  if(!supabaseReady){
+    try{
+      const res = await window.storage.get('choomdle:account');
+      if(res){ currentPseudo = JSON.parse(res.value).pseudo; setLoggedInUI(currentPseudo); }
+    }catch(e){}
+  }
   document.getElementById('createAccountBtn').addEventListener('click', async ()=>{
     const pseudo = document.getElementById('pseudoInput').value.trim();
     if(!pseudo) return;
-    try{
-      await window.storage.set('choomdle:account', JSON.stringify({pseudo, method:"local", created: Date.now()}));
-      setLoggedInUI(pseudo);
-    }catch(e){}
+    if(supabaseReady){
+      try{
+        const { data, error } = await supabaseClient.auth.signInAnonymously();
+        if(error) throw error;
+        currentSession = data.session;
+        currentPseudo = pseudo;
+        await supabaseClient.from('profiles').upsert({ id: currentSession.user.id, pseudo });
+        setLoggedInUI(pseudo);
+      }catch(e){ alert("Connexion impossible pour le moment. Vérifie que la connexion anonyme est activée dans Supabase (Authentication -> Providers -> Anonymous)."); }
+    } else {
+      try{
+        await window.storage.set('choomdle:account', JSON.stringify({pseudo, method:"local", created: Date.now()}));
+        currentPseudo = pseudo;
+        setLoggedInUI(pseudo);
+      }catch(e){}
+    }
   });
-  document.getElementById('googleBtn').addEventListener('click', ()=>{
-    if(GOOGLE_CLIENT_ID.startsWith("REMPLACE")){
-      alert("Connexion Google : crée un Client ID OAuth dans Google Cloud Console, héberge le site sur un domaine autorisé, puis remplace GOOGLE_CLIENT_ID dans le code. En attendant, utilise le pseudo simple à gauche.");
+  document.getElementById('googleBtn').addEventListener('click', async ()=>{
+    if(!supabaseReady){
+      alert("Renseigne d'abord SUPABASE_URL et SUPABASE_ANON_KEY dans le code, puis active Google dans Supabase -> Authentication -> Providers.");
       return;
     }
-    if(window.google && window.google.accounts){
-      google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential });
-      google.accounts.id.prompt();
-    }
+    await supabaseClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } });
   });
 }
 function setLoggedInUI(pseudo){
-  document.getElementById('accountStatus').textContent = (I18N[currentLang]||I18N.fr).acc_not_connected.replace(/.*/, "") || "";
   document.getElementById('accountStatus').textContent = "✓ " + pseudo;
   document.getElementById('pseudoInput').style.display = 'none';
   document.getElementById('createAccountBtn').style.display = 'none';
   document.getElementById('googleBtn').style.display = 'none';
 }
-// Décodage client-side du JWT Google (pas de vérification serveur : suffisant
-// pour un pseudo/leaderboard hobby, pas pour de l'auth sécurisée).
-function handleGoogleCredential(response){
-  try{
-    const payload = JSON.parse(atob(response.credential.split('.')[1]));
-    const pseudo = payload.name || payload.email || "Choomer";
-    window.storage.set('choomdle:account', JSON.stringify({pseudo, method:"google", created: Date.now()}));
-    setLoggedInUI(pseudo);
-  }catch(e){}
-}
 async function getPseudo(){
+  if(currentPseudo) return currentPseudo;
   try{ const res = await window.storage.get('choomdle:account'); return res ? JSON.parse(res.value).pseudo : "Anonyme"; }
   catch(e){ return "Anonyme"; }
 }
 
 // ======================= COMMUNITY (podiums par jeu + cumulé) =======================
 async function publishStats(){
-  const pseudo = await getPseudo();
   const s = await loadStats();
+  if(supabaseReady && currentSession){
+    try{ await supabaseClient.from('stats').upsert(localToStatsRow(s, currentSession.user.id)); }catch(e){}
+    renderCommunity();
+    return;
+  }
+  const pseudo = await getPseudo();
   try{
     await window.storage.set('community:'+pseudo, JSON.stringify({
       pseudo, streak: s.streak, bestStreak: s.bestStreak, endlessSolved: s.endlessSolved||0,
@@ -673,6 +747,20 @@ async function publishStats(){
   }catch(e){}
 }
 async function loadCommunityRows(){
+  if(supabaseReady){
+    try{
+      const { data, error } = await supabaseClient.from('stats')
+        .select('streak, best_streak, eddies_classic, eddies_legend, eddies_blitz, eddies_endless, eddies_chrome, profiles(pseudo)')
+        .limit(500);
+      if(error) throw error;
+      return (data||[]).map(r=>({
+        pseudo: (r.profiles && r.profiles.pseudo) || "Choomer",
+        streak: r.streak, bestStreak: r.best_streak,
+        eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome },
+        eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)
+      }));
+    }catch(e){ return []; }
+  }
   const list = await window.storage.list('community:', true);
   if(!list || !list.keys || !list.keys.length) return [];
   const rows = [];
@@ -703,8 +791,7 @@ async function renderCommunity(){
       podiumHTML(t('podium_legend'), rows, r=>(r.eddies&&r.eddies.legend)||0) +
       podiumHTML(t('podium_blitz'), rows, r=>(r.eddies&&r.eddies.blitz)||0) +
       podiumHTML(t('podium_endless'), rows, r=>(r.eddies&&r.eddies.endless)||0) +
-      podiumHTML(t('podium_chrome'), rows, r=>(r.eddies&&r.eddies.chrome)||0) +
-      podiumHTML(t('podium_breach'), rows, r=>(r.eddies&&r.eddies.breach)||0);
+      podiumHTML(t('podium_chrome'), rows, r=>(r.eddies&&r.eddies.chrome)||0);
   }catch(e){
     grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
   }
@@ -738,6 +825,14 @@ function initFeedback(){
     const text = document.getElementById('feedbackText').value.trim();
     if(!text) return;
     const pseudo = await getPseudo();
+    if(supabaseReady){
+      try{
+        await supabaseClient.from('feedback').insert({ user_id: currentSession ? currentSession.user.id : null, pseudo, text });
+        document.getElementById('feedbackConfirm').textContent = t('feedback_ok');
+        document.getElementById('feedbackText').value = "";
+      }catch(e){ document.getElementById('feedbackConfirm').textContent = "…"; }
+      return;
+    }
     try{
       await window.storage.set('feedback:'+Date.now()+'-'+Math.random().toString(36).slice(2), JSON.stringify({pseudo, text, date: new Date().toISOString()}), true);
       document.getElementById('feedbackConfirm').textContent = t('feedback_ok');
@@ -1051,6 +1146,7 @@ function applyFeatureFlags(){
 initClassic();
 initLegend();
 initLangSelect();
+initSupabaseAuth();
 initAccount();
 initFeedback();
 refreshEddiesUI();
