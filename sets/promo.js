@@ -10,7 +10,7 @@
 // confirme ces informations.
 // =======================================================================
 const PROMO_CARDS = [
-{n:"Lucyna Kushinada",t:"Legend",f:["Overclocking"],c:null,p:0,r:2},
-{n:"Rebecca — Having a Moment",t:"Legend",f:["Merc"],c:null,p:null,r:2},
-{n:"V — Corporate Exile",t:"Legend",f:["Corpo","Merc"],c:5,p:8,r:2},
+{n:"Lucyna Kushinada",t:"Legend",f:["Overclocking"],c:null,p:0,r:2,text:""},
+{n:"Rebecca — Having a Moment",t:"Legend",f:["Merc"],c:null,p:null,r:2,text:""},
+{n:"V — Corporate Exile",t:"Legend",f:["Corpo","Merc"],c:5,p:8,r:2,text:"{Go Solo} (Pay this Legend's cost to play it as a ready Unit. It can attack this turn. If it leaves the field, remove it from the game.)"},
 ];

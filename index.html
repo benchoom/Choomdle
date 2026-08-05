@@ -139,6 +139,8 @@
     <button class="tab" data-panel="legend" data-i18n="tab_legend">Legend</button>
     <button class="tab" data-panel="blitz" data-i18n="tab_blitz">Blitz</button>
     <button class="tab" data-panel="endless" data-i18n="tab_endless">Endless</button>
+    <button class="tab" data-panel="ability" data-i18n="tab_ability">Ability</button>
+    <button class="tab" data-panel="art" data-i18n="tab_art">Art</button>
     <button class="tab" data-panel="chrome" data-i18n="tab_chrome">Chrome Check</button>
     <!-- Netrunner Breach désactivé pour le moment — remettre la classe ci-dessous à rien pour réactiver -->
     <button class="tab ff-hidden" data-panel="breach" data-i18n="tab_breach">Netrunner Breach</button>
@@ -219,6 +221,49 @@
       </table>
     </div>
     <div class="banner" id="endlessBanner"></div>
+  </div>
+
+  <!-- ABILITY -->
+  <div class="panel" id="panel-ability" style="display:none">
+    <div class="statusline">
+      <span data-i18n="ability_label">Devine la carte à partir de son texte de règle</span>
+      <span class="stat"><span data-i18n="endless_solved">Cartes résolues (total)</span> <b id="abilitySolved">0</b></span>
+    </div>
+    <div class="ability-quote" id="abilityQuote">« ... »</div>
+    <div class="searchrow">
+      <input class="guessInput" id="guessInputAbility" type="text" data-i18n-ph="classic_input_ph" placeholder="Tape le nom d'une carte..." autocomplete="off">
+      <div class="suggestions" id="suggestionsAbility"></div>
+    </div>
+    <div class="gridwrap">
+      <table class="guesses">
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <tbody id="abilityBody"></tbody>
+      </table>
+    </div>
+    <div class="banner" id="abilityBanner"></div>
+  </div>
+
+  <!-- ART -->
+  <div class="panel" id="panel-art" style="display:none">
+    <div class="statusline">
+      <span data-i18n="art_label">Devine la carte à partir de son illustration</span>
+      <span class="stat"><span data-i18n="endless_solved">Cartes résolues (total)</span> <b id="artSolved">0</b></span>
+    </div>
+    <div class="art-frame">
+      <img id="artImage" src="" alt="Cyberpunk TCG card art">
+      <div class="art-placeholder" id="artPlaceholder" style="display:none;" data-i18n="art_missing">Visuel bientôt disponible pour cette carte.</div>
+    </div>
+    <div class="searchrow">
+      <input class="guessInput" id="guessInputArt" type="text" data-i18n-ph="classic_input_ph" placeholder="Tape le nom d'une carte..." autocomplete="off">
+      <div class="suggestions" id="suggestionsArt"></div>
+    </div>
+    <div class="gridwrap">
+      <table class="guesses">
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <tbody id="artBody"></tbody>
+      </table>
+    </div>
+    <div class="banner" id="artBanner"></div>
   </div>
 
   <!-- CHROME CHECK -->
@@ -441,10 +486,11 @@ function statsRowToLocal(row){
   return {
     streak: row.streak||0, bestStreak: row.best_streak||0,
     lastWin: meta.lastWin||null, endlessSolved: meta.endlessSolved||0,
+    abilitySolved: meta.abilitySolved||0, artSolved: meta.artSolved||0,
     gamesPlayed: row.games_played||0, wins: row.wins||0,
     guessDistribution: row.guess_distribution||{},
     lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
-    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0 }
+    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0 }
   };
 }
 function localToStatsRow(s, uid){
@@ -454,8 +500,9 @@ function localToStatsRow(s, uid){
     guess_distribution: s.guessDistribution||{},
     eddies_classic: (s.eddies&&s.eddies.classic)||0, eddies_legend: (s.eddies&&s.eddies.legend)||0,
     eddies_blitz: (s.eddies&&s.eddies.blitz)||0, eddies_endless: (s.eddies&&s.eddies.endless)||0,
-    eddies_chrome: (s.eddies&&s.eddies.chrome)||0,
-    meta: { lastWin: s.lastWin||null, endlessSolved: s.endlessSolved||0, lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
+    eddies_chrome: (s.eddies&&s.eddies.chrome)||0, eddies_ability: (s.eddies&&s.eddies.ability)||0,
+    eddies_art: (s.eddies&&s.eddies.art)||0,
+    meta: { lastWin: s.lastWin||null, endlessSolved: s.endlessSolved||0, abilitySolved: s.abilitySolved||0, artSolved: s.artSolved||0, lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
   };
 }
 
@@ -474,7 +521,7 @@ async function loadStats(){
 }
 function defaultStats(){
   return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
-    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0}, lastLegendPlayed:null, legendResult:null};
+    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0}, lastLegendPlayed:null, legendResult:null};
 }
 async function saveStats(stats){
   try{ await window.storage.set('choomdle:stats', JSON.stringify(stats)); }catch(e){}
@@ -707,14 +754,14 @@ async function loadCommunityRows(){
   if(supabaseReady){
     try{
       const { data, error } = await supabaseClient.from('stats')
-        .select('streak, best_streak, eddies_classic, eddies_legend, eddies_blitz, eddies_endless, eddies_chrome, profiles(pseudo)')
+        .select('streak, best_streak, eddies_classic, eddies_legend, eddies_blitz, eddies_endless, eddies_chrome, eddies_ability, eddies_art, profiles(pseudo)')
         .limit(500);
       if(error) throw error;
       return (data||[]).map(r=>({
         pseudo: (r.profiles && r.profiles.pseudo) || "Choomer",
         streak: r.streak, bestStreak: r.best_streak,
-        eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome },
-        eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)
+        eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art },
+        eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)
       }));
     }catch(e){ return []; }
   }
@@ -748,6 +795,8 @@ async function renderCommunity(){
       podiumHTML(t('podium_legend'), rows, r=>(r.eddies&&r.eddies.legend)||0) +
       podiumHTML(t('podium_blitz'), rows, r=>(r.eddies&&r.eddies.blitz)||0) +
       podiumHTML(t('podium_endless'), rows, r=>(r.eddies&&r.eddies.endless)||0) +
+      podiumHTML(t('podium_ability'), rows, r=>(r.eddies&&r.eddies.ability)||0) +
+      podiumHTML(t('podium_art'), rows, r=>(r.eddies&&r.eddies.art)||0) +
       podiumHTML(t('podium_chrome'), rows, r=>(r.eddies&&r.eddies.chrome)||0);
   }catch(e){
     grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
@@ -995,6 +1044,90 @@ setupAutocomplete(endlessInput, endlessSugg, (card)=>{
   }
 }, ()=>endlessGuesses);
 
+// ======================= SLUGIFY (pour les futurs fichiers d'images) =======================
+function slugify(name){
+  return name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // enlève les accents
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'');
+}
+function cardImgUrl(card){ return 'images/cards/' + slugify(card.n) + '.jpg'; }
+
+// ======================= ABILITY (texte de règle réel, avec l'accord de WeirdCo) =======================
+const ABILITY_CARDS = CARDS.filter(c=>c.text && c.text.trim().length>0);
+let abilitySecret, abilityGuesses = [];
+const abilityBody = document.getElementById('abilityBody');
+const abilityInput = document.getElementById('guessInputAbility');
+const abilitySugg = document.getElementById('suggestionsAbility');
+const abilityBanner = document.getElementById('abilityBanner');
+function newAbilityCard(){
+  abilitySecret = ABILITY_CARDS[Math.floor(Math.random()*ABILITY_CARDS.length)];
+  abilityGuesses = [];
+  document.getElementById('abilityQuote').textContent = '« ' + abilitySecret.text + ' »';
+  abilityBody.innerHTML = ""; abilityBanner.className = "banner"; abilityBanner.innerHTML = "";
+}
+newAbilityCard();
+setupAutocomplete(abilityInput, abilitySugg, (card)=>{
+  const {row, win} = renderRow(card, abilitySecret);
+  abilityBody.insertAdjacentHTML('beforeend', row);
+  abilityGuesses.push(card.n);
+  if(win){
+    const reward = computeReward(abilityGuesses.length);
+    abilityBanner.className = "banner win";
+    abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub">'+t('win_tries').replace('{n}', abilityGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span> <button class="bigbtn" id="abilityPlayAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
+    loadStats().then(s=>{
+      s.abilitySolved = (s.abilitySolved||0)+1;
+      s.eddies = s.eddies || {};
+      s.eddies.ability = (s.eddies.ability||0) + reward;
+      saveStats(s).then(()=>{
+        document.getElementById('abilitySolved').textContent = s.abilitySolved;
+        refreshEddiesUI();
+      });
+    });
+    setTimeout(()=>{ const btn = document.getElementById('abilityPlayAgain'); if(btn) btn.addEventListener('click', newAbilityCard); },0);
+  }
+}, ()=>abilityGuesses);
+
+// ======================= ART (illustration réelle, avec l'accord de WeirdCo) =======================
+// En attendant l'upload des vrais visuels (Cloudflare R2), l'image manquante affiche
+// un placeholder propre au lieu d'une icône d'image cassée.
+let artSecret, artGuesses = [];
+const artBody = document.getElementById('artBody');
+const artInput = document.getElementById('guessInputArt');
+const artSugg = document.getElementById('suggestionsArt');
+const artBanner = document.getElementById('artBanner');
+function newArtCard(){
+  artSecret = randCard();
+  artGuesses = [];
+  const img = document.getElementById('artImage');
+  const placeholder = document.getElementById('artPlaceholder');
+  img.style.display = 'block'; placeholder.style.display = 'none';
+  img.onerror = ()=>{ img.style.display='none'; placeholder.style.display='flex'; };
+  img.src = cardImgUrl(artSecret);
+  artBody.innerHTML = ""; artBanner.className = "banner"; artBanner.innerHTML = "";
+}
+newArtCard();
+setupAutocomplete(artInput, artSugg, (card)=>{
+  const {row, win} = renderRow(card, artSecret);
+  artBody.insertAdjacentHTML('beforeend', row);
+  artGuesses.push(card.n);
+  if(win){
+    const reward = computeReward(artGuesses.length);
+    artBanner.className = "banner win";
+    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span> <button class="bigbtn" id="artPlayAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
+    loadStats().then(s=>{
+      s.artSolved = (s.artSolved||0)+1;
+      s.eddies = s.eddies || {};
+      s.eddies.art = (s.eddies.art||0) + reward;
+      saveStats(s).then(()=>{
+        document.getElementById('artSolved').textContent = s.artSolved;
+        refreshEddiesUI();
+      });
+    });
+    setTimeout(()=>{ const btn = document.getElementById('artPlayAgain'); if(btn) btn.addEventListener('click', newArtCard); },0);
+  }
+}, ()=>artGuesses);
+
 // ======================= CHROME CHECK (Vrai/Faux, 90s, -5s si erreur) =======================
 let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null;
 function chromeNewQuestion(){
@@ -1091,7 +1224,7 @@ setupAutocomplete(breachInput, breachSugg, (card)=>{
 }, ()=>breachGuesses);
 
 // ======================= NAVIGATION =======================
-const ALL_PANELS = ['classic','legend','blitz','endless','chrome','breach','community','stats','feedback'];
+const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','chrome','breach','community','stats','feedback'];
 function showPanel(name){
   ALL_PANELS.forEach(p=>{
     const el = document.getElementById('panel-'+p);
