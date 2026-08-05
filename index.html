@@ -439,12 +439,25 @@ function renderRow(guess, secret){
   return {row, win};
 }
 function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
+  // Le menu déroulant est déplacé dans <body> et positionné en "fixed" pour échapper
+  // au clip-path des panneaux (qui coupait visuellement la liste avant qu'elle finisse).
+  if(suggEl.parentElement !== document.body){
+    document.body.appendChild(suggEl);
+    suggEl.classList.add('suggestions-floating');
+  }
+  function positionSugg(){
+    const r = inputEl.getBoundingClientRect();
+    suggEl.style.left = r.left + 'px';
+    suggEl.style.top = (r.bottom) + 'px';
+    suggEl.style.width = r.width + 'px';
+  }
   inputEl.addEventListener('input', ()=>{
     const q = inputEl.value.trim().toLowerCase();
     suggEl.innerHTML = "";
     if(!q){ suggEl.style.display="none"; return; }
     const excl = excludeNames ? excludeNames() : [];
-    const matches = CARDS.filter(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n)).slice(0,8);
+    const allMatches = CARDS.filter(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
+    const matches = allMatches.slice(0,10);
     if(!matches.length){ suggEl.style.display="none"; return; }
     matches.forEach(c=>{
       const div = document.createElement('div');
@@ -452,8 +465,17 @@ function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
       div.addEventListener('click', ()=>{ onPick(c); inputEl.value=""; suggEl.style.display="none"; });
       suggEl.appendChild(div);
     });
+    if(allMatches.length > 10){
+      const more = document.createElement('div');
+      more.className = 'suggestions-more';
+      more.textContent = '···';
+      suggEl.appendChild(more);
+    }
+    positionSugg();
     suggEl.style.display = "block";
   });
+  window.addEventListener('resize', ()=>{ if(suggEl.style.display==='block') positionSugg(); });
+  window.addEventListener('scroll', ()=>{ if(suggEl.style.display==='block') positionSugg(); }, true);
   inputEl.addEventListener('keydown', (e)=>{
     if(e.key === 'Enter'){
       const q = inputEl.value.trim().toLowerCase();
@@ -1069,7 +1091,7 @@ function slugify(name){
     .replace(/[^a-z0-9]+/g,'-')
     .replace(/^-+|-+$/g,'');
 }
-function cardImgUrl(card){ return '/images/cards/' + slugify(card.n) + '.jpg'; }
+function cardImgUrl(card){ return 'https://img.choomdle.com/cards/' + slugify(card.n) + '.jpg'; }
 function revealCardHTML(card){
   return '<img class="win-card-img" src="'+cardImgUrl(card)+'" alt="'+card.n.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
 }
@@ -1220,15 +1242,18 @@ function endChrome(){
   const recap = chromeHistory.map(h=>{
     const icon = h.correct ? '✓' : '✗';
     const cls = h.correct ? 'match' : 'miss';
-    const userAnswer = h.userSaysTrue ? t('chrome_true') : t('chrome_false');
-    return '<div class="chrome-recap-row '+cls+'"><span>'+icon+'</span><span>'+h.a.n+' '+h.op+' '+h.b.n+' ('+labelMap[h.attr]+')</span><span>'+userAnswer+'</span></div>';
+    return '<div class="chrome-recap-row '+cls+'">'+
+      '<span class="recap-label">['+labelMap[h.attr]+']</span>'+
+      '<span class="recap-icon">'+icon+'</span>'+
+      '<span class="recap-detail">'+h.a.n+' <span class="recap-val">['+h.av+']</span> <span class="recap-op">'+h.op+'</span> <span class="recap-val">['+h.bv+']</span> '+h.b.n+'</span>'+
+      '</div>';
   }).join('');
   document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+'<div class="chrome-recap">'+recap+'</div>';
 }
 function chromeAnswer(userSaysTrue){
   if(!chromeActive) return;
   const correct = userSaysTrue === chromeCurrent.truth;
-  chromeHistory.push({ a:chromeCurrent.a, b:chromeCurrent.b, attr:chromeCurrent.attr, op:chromeCurrent.op, userSaysTrue, correct });
+  chromeHistory.push({ a:chromeCurrent.a, b:chromeCurrent.b, attr:chromeCurrent.attr, av:chromeCurrent.av, bv:chromeCurrent.bv, op:chromeCurrent.op, userSaysTrue, correct });
   const duel = document.getElementById('chromeDuel');
   if(correct){
     chromeScore++; document.getElementById('chromeScore').textContent = chromeScore;
