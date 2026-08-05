@@ -317,7 +317,6 @@
   .podiumgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:10px; }
   .podiumbox{ background:var(--bg2); border:1px solid var(--line); padding:12px; }
   .podiumbox h4{ margin:0 0 8px; font-family:'Chakra Petch',sans-serif; font-size:12px; letter-spacing:.06em; color:var(--cyan); text-transform:uppercase; }
-  .podiumbox > .podiumrow, .podiumbox > .podium-separator{ display:block; }
   .podiumbox{ max-height:420px; overflow-y:auto; }
   .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); }
   .podiumrow:last-child{ border-bottom:none; }
