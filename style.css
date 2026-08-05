@@ -237,7 +237,7 @@
   }
   .chrome-recap{ margin-top:16px; text-align:left; max-height:260px; overflow-y:auto; }
   .chrome-recap-row{
-    display:grid; grid-template-columns:auto 20px 1fr; gap:8px; align-items:center;
+    display:grid; grid-template-columns:auto 20px 1fr auto; gap:8px; align-items:center;
     font-family:'JetBrains Mono',monospace; font-size:12px; padding:6px 8px; border-bottom:1px solid var(--line);
   }
   .chrome-recap-row .recap-label{ color:var(--cyan); font-weight:700; white-space:nowrap; }
@@ -247,6 +247,11 @@
   .chrome-recap-row .recap-val{ color:var(--yellow); font-weight:700; }
   .chrome-recap-row.match .recap-op{ color:var(--green); font-weight:700; }
   .chrome-recap-row.miss .recap-op{ color:#ff9db2; font-weight:700; }
+  .chrome-recap-row .recap-reward{ color:var(--yellow); font-weight:700; text-align:right; white-space:nowrap; }
+  .chrome-recap-total{
+    text-align:right; font-family:'Chakra Petch',sans-serif; font-weight:700; color:var(--yellow);
+    padding:10px 8px 4px; font-size:14px; letter-spacing:.03em;
+  }
   .legend-quote{
     text-align:center; font-family:'Chakra Petch',sans-serif; font-style:italic; font-weight:600;
     font-size:22px; color:var(--cyan); padding:26px 10px; letter-spacing:.02em;

@@ -1290,25 +1290,31 @@ function endChrome(){
       '<span class="recap-label">['+labelMap[h.attr]+']</span>'+
       '<span class="recap-icon">'+icon+'</span>'+
       '<span class="recap-detail">'+h.a.n+' <span class="recap-val">['+h.av+']</span> <span class="recap-op">'+h.op+'</span> <span class="recap-val">['+h.bv+']</span> '+h.b.n+'</span>'+
+      '<span class="recap-reward">+'+h.reward+'</span>'+
       '</div>';
   }).join('');
-  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+' <span class="rw">'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'</span><div class="chrome-recap">'+recap+'</div>';
+  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+'<div class="chrome-recap">'+recap+'<div class="chrome-recap-total">'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'</div></div>';
 }
 function chromeAnswer(userSaysTrue){
   if(!chromeActive) return;
   const correct = userSaysTrue === chromeCurrent.truth;
-  chromeHistory.push({ a:chromeCurrent.a, b:chromeCurrent.b, attr:chromeCurrent.attr, av:chromeCurrent.av, bv:chromeCurrent.bv, op:chromeCurrent.op, userSaysTrue, correct });
+  let rowReward = 0;
   const duel = document.getElementById('chromeDuel');
   if(correct){
     chromeScore++; document.getElementById('chromeScore').textContent = chromeScore;
-    chromeEddiesEarned += 15;
-    addEddies('chrome', 15);
+    // Les eddies ne rapportent qu'à partir de la 10e bonne réponse (5 eddies chacune avant ça, 0).
+    if(chromeScore >= 10){
+      rowReward = 5;
+      chromeEddiesEarned += rowReward;
+      addEddies('chrome', rowReward);
+    }
     duel.classList.remove('flash-wrong'); duel.classList.add('flash-correct');
   }else{
     chromeTimeLeft = Math.max(0, chromeTimeLeft-5);
     document.getElementById('chromeTimer').textContent = chromeTimeLeft+"s";
     duel.classList.remove('flash-correct'); duel.classList.add('flash-wrong');
   }
+  chromeHistory.push({ a:chromeCurrent.a, b:chromeCurrent.b, attr:chromeCurrent.attr, av:chromeCurrent.av, bv:chromeCurrent.bv, op:chromeCurrent.op, userSaysTrue, correct, reward:rowReward });
   setTimeout(()=>duel.classList.remove('flash-correct','flash-wrong'),300);
   if(chromeTimeLeft<=0){ endChrome(); return; }
   chromeNewQuestion();
