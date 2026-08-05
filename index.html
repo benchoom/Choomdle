@@ -187,12 +187,12 @@
   <!-- BLITZ -->
   <div class="panel" id="panel-blitz" style="display:none">
     <div class="blitzbar">
-      <div class="timerbox" id="blitzTimer">90s</div>
+      <div class="timerbox" id="blitzTimer">77s</div>
       <div class="scorebox"><span data-i18n="blitz_score">Score</span> <b id="blitzScore">0</b></div>
       <button class="bigbtn" id="startBlitzBtn" data-i18n="blitz_start">Lancer le Blitz</button>
     </div>
     <div class="searchrow">
-      <input class="guessInput" id="guessInputBlitz" type="text" data-i18n-ph="blitz_input_ph" placeholder="90 secondes pour enchaîner un max de cartes..." autocomplete="off" disabled>
+      <input class="guessInput" id="guessInputBlitz" type="text" data-i18n-ph="blitz_input_ph" placeholder="77 secondes pour enchaîner un max de cartes..." autocomplete="off" disabled>
       <div class="suggestions" id="suggestionsBlitz"></div>
     </div>
     <div class="gridwrap">
@@ -511,6 +511,7 @@ function statsRowToLocal(row){
     abilitySolved: meta.abilitySolved||0, artSolved: meta.artSolved||0,
     lastAbilityPlayed: meta.lastAbilityPlayed||null, abilityWon: meta.abilityWon||false,
     lastArtPlayed: meta.lastArtPlayed||null, artWon: meta.artWon||false, artLost: meta.artLost||false,
+    lastClassicReward: meta.lastClassicReward||0, lastAbilityReward: meta.lastAbilityReward||0, lastArtReward: meta.lastArtReward||0,
     gamesPlayed: row.games_played||0, wins: row.wins||0,
     guessDistribution: row.guess_distribution||{},
     lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
@@ -529,6 +530,7 @@ function localToStatsRow(s, uid){
     meta: { lastWin: s.lastWin||null, endlessSolved: s.endlessSolved||0, abilitySolved: s.abilitySolved||0, artSolved: s.artSolved||0,
       lastAbilityPlayed: s.lastAbilityPlayed||null, abilityWon: s.abilityWon||false,
       lastArtPlayed: s.lastArtPlayed||null, artWon: s.artWon||false, artLost: s.artLost||false,
+      lastClassicReward: s.lastClassicReward||0, lastAbilityReward: s.lastAbilityReward||0, lastArtReward: s.lastArtReward||0,
       lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
   };
 }
@@ -552,7 +554,8 @@ async function loadStats(){
 function defaultStats(){
   return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
     eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0}, lastLegendPlayed:null, legendResult:null,
-    lastAbilityPlayed:null, abilityWon:false, lastArtPlayed:null, artWon:false, artLost:false};
+    lastAbilityPlayed:null, abilityWon:false, lastArtPlayed:null, artWon:false, artLost:false,
+    lastClassicReward:0, lastAbilityReward:0, lastArtReward:0};
 }
 async function saveStats(stats){
   lsSetJSON('choomdle:stats', stats);
@@ -916,7 +919,7 @@ function initClassic(){
     if(s.lastWin === today){
       classicSolved = true; classicInput.disabled = true;
       classicBanner.className = "banner win";
-      classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+revealCardHTML(classicSecret);
+      classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastClassicReward||0)+'</span></span>'+revealCardHTML(classicSecret);
     }
   });
 }
@@ -948,6 +951,7 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
         s.guessDistribution[classicGuesses.length] = (s.guessDistribution[classicGuesses.length]||0)+1;
         s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
         s.eddies.classic += reward;
+        s.lastClassicReward = reward;
         saveStats(s).then(()=>{ refreshStreakUI(); refreshEddiesUI(); });
       }
     });
@@ -1013,14 +1017,14 @@ document.getElementById('submitLegendBtn').addEventListener('click', submitLegen
 document.getElementById('guessInputLegend').addEventListener('keydown', e=>{ if(e.key==='Enter') submitLegend(); });
 
 // ======================= BLITZ =======================
-let blitzSecret, blitzTimeLeft = 90, blitzTimer = null, blitzScore = 0, blitzGuesses = [], blitzActive=false;
+let blitzSecret, blitzTimeLeft = 77, blitzTimer = null, blitzScore = 0, blitzGuesses = [], blitzActive=false, blitzEddiesEarned = 0;
 const blitzBody = document.getElementById('blitzBody');
 const blitzInput = document.getElementById('guessInputBlitz');
 const blitzSugg = document.getElementById('suggestionsBlitz');
 const blitzBanner = document.getElementById('blitzBanner');
 function newBlitzCard(){ blitzSecret = randCard(); blitzGuesses = []; }
 function startBlitz(){
-  blitzScore = 0; blitzTimeLeft = 90; blitzActive = true;
+  blitzScore = 0; blitzTimeLeft = 77; blitzActive = true; blitzEddiesEarned = 0;
   blitzBody.innerHTML=""; blitzBanner.className="banner"; blitzBanner.innerHTML="";
   document.getElementById('blitzScore').textContent = blitzScore;
   document.getElementById('blitzTimer').textContent = blitzTimeLeft+"s";
@@ -1033,7 +1037,7 @@ function startBlitz(){
     if(blitzTimeLeft<=0){
       clearInterval(blitzTimer); blitzActive = false; blitzInput.disabled = true;
       blitzBanner.className = "banner win";
-      blitzBanner.innerHTML = t('blitz_timeup')+' '+blitzScore+'<span class="sub">'+t('blitz_answer')+' '+blitzSecret.n+'.</span>';
+      blitzBanner.innerHTML = t('blitz_timeup')+' '+blitzScore+'<span class="sub">'+t('blitz_answer')+' '+blitzSecret.n+'. <span class="rw">'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'</span></span>';
     }
   },1000);
 }
@@ -1041,11 +1045,11 @@ document.getElementById('startBlitzBtn').addEventListener('click', startBlitz);
 setupAutocomplete(blitzInput, blitzSugg, (card)=>{
   if(!blitzActive) return;
   const {row, win} = renderRow(card, blitzSecret);
-  blitzBody.insertAdjacentHTML('beforeend', row);
+  blitzBody.insertAdjacentHTML('beforeend', row); // récap cumulé : jamais vidé entre les cartes, seulement au lancement
   blitzGuesses.push(card.n);
   if(win){
     const reward = computeReward(blitzGuesses.length);
-    blitzScore++;
+    blitzScore++; blitzEddiesEarned += reward;
     document.getElementById('blitzScore').textContent = blitzScore;
     addEddies('blitz', reward);
     newBlitzCard();
@@ -1114,7 +1118,7 @@ function initAbility(){
     if(s.lastAbilityPlayed === today && s.abilityWon){
       abilitySolved = true; abilityInput.disabled = true;
       abilityBanner.className = "banner win";
-      abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+revealCardHTML(abilitySecret);
+      abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastAbilityReward||0)+'</span></span>'+revealCardHTML(abilitySecret);
     }
   });
 }
@@ -1135,6 +1139,7 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
         s.abilitySolved = (s.abilitySolved||0)+1;
         s.eddies = s.eddies || {};
         s.eddies.ability = (s.eddies.ability||0) + reward;
+        s.lastAbilityReward = reward;
         saveStats(s).then(()=>{
           document.getElementById('abilitySolved').textContent = s.abilitySolved;
           refreshEddiesUI();
@@ -1188,10 +1193,10 @@ function initArt(){
       applyArtBlur(6);
       if(s.artWon){
         artBanner.className = "banner win";
-        artBanner.innerHTML = t('endless_found')+' '+artSecret.n;
+        artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>';
       } else {
         artBanner.className = "banner fail";
-        artBanner.innerHTML = t('art_failed')+' '+artSecret.n;
+        artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
       }
     }
   });
@@ -1214,6 +1219,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
         s.artSolved = (s.artSolved||0)+1;
         s.eddies = s.eddies || {};
         s.eddies.art = (s.eddies.art||0) + reward;
+        s.lastArtReward = reward;
         saveStats(s).then(()=>{
           document.getElementById('artSolved').textContent = s.artSolved;
           refreshEddiesUI();
@@ -1226,7 +1232,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
       artSolved = true; artInput.disabled = true;
       applyArtBlur(6);
       artBanner.className = "banner fail";
-      artBanner.innerHTML = t('art_failed')+' '+artSecret.n;
+      artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
       loadStats().then(s=>{
         if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
           s.lastArtPlayed = today; s.artWon = false; s.artLost = true;
@@ -1240,7 +1246,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
 }, ()=>artGuesses);
 
 // ======================= CHROME CHECK (Vrai/Faux, 40s, -5s si erreur, ">" ou "=") =======================
-let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null, chromeHistory=[];
+let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null, chromeHistory=[], chromeEddiesEarned=0;
 function chromeNewQuestion(){
   const attrs = ["c","p","r"];
   let a, b, attr, av, bv, tries=0;
@@ -1257,7 +1263,7 @@ function chromeNewQuestion(){
   document.getElementById('chromeOp').innerHTML = op+'&nbsp;<div class="duelattr">'+labelMap[attr]+'</div>';
 }
 function startChrome(){
-  chromeScore=0; chromeTimeLeft=40; chromeActive=true; chromeHistory=[];
+  chromeScore=0; chromeTimeLeft=40; chromeActive=true; chromeHistory=[]; chromeEddiesEarned=0;
   document.getElementById('chromeScore').textContent = chromeScore;
   document.getElementById('chromeTimer').textContent = chromeTimeLeft+"s";
   document.getElementById('chromeDuel').style.display='flex';
@@ -1286,7 +1292,7 @@ function endChrome(){
       '<span class="recap-detail">'+h.a.n+' <span class="recap-val">['+h.av+']</span> <span class="recap-op">'+h.op+'</span> <span class="recap-val">['+h.bv+']</span> '+h.b.n+'</span>'+
       '</div>';
   }).join('');
-  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+'<div class="chrome-recap">'+recap+'</div>';
+  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+' <span class="rw">'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'</span><div class="chrome-recap">'+recap+'</div>';
 }
 function chromeAnswer(userSaysTrue){
   if(!chromeActive) return;
@@ -1295,6 +1301,7 @@ function chromeAnswer(userSaysTrue){
   const duel = document.getElementById('chromeDuel');
   if(correct){
     chromeScore++; document.getElementById('chromeScore').textContent = chromeScore;
+    chromeEddiesEarned += 15;
     addEddies('chrome', 15);
     duel.classList.remove('flash-wrong'); duel.classList.add('flash-correct');
   }else{
