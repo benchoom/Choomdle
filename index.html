@@ -3,7 +3,63 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CHOOMDLE — Le Wordle du Cyberpunk TCG</title>
+
+<!-- ===== SEO : titre, description, mots-clés ===== -->
+<title>Choomdle — Daily Cyberpunk TCG Card Guessing Game</title>
+<meta name="description" content="Guess the daily Cyberpunk Trading Card Game card in Choomdle — a free Wordle-style game for Cyberpunk TCG fans. Classic, Legend, Blitz, Endless and Chrome Check modes, plus a community leaderboard.">
+<meta name="keywords" content="Cyberpunk TCG, Cyberpunk 2077 card game, Cyberpunk Wordle, Choomdle, Cyberpunk trading card game, daily card game, WeirdCo, Night City">
+<meta name="robots" content="index, follow">
+<meta name="author" content="Choomdle">
+<link rel="canonical" href="https://choomdle.com/">
+
+<!-- ===== Favicon ===== -->
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
+
+<!-- ===== hreflang : indique à Google les versions par langue ===== -->
+<link rel="alternate" hreflang="x-default" href="https://choomdle.com/">
+<link rel="alternate" hreflang="en" href="https://choomdle.com/en">
+<link rel="alternate" hreflang="fr" href="https://choomdle.com/fr">
+<link rel="alternate" hreflang="es" href="https://choomdle.com/es">
+<link rel="alternate" hreflang="de" href="https://choomdle.com/de">
+<link rel="alternate" hreflang="pt" href="https://choomdle.com/pt">
+<link rel="alternate" hreflang="it" href="https://choomdle.com/it">
+<link rel="alternate" hreflang="pl" href="https://choomdle.com/pl">
+<link rel="alternate" hreflang="ko" href="https://choomdle.com/ko">
+<link rel="alternate" hreflang="zh" href="https://choomdle.com/zh">
+<link rel="alternate" hreflang="ja" href="https://choomdle.com/ja">
+
+<!-- ===== Open Graph (partage Facebook, Discord, LinkedIn...) ===== -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Choomdle">
+<meta property="og:title" content="Choomdle — Daily Cyberpunk TCG Card Guessing Game">
+<meta property="og:description" content="A free daily Wordle-style guessing game for the Cyberpunk Trading Card Game. Five modes, a community leaderboard, and cards from every set.">
+<meta property="og:url" content="https://choomdle.com/">
+<meta property="og:image" content="https://choomdle.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+
+<!-- ===== Twitter / X Card ===== -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Choomdle — Daily Cyberpunk TCG Card Guessing Game">
+<meta name="twitter:description" content="Guess the daily Cyberpunk TCG card. Free, fan-made, five game modes.">
+<meta name="twitter:image" content="https://choomdle.com/og-image.png">
+
+<!-- ===== Données structurées (Google) ===== -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Choomdle",
+  "url": "https://choomdle.com/",
+  "description": "A free daily Wordle-style guessing game for the Cyberpunk Trading Card Game (WeirdCo x CD Projekt Red).",
+  "applicationCategory": "Game",
+  "operatingSystem": "Any (web browser)",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "inLanguage": ["en","fr","es","de","pt","it","pl","ko","zh","ja"]
+}
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
 <!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
@@ -69,7 +125,7 @@
   <header>
     <div class="eyebrow" data-i18n="eyebrow">Netdeck // Breach Protocol</div>
     <h1>CHOOMDLE</h1>
-    <div class="subtitle" data-i18n="subtitle">Devine la carte Cyberpunk TCG du jour — fan-made, non affilié à CD Projekt Red / WeirdCo</div>
+    <div class="subtitle" data-i18n="subtitle">Guess today's Cyberpunk TCG card — fan-made, not affiliated with CD Projekt Red / WeirdCo</div>
 
     <div class="featurebar">
       <button class="fbtn" data-panel="community" data-i18n="fbtn_community">Communauté</button>
@@ -233,7 +289,7 @@
   </div>
 
   <footer data-i18n="footer">
-    Base de cartes : Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Projet de fan non officiel, sans image de carte ni texte de règle reproduit. Une nouvelle carte Classic chaque jour à 00:00 UTC.
+    Card data: Cyberpunk Trading Card Game (WeirdCo × CD Projekt Red). Unofficial fan project — no card art or rules text reproduced. A new Classic card every day at 00:00 UTC.
   </footer>
 </div>
 
@@ -1073,6 +1129,12 @@ initLangSelect();
   const btn = document.getElementById('langSelectBtn');
   if(btn) btn.textContent = lang.toUpperCase() + ' ▾';
   document.querySelectorAll('#langSelectList button').forEach(b=>b.classList.toggle('active', b.dataset.code===lang));
+  // Canonique auto-référencée selon la langue de l'URL (bonne pratique SEO avec hreflang)
+  const canonicalUrl = "https://choomdle.com/" + (LANG_LABELS[seg] ? seg : "");
+  const canonicalTag = document.querySelector('link[rel="canonical"]');
+  if(canonicalTag) canonicalTag.href = canonicalUrl;
+  const ogUrlTag = document.querySelector('meta[property="og:url"]');
+  if(ogUrlTag) ogUrlTag.setAttribute('content', canonicalUrl);
 })();
 initSupabaseAuth();
 initAccount();
