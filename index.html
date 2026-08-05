@@ -65,10 +65,10 @@
 <!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
-<script src="sets/wnc.js"></script>
-<script src="sets/promo.js"></script>
-<script src="i18n.js"></script>
-<link rel="stylesheet" href="style.css">
+<script src="/sets/wnc.js"></script>
+<script src="/sets/promo.js"></script>
+<script src="/i18n.js"></script>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <div class="wrap">
@@ -395,7 +395,7 @@ function applyLanguage(code){
     if(dict[key]!==undefined) el.title = dict[key];
   });
   document.documentElement.lang = code;
-  try{ window.storage && window.storage.set('choomdle:lang', code); }catch(e){}
+  try{ localStorage.setItem('choomdle:lang', code); }catch(e){}
   // Le nom du badge profil est généré dynamiquement (pas via data-i18n) : on le rafraîchit ici.
   if(typeof currentSession !== 'undefined' && !currentSession){ try{ setLoggedOutUI(); }catch(e){} }
 }
@@ -487,6 +487,8 @@ function statsRowToLocal(row){
     streak: row.streak||0, bestStreak: row.best_streak||0,
     lastWin: meta.lastWin||null, endlessSolved: meta.endlessSolved||0,
     abilitySolved: meta.abilitySolved||0, artSolved: meta.artSolved||0,
+    lastAbilityPlayed: meta.lastAbilityPlayed||null, abilityWon: meta.abilityWon||false,
+    lastArtPlayed: meta.lastArtPlayed||null, artWon: meta.artWon||false,
     gamesPlayed: row.games_played||0, wins: row.wins||0,
     guessDistribution: row.guess_distribution||{},
     lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
@@ -502,11 +504,20 @@ function localToStatsRow(s, uid){
     eddies_blitz: (s.eddies&&s.eddies.blitz)||0, eddies_endless: (s.eddies&&s.eddies.endless)||0,
     eddies_chrome: (s.eddies&&s.eddies.chrome)||0, eddies_ability: (s.eddies&&s.eddies.ability)||0,
     eddies_art: (s.eddies&&s.eddies.art)||0,
-    meta: { lastWin: s.lastWin||null, endlessSolved: s.endlessSolved||0, abilitySolved: s.abilitySolved||0, artSolved: s.artSolved||0, lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
+    meta: { lastWin: s.lastWin||null, endlessSolved: s.endlessSolved||0, abilitySolved: s.abilitySolved||0, artSolved: s.artSolved||0,
+      lastAbilityPlayed: s.lastAbilityPlayed||null, abilityWon: s.abilityWon||false,
+      lastArtPlayed: s.lastArtPlayed||null, artWon: s.artWon||false,
+      lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
   };
 }
 
-// ======================= STATS (Supabase si connecté, sinon stockage local) =======================
+// ======================= STATS (Supabase si connecté, sinon localStorage réel du navigateur) =======================
+function lsGetJSON(key){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }catch(e){ return null; }
+}
+function lsSetJSON(key, obj){
+  try{ localStorage.setItem(key, JSON.stringify(obj)); }catch(e){}
+}
 async function loadStats(){
   if(supabaseReady && currentSession){
     try{
@@ -514,17 +525,15 @@ async function loadStats(){
       if(!error && data) return statsRowToLocal(data);
     }catch(e){}
   }
-  try{
-    const res = await window.storage.get('choomdle:stats');
-    return res ? JSON.parse(res.value) : defaultStats();
-  }catch(e){ return defaultStats(); }
+  return lsGetJSON('choomdle:stats') || defaultStats();
 }
 function defaultStats(){
   return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
-    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0}, lastLegendPlayed:null, legendResult:null};
+    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0}, lastLegendPlayed:null, legendResult:null,
+    lastAbilityPlayed:null, abilityWon:false, lastArtPlayed:null, artWon:false};
 }
 async function saveStats(stats){
-  try{ await window.storage.set('choomdle:stats', JSON.stringify(stats)); }catch(e){}
+  lsSetJSON('choomdle:stats', stats);
   if(supabaseReady && currentSession){
     try{ await supabaseClient.from('stats').upsert(localToStatsRow(stats, currentSession.user.id)); }catch(e){}
   }
@@ -878,7 +887,16 @@ function initClassic(){
   classicSecret = CARDS[seededIndex(today, CARDS.length)];
   classicGuesses = []; classicSolved = false;
   classicBody.innerHTML = ""; classicBanner.className = "banner"; classicBanner.innerHTML = "";
-  refreshStreakUI();
+  classicInput.disabled = false;
+  loadStats().then(s=>{
+    document.getElementById('streakVal').textContent = s.streak;
+    document.getElementById('bestStreakVal').textContent = s.bestStreak;
+    if(s.lastWin === today){
+      classicSolved = true; classicInput.disabled = true;
+      classicBanner.className = "banner win";
+      classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+revealCardHTML(classicSecret);
+    }
+  });
 }
 function refreshStreakUI(){
   loadStats().then(s=>{
@@ -892,10 +910,10 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
   classicBody.insertAdjacentHTML('beforeend', row);
   classicGuesses.push(card.n);
   if(win){
-    classicSolved = true;
+    classicSolved = true; classicInput.disabled = true;
     const reward = computeReward(classicGuesses.length);
     classicBanner.className = "banner win";
-    classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', classicGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+    classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', classicGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(classicSecret);
     loadStats().then(s=>{
       const today = todayUTCString();
       if(s.lastWin !== today){
@@ -935,7 +953,7 @@ function initLegend(){
       legendDone = true; input.disabled = true; btn.disabled = true;
       if(s.legendResult === 'win'){
         banner.className = "banner win";
-        banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>';
+        banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret);
       } else {
         banner.className = "banner fail";
         banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>';
@@ -959,7 +977,7 @@ function submitLegend(){
       s.legendResult = 'win';
       s.eddies.legend = (s.eddies.legend||0) + 50;
       banner.className = "banner win";
-      banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>';
+      banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret);
     } else {
       s.legendResult = 'lose';
       s.eddies.legend = (s.eddies.legend||0) - 25;
@@ -1051,85 +1069,118 @@ function slugify(name){
     .replace(/[^a-z0-9]+/g,'-')
     .replace(/^-+|-+$/g,'');
 }
-function cardImgUrl(card){ return 'images/cards/' + slugify(card.n) + '.jpg'; }
+function cardImgUrl(card){ return '/images/cards/' + slugify(card.n) + '.jpg'; }
+function revealCardHTML(card){
+  return '<img class="win-card-img" src="'+cardImgUrl(card)+'" alt="'+card.n.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
+}
 
-// ======================= ABILITY (texte de règle réel, avec l'accord de WeirdCo) =======================
+// ======================= ABILITY (défi quotidien, texte de règle réel avec l'accord de WeirdCo) =======================
 const ABILITY_CARDS = CARDS.filter(c=>c.text && c.text.trim().length>0);
-let abilitySecret, abilityGuesses = [];
+let abilitySecret, abilityGuesses = [], abilitySolved = false;
 const abilityBody = document.getElementById('abilityBody');
 const abilityInput = document.getElementById('guessInputAbility');
 const abilitySugg = document.getElementById('suggestionsAbility');
 const abilityBanner = document.getElementById('abilityBanner');
-function newAbilityCard(){
-  abilitySecret = ABILITY_CARDS[Math.floor(Math.random()*ABILITY_CARDS.length)];
-  abilityGuesses = [];
+function initAbility(){
+  const today = todayUTCString();
+  abilitySecret = ABILITY_CARDS[seededIndex(today+"-ability", ABILITY_CARDS.length)];
   document.getElementById('abilityQuote').textContent = '« ' + abilitySecret.text + ' »';
+  abilityGuesses = []; abilitySolved = false;
   abilityBody.innerHTML = ""; abilityBanner.className = "banner"; abilityBanner.innerHTML = "";
+  abilityInput.disabled = false;
+  loadStats().then(s=>{
+    if(s.lastAbilityPlayed === today && s.abilityWon){
+      abilitySolved = true; abilityInput.disabled = true;
+      abilityBanner.className = "banner win";
+      abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+revealCardHTML(abilitySecret);
+    }
+  });
 }
-newAbilityCard();
 setupAutocomplete(abilityInput, abilitySugg, (card)=>{
+  if(abilitySolved) return;
   const {row, win} = renderRow(card, abilitySecret);
   abilityBody.insertAdjacentHTML('beforeend', row);
   abilityGuesses.push(card.n);
   if(win){
+    abilitySolved = true; abilityInput.disabled = true;
     const reward = computeReward(abilityGuesses.length);
     abilityBanner.className = "banner win";
-    abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub">'+t('win_tries').replace('{n}', abilityGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span> <button class="bigbtn" id="abilityPlayAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
+    abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub">'+t('win_tries').replace('{n}', abilityGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(abilitySecret);
+    const today = todayUTCString();
     loadStats().then(s=>{
-      s.abilitySolved = (s.abilitySolved||0)+1;
-      s.eddies = s.eddies || {};
-      s.eddies.ability = (s.eddies.ability||0) + reward;
-      saveStats(s).then(()=>{
-        document.getElementById('abilitySolved').textContent = s.abilitySolved;
-        refreshEddiesUI();
-      });
+      if(s.lastAbilityPlayed !== today || !s.abilityWon){
+        s.lastAbilityPlayed = today; s.abilityWon = true;
+        s.abilitySolved = (s.abilitySolved||0)+1;
+        s.eddies = s.eddies || {};
+        s.eddies.ability = (s.eddies.ability||0) + reward;
+        saveStats(s).then(()=>{
+          document.getElementById('abilitySolved').textContent = s.abilitySolved;
+          refreshEddiesUI();
+        });
+      }
     });
-    setTimeout(()=>{ const btn = document.getElementById('abilityPlayAgain'); if(btn) btn.addEventListener('click', newAbilityCard); },0);
   }
 }, ()=>abilityGuesses);
 
-// ======================= ART (illustration réelle, avec l'accord de WeirdCo) =======================
-// En attendant l'upload des vrais visuels (Cloudflare R2), l'image manquante affiche
-// un placeholder propre au lieu d'une icône d'image cassée.
-let artSecret, artGuesses = [];
+// ======================= ART (défi quotidien, illustration réelle avec l'accord de WeirdCo) =======================
+// Si le placeholder "visuel bientôt disponible" s'affiche, vérifie que les fichiers sont bien
+// uploadés dans /images/cards/ sur le domaine (Cloudflare R2 ou dossier statique).
+const ART_CARDS = CARDS;
+let artSecret, artGuesses = [], artSolved = false;
 const artBody = document.getElementById('artBody');
 const artInput = document.getElementById('guessInputArt');
 const artSugg = document.getElementById('suggestionsArt');
 const artBanner = document.getElementById('artBanner');
-function newArtCard(){
-  artSecret = randCard();
-  artGuesses = [];
+function showArtImage(card){
   const img = document.getElementById('artImage');
   const placeholder = document.getElementById('artPlaceholder');
   img.style.display = 'block'; placeholder.style.display = 'none';
   img.onerror = ()=>{ img.style.display='none'; placeholder.style.display='flex'; };
-  img.src = cardImgUrl(artSecret);
-  artBody.innerHTML = ""; artBanner.className = "banner"; artBanner.innerHTML = "";
+  img.src = cardImgUrl(card);
 }
-newArtCard();
+function initArt(){
+  const today = todayUTCString();
+  artSecret = ART_CARDS[seededIndex(today+"-art", ART_CARDS.length)];
+  artGuesses = []; artSolved = false;
+  artBody.innerHTML = ""; artBanner.className = "banner"; artBanner.innerHTML = "";
+  artInput.disabled = false;
+  showArtImage(artSecret);
+  loadStats().then(s=>{
+    if(s.lastArtPlayed === today && s.artWon){
+      artSolved = true; artInput.disabled = true;
+      artBanner.className = "banner win";
+      artBanner.innerHTML = t('endless_found')+' '+artSecret.n;
+    }
+  });
+}
 setupAutocomplete(artInput, artSugg, (card)=>{
+  if(artSolved) return;
   const {row, win} = renderRow(card, artSecret);
   artBody.insertAdjacentHTML('beforeend', row);
   artGuesses.push(card.n);
   if(win){
+    artSolved = true; artInput.disabled = true;
     const reward = computeReward(artGuesses.length);
     artBanner.className = "banner win";
-    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span> <button class="bigbtn" id="artPlayAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
+    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+    const today = todayUTCString();
     loadStats().then(s=>{
-      s.artSolved = (s.artSolved||0)+1;
-      s.eddies = s.eddies || {};
-      s.eddies.art = (s.eddies.art||0) + reward;
-      saveStats(s).then(()=>{
-        document.getElementById('artSolved').textContent = s.artSolved;
-        refreshEddiesUI();
-      });
+      if(s.lastArtPlayed !== today || !s.artWon){
+        s.lastArtPlayed = today; s.artWon = true;
+        s.artSolved = (s.artSolved||0)+1;
+        s.eddies = s.eddies || {};
+        s.eddies.art = (s.eddies.art||0) + reward;
+        saveStats(s).then(()=>{
+          document.getElementById('artSolved').textContent = s.artSolved;
+          refreshEddiesUI();
+        });
+      }
     });
-    setTimeout(()=>{ const btn = document.getElementById('artPlayAgain'); if(btn) btn.addEventListener('click', newArtCard); },0);
   }
 }, ()=>artGuesses);
 
-// ======================= CHROME CHECK (Vrai/Faux, 90s, -5s si erreur) =======================
-let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null;
+// ======================= CHROME CHECK (Vrai/Faux, 40s, -5s si erreur, ">" ou "=") =======================
+let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null, chromeHistory=[];
 function chromeNewQuestion(){
   const attrs = ["c","p","r"];
   let a, b, attr, av, bv, tries=0;
@@ -1137,14 +1188,16 @@ function chromeNewQuestion(){
     a = randCard(); b = randCard(); attr = attrs[Math.floor(Math.random()*attrs.length)];
     av = a[attr]; bv = b[attr]; tries++;
   } while((a.n===b.n || av===null || bv===null) && tries<50);
-  chromeCurrent = { a, b, attr, truth: av > bv };
+  const op = Math.random() < 0.5 ? '>' : '=';
+  const truth = op === '>' ? (av > bv) : (av === bv);
+  chromeCurrent = { a, b, attr, av, bv, op, truth };
   const labelMap = {c:t('col_cost'), p:t('col_pwr'), r:t('col_ram')};
   document.getElementById('chromeCardA').textContent = a.n;
   document.getElementById('chromeCardB').textContent = b.n;
-  document.getElementById('chromeOp').innerHTML = '>&nbsp;<div class="duelattr">'+labelMap[attr]+'</div>';
+  document.getElementById('chromeOp').innerHTML = op+'&nbsp;<div class="duelattr">'+labelMap[attr]+'</div>';
 }
 function startChrome(){
-  chromeScore=0; chromeTimeLeft=40; chromeActive=true;
+  chromeScore=0; chromeTimeLeft=40; chromeActive=true; chromeHistory=[];
   document.getElementById('chromeScore').textContent = chromeScore;
   document.getElementById('chromeTimer').textContent = chromeTimeLeft+"s";
   document.getElementById('chromeDuel').style.display='flex';
@@ -1163,11 +1216,19 @@ function endChrome(){
   document.getElementById('chromeDuel').style.display='none';
   document.getElementById('chromeAnswers').style.display='none';
   document.getElementById('chromeBanner').className='banner win';
-  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore;
+  const labelMap = {c:t('col_cost'), p:t('col_pwr'), r:t('col_ram')};
+  const recap = chromeHistory.map(h=>{
+    const icon = h.correct ? '✓' : '✗';
+    const cls = h.correct ? 'match' : 'miss';
+    const userAnswer = h.userSaysTrue ? t('chrome_true') : t('chrome_false');
+    return '<div class="chrome-recap-row '+cls+'"><span>'+icon+'</span><span>'+h.a.n+' '+h.op+' '+h.b.n+' ('+labelMap[h.attr]+')</span><span>'+userAnswer+'</span></div>';
+  }).join('');
+  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+'<div class="chrome-recap">'+recap+'</div>';
 }
 function chromeAnswer(userSaysTrue){
   if(!chromeActive) return;
   const correct = userSaysTrue === chromeCurrent.truth;
+  chromeHistory.push({ a:chromeCurrent.a, b:chromeCurrent.b, attr:chromeCurrent.attr, op:chromeCurrent.op, userSaysTrue, correct });
   const duel = document.getElementById('chromeDuel');
   if(correct){
     chromeScore++; document.getElementById('chromeScore').textContent = chromeScore;
@@ -1251,8 +1312,6 @@ function applyFeatureFlags(){
 }
 
 // ======================= INIT =======================
-initClassic();
-initLegend();
 initLangSelect();
 // Langue déduite de l'URL (/fr, /es, ...) si présente et reconnue, sinon anglais par défaut.
 (function(){
@@ -1269,10 +1328,19 @@ initLangSelect();
   const ogUrlTag = document.querySelector('meta[property="og:url"]');
   if(ogUrlTag) ogUrlTag.setAttribute('content', canonicalUrl);
 })();
-initSupabaseAuth();
 initAccount();
 initFeedback();
-refreshEddiesUI();
+// IMPORTANT : on attend que la session Supabase soit résolue AVANT de lancer les modes
+// à verrou journalier (Classic/Legend/Ability/Art). Sans ça, le verrou se basait sur un
+// état "non connecté" temporaire à chaque rechargement de page et se réinitialisait à tort.
+(async function(){
+  await initSupabaseAuth();
+  initClassic();
+  initLegend();
+  initAbility();
+  initArt();
+  refreshEddiesUI();
+})();
 document.getElementById('publishStatsBtn').addEventListener('click', publishStats);
 applyFeatureFlags();
 </script>
