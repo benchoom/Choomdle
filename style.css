@@ -252,6 +252,14 @@
     text-align:right; font-family:'Chakra Petch',sans-serif; font-weight:700; color:var(--yellow);
     padding:10px 8px 4px; font-size:14px; letter-spacing:.03em;
   }
+  .stats-game-block{ background:var(--bg2); border:1px solid var(--line); padding:14px 16px; margin-bottom:14px; }
+  .stats-game-title{
+    margin:0 0 10px; font-family:'Chakra Petch',sans-serif; font-size:13px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--cyan);
+  }
+  .stats-numbers{ display:flex; gap:22px; flex-wrap:wrap; }
+  .stats-numbers .stats-num{ font-size:22px; color:var(--yellow); font-family:'Chakra Petch',sans-serif; font-weight:700; }
+  .stats-numbers .stats-label{ font-size:11px; color:var(--muted); }
   .legend-quote{
     text-align:center; font-family:'Chakra Petch',sans-serif; font-style:italic; font-weight:600;
     font-size:22px; color:var(--cyan); padding:26px 10px; letter-spacing:.02em;
@@ -309,9 +317,14 @@
   .podiumgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:10px; }
   .podiumbox{ background:var(--bg2); border:1px solid var(--line); padding:12px; }
   .podiumbox h4{ margin:0 0 8px; font-family:'Chakra Petch',sans-serif; font-size:12px; letter-spacing:.06em; color:var(--cyan); text-transform:uppercase; }
+  .podiumbox > .podiumrow, .podiumbox > .podium-separator{ display:block; }
+  .podiumbox{ max-height:420px; overflow-y:auto; }
   .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); }
   .podiumrow:last-child{ border-bottom:none; }
   .podiumrow .val{ color:var(--yellow); font-weight:700; }
+  .podiumrow-me{ background:rgba(244,228,9,.14); }
+  .podiumrow-me span:first-child{ color:var(--yellow); font-weight:700; }
+  .podium-separator{ border-top:2px solid var(--cyan); margin:8px 0; opacity:.7; }
 
   footer{ text-align:center; color:var(--muted); font-size:11px; margin-top:30px; line-height:1.7; }
   ::-webkit-scrollbar{ width:8px; height:8px; } ::-webkit-scrollbar-thumb{ background:var(--line); }
