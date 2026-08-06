@@ -306,7 +306,7 @@
   }
   .sequence-row.correct-pos{ border-color:var(--green); }
   .sequence-row.wrong-pos{ border-color:var(--magenta); }
-  .sequence-thumb{ width:56px; aspect-ratio:623/420; background-repeat:no-repeat; background-size:118% 244%; background-position:33% 25%; flex-shrink:0; border:1px solid var(--line); }
+  .sequence-thumb{ width:168px; aspect-ratio:623/420; background-repeat:no-repeat; background-size:118% 244%; background-position:33% 25%; flex-shrink:0; border:1px solid var(--line); }
   .sequence-name{ flex:1; font-family:'Chakra Petch',sans-serif; font-weight:600; font-size:13px; }
   .sequence-value{ color:var(--yellow); font-weight:700; font-family:'Chakra Petch',sans-serif; min-width:40px; text-align:right; }
   .sequence-arrows{ display:flex; flex-direction:column; gap:2px; }
