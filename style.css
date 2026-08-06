@@ -274,6 +274,44 @@
     background:var(--bg2); aspect-ratio:5/7; display:flex; align-items:center; justify-content:center; overflow:hidden;
   }
   .art-frame canvas{ width:100%; height:100%; object-fit:cover; transition:filter .5s ease; }
+
+  /* ---- CARDS LINK ---- */
+  #cardsLinkDots{ letter-spacing:.15em; }
+  #cardsLinkDots .dot{ color:var(--yellow); }
+  #cardsLinkDots .dot.used{ color:var(--line); }
+  .cardslink-solved-bar{
+    background:var(--panel2); border-left:4px solid var(--cyan); margin-bottom:8px; padding:10px 12px;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .cardslink-solved-bar .label{
+    font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:12px; color:var(--cyan);
+    text-transform:uppercase; letter-spacing:.04em; margin-right:auto;
+  }
+  .cardslink-solved-bar .thumbs{ display:flex; gap:4px; }
+  .cardslink-solved-bar .thumbs img{ width:32px; height:32px; object-fit:cover; border:1px solid var(--line); }
+  .cardslink-grid{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0;
+  }
+  .cardslink-cell{
+    position:relative; aspect-ratio:1/1; cursor:pointer; border:2px solid var(--line); overflow:hidden;
+    background:var(--bg2); transition:.12s;
+  }
+  .cardslink-cell img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .cardslink-cell .fallback{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center;
+    padding:6px; font-size:10px; color:var(--muted); background:var(--bg2); font-family:'Chakra Petch',sans-serif;
+  }
+  .cardslink-cell:hover{ border-color:var(--cyan); }
+  .cardslink-cell.selected{ border-color:var(--yellow); box-shadow:0 0 0 2px var(--yellow) inset; }
+  .cardslink-cell.flash-wrong{ animation:cardslink-shake .3s; border-color:var(--magenta); }
+  .cardslink-cell.flash-correct{ animation:cardslink-pop .3s; border-color:var(--green); }
+  @keyframes cardslink-shake{ 0%,100%{ transform:translateX(0); } 25%{ transform:translateX(-4px); } 75%{ transform:translateX(4px); } }
+  @keyframes cardslink-pop{ 0%{ transform:scale(1); } 50%{ transform:scale(1.06); } 100%{ transform:scale(1); } }
+  .cardslink-controls{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
+  @media (max-width:480px){
+    .cardslink-grid{ gap:5px; }
+    .cardslink-solved-bar .thumbs img{ width:22px; height:22px; }
+  }
   .art-placeholder{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center;
     padding:20px; font-family:'Chakra Petch',sans-serif; font-size:13px; color:var(--muted); background:var(--bg2);
