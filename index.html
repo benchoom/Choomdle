@@ -116,9 +116,15 @@
 
         </div>
       </div>
-      <div class="lang-select-wrap" id="langSelectWrap">
-        <button class="lang-select-btn" id="langSelectBtn">EN ▾</button>
-        <div class="lang-select-list" id="langSelectList" style="display:none;"></div>
+      <div class="topbar-row">
+        <span class="tab-eddies" id="eddiesChip" data-i18n-title="eddies_purpose" title="Les eddies ne servent qu'au classement communautaire et à tes stats — aucune autre utilité.">
+          <svg class="eddies-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" font-family="Chakra Petch, sans-serif" font-weight="700" fill="currentColor">€$</text></svg>
+          <span id="eddiesTotal">0</span>
+        </span>
+        <div class="lang-select-wrap" id="langSelectWrap">
+          <button class="lang-select-btn" id="langSelectBtn">EN ▾</button>
+          <div class="lang-select-list" id="langSelectList" style="display:none;"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -144,10 +150,6 @@
     <button class="tab" data-panel="chrome" data-i18n="tab_chrome">Chrome Check</button>
     <!-- Netrunner Breach désactivé pour le moment — remettre la classe ci-dessous à rien pour réactiver -->
     <button class="tab ff-hidden" data-panel="breach" data-i18n="tab_breach">Netrunner Breach</button>
-    <span class="tab-eddies" id="eddiesChip" data-i18n-title="eddies_purpose" title="Les eddies ne servent qu'au classement communautaire et à tes stats — aucune autre utilité.">
-      <svg class="eddies-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" font-family="Chakra Petch, sans-serif" font-weight="700" fill="currentColor">€$</text></svg>
-      <span id="eddiesTotal">0</span>
-    </span>
   </nav>
 
   <!-- CLASSIC -->
@@ -156,11 +158,11 @@
       <span><span data-i18n="classic_daily">Défi du jour</span> · <span id="dailyDate"></span></span>
       <span class="stat"><span data-i18n="classic_streak">Série</span> <b id="streakVal">0</b> 🔥 · <span data-i18n="classic_best">Meilleure</span> <b id="bestStreakVal">0</b></span>
     </div>
+    <div class="hint" data-i18n="classic_hint">Compare TYPE · FACTION · COÛT (€$) · PUISSANCE · RAM. Orange = au moins une faction commune (sans dire laquelle).</div>
     <div class="searchrow">
       <input class="guessInput" id="guessInput" type="text" data-i18n-ph="classic_input_ph" placeholder="Tape le nom d'une carte..." autocomplete="off">
       <div class="suggestions" id="suggestions"></div>
     </div>
-    <div class="hint" data-i18n="classic_hint">Compare TYPE · FACTION · COÛT (€$) · PUISSANCE · RAM. Orange = au moins une faction commune (sans dire laquelle).</div>
     <div class="gridwrap">
       <table class="guesses">
         <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
@@ -250,7 +252,7 @@
       <span class="stat"><span data-i18n="endless_solved">Cartes résolues (total)</span> <b id="artSolved">0</b></span>
     </div>
     <div class="art-frame">
-      <img id="artImage" src="" alt="Cyberpunk TCG card art">
+      <canvas id="artCanvas" width="480" height="672" style="display:none;"></canvas>
       <div class="art-placeholder" id="artPlaceholder" style="display:none;" data-i18n="art_missing">Visuel bientôt disponible pour cette carte.</div>
     </div>
     <div class="searchrow">
@@ -1238,14 +1240,23 @@ const artSugg = document.getElementById('suggestionsArt');
 const artBanner = document.getElementById('artBanner');
 function applyArtBlur(attempt){
   const step = ART_FILTER_STEPS[Math.min(attempt, ART_FILTER_STEPS.length) - 1];
-  const img = document.getElementById('artImage');
-  img.style.filter = 'blur('+step.blur+'px) grayscale('+step.gray+')';
+  const canvas = document.getElementById('artCanvas');
+  canvas.style.filter = 'blur('+step.blur+'px) grayscale('+step.gray+')';
 }
 function showArtImage(card){
-  const img = document.getElementById('artImage');
+  const canvas = document.getElementById('artCanvas');
   const placeholder = document.getElementById('artPlaceholder');
-  img.style.display = 'block'; placeholder.style.display = 'none';
-  img.onerror = ()=>{ img.style.display='none'; placeholder.style.display='flex'; };
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = ()=>{
+    canvas.style.display = 'block'; placeholder.style.display = 'none';
+    const cw = canvas.width, ch = canvas.height;
+    const scale = Math.max(cw/img.width, ch/img.height);
+    const dw = img.width*scale, dh = img.height*scale;
+    ctx.clearRect(0,0,cw,ch);
+    ctx.drawImage(img, (cw-dw)/2, (ch-dh)/2, dw, dh);
+  };
+  img.onerror = ()=>{ canvas.style.display='none'; placeholder.style.display='flex'; };
   img.src = cardImgUrl(card);
 }
 function initArt(){
