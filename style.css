@@ -288,7 +288,7 @@
     text-transform:uppercase; letter-spacing:.04em; margin-right:auto;
   }
   .cardslink-solved-bar .thumbs{ display:flex; gap:4px; }
-  .cardslink-solved-bar .thumbs img{ width:32px; height:32px; object-fit:cover; border:1px solid var(--line); }
+  .cardslink-solved-bar .thumbs img{ width:96px; height:auto; object-fit:contain; border:1px solid var(--line); }
   .cardslink-grid{
     display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0;
   }
@@ -313,7 +313,7 @@
   .cardslink-controls{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:6px; }
   @media (max-width:480px){
     .cardslink-grid{ gap:5px; }
-    .cardslink-solved-bar .thumbs img{ width:22px; height:22px; }
+    .cardslink-solved-bar .thumbs img{ width:66px; height:auto; }
   }
   .art-placeholder{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center;
