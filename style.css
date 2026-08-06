@@ -18,7 +18,7 @@
     pointer-events:none; animation:scan 7s linear infinite; z-index:1;
   }
   @keyframes scan{ 0%{ background-position:0 -100vh; } 100%{ background-position:0 100vh; } }
-  .wrap{ max-width:800px; margin:0 auto; position:relative; z-index:2; }
+  .wrap{ max-width:1000px; margin:0 auto; position:relative; z-index:2; }
   .ff-hidden{ display:none !important; }
 
   header{ text-align:center; margin-bottom:14px; }
