@@ -136,6 +136,8 @@
     <div class="featurebar">
       <button class="fbtn" data-panel="community" data-i18n="fbtn_community">Communauté</button>
       <button class="fbtn" data-panel="stats" data-i18n="fbtn_stats">Mes Stats</button>
+      <button class="fbtn" data-panel="achievements" data-i18n="fbtn_achievements">Succès</button>
+      <button class="fbtn" data-panel="archive" data-i18n="fbtn_archive">Archive</button>
       <button class="fbtn" data-panel="feedback" data-i18n="fbtn_feedback">Feedback</button>
     </div>
   </header>
@@ -149,6 +151,7 @@
     <button class="tab" data-panel="art" data-i18n="tab_art">Art</button>
     <button class="tab" data-panel="cardslink" data-i18n="tab_cardslink">Cards Link</button>
     <button class="tab" data-panel="chrome" data-i18n="tab_chrome">Chrome Check</button>
+    <button class="tab" data-panel="sequence" data-i18n="tab_sequence">Sequence</button>
     <!-- Netrunner Breach désactivé pour le moment — remettre la classe ci-dessous à rien pour réactiver -->
     <button class="tab ff-hidden" data-panel="breach" data-i18n="tab_breach">Netrunner Breach</button>
   </nav>
@@ -289,6 +292,17 @@
     <div class="banner" id="chromeBanner"></div>
   </div>
 
+  <!-- SEQUENCE -->
+  <div class="panel" id="panel-sequence" style="display:none">
+    <div class="statusline">
+      <span><span data-i18n="sequence_daily">Défi Sequence du jour</span> · <span id="sequenceDate"></span></span>
+    </div>
+    <div class="hint" id="sequenceInstruction"></div>
+    <div class="sequence-list" id="sequenceList"></div>
+    <button class="bigbtn" id="sequenceSubmitBtn" data-i18n="sequence_submit" style="margin-top:10px;">Valider</button>
+    <div class="banner" id="sequenceBanner"></div>
+  </div>
+
   <!-- NETRUNNER BREACH -->
   <div class="panel" id="panel-breach" style="display:none">
     <div class="breachbar">
@@ -343,12 +357,43 @@
     <div id="statsPerGame"></div>
   </div>
 
+  <!-- ACHIEVEMENTS -->
+  <div class="panel" id="panel-achievements" style="display:none">
+    <div class="statusline">
+      <span data-i18n="achievements_title">Succès</span>
+      <span class="stat"><b id="achievementsUnlockedCount">0</b> / <b id="achievementsTotalCount">0</b></span>
+    </div>
+    <div id="achievementsGrid" class="achievements-grid"></div>
+  </div>
+
+  <!-- ARCHIVE -->
+  <div class="panel" id="panel-archive" style="display:none">
+    <div class="statusline"><span data-i18n="archive_title">Archive — rejoue les défis passés</span></div>
+    <div class="hint" data-i18n="archive_hint">Mode entraînement : aucun eddie, aucune statistique enregistrée.</div>
+    <div class="archive-controls">
+      <select id="archiveGameSelect" class="fbtn">
+        <option value="classic" data-i18n="tab_classic">Classic</option>
+        <option value="legend" data-i18n="tab_legend">Legend</option>
+        <option value="ability" data-i18n="tab_ability">Ability</option>
+        <option value="sequence" data-i18n="tab_sequence">Sequence</option>
+        <option value="cardslink" data-i18n="tab_cardslink">Cards Link</option>
+      </select>
+      <input type="date" id="archiveDateInput">
+      <button class="bigbtn" id="archiveLoadBtn" data-i18n="archive_load">Charger</button>
+    </div>
+    <div id="archiveArea"></div>
+  </div>
+
   <!-- FEEDBACK -->
   <div class="panel" id="panel-feedback" style="display:none">
     <div class="statusline"><span data-i18n="feedback_title">Donne ton avis sur Choomdle</span></div>
     <textarea id="feedbackText" rows="3" data-i18n-ph="feedback_ph" placeholder="Une idée de mode, un bug, une carte manquante..." style="width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--text);font-family:'JetBrains Mono',monospace;padding:10px;"></textarea>
     <button class="bigbtn" id="sendFeedbackBtn" data-i18n="feedback_send" style="margin-top:8px;">Envoyer</button>
     <span id="feedbackConfirm" style="margin-left:10px;color:var(--green);font-size:12px;"></span>
+    <div id="feedbackAdminView" style="display:none; margin-top:24px; border-top:1px solid var(--line); padding-top:16px;">
+      <div class="statusline"><span data-i18n="feedback_admin_title">Retours reçus (admin)</span></div>
+      <div id="feedbackAdminList"></div>
+    </div>
   </div>
 
   <footer data-i18n="footer">
@@ -428,6 +473,53 @@ function randCard(){ return CARDS[Math.floor(Math.random()*CARDS.length)]; }
 
 // Barème de récompense (÷10) : 100 eddies au 1er essai, -10 par essai supplémentaire, plancher 10.
 function computeReward(tries){ return Math.max(10, 100 - (tries-1)*10); }
+function shareToClipboard(text, btnEl){
+  const done = ()=>{
+    if(!btnEl) return;
+    const orig = btnEl.textContent;
+    btnEl.textContent = t('share_copied');
+    setTimeout(()=>{ btnEl.textContent = orig; }, 2000);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(done);
+  } else {
+    try{
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }catch(e){}
+    done();
+  }
+}
+function shareButtonHTML(fnName){
+  return '<button class="share-btn" onclick="'+fnName+'(this)">'+t('share_button')+'</button>';
+}
+function shareClassic(btn){
+  const rows = classicGuesses.map(name=>{
+    const card = CARDS.find(c=>c.n===name);
+    if(!card) return '';
+    const r = compareCard(card, classicSecret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const text = 'Choomdle Classic — '+todayUTCString()+'\n'+(rows||'✅')+'\n'+t('win_tries').replace('{n}', classicGuesses.length||'?')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareLegend(btn){
+  const text = 'Choomdle Legend — '+todayUTCString()+'\n✅\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareCardsLink(btn){
+  const colors = ['🟨','🟩','🟦','🟪'];
+  const order = cardsLinkSolveOrder.length ? cardsLinkSolveOrder : cardsLinkGroups.map((g,i)=>i);
+  const colorFor = gi => { const rank = order.indexOf(gi); return rank>=0 ? colors[rank] : '⬛'; };
+  const cells = cardsLinkOriginalCells.length ? cardsLinkOriginalCells : cardsLinkGroups.flatMap((g,gi)=>g.cards.map(c=>({groupIndex:gi})));
+  const rows = [];
+  for(let i=0;i<cells.length;i+=4){
+    rows.push(cells.slice(i,i+4).map(c=>colorFor(c.groupIndex)).join(''));
+  }
+  const text = 'Choomdle Cards Link — '+todayUTCString()+'\n'+rows.join('\n')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
 
 function compareCard(guess, secret){
   const res = {};
@@ -540,7 +632,10 @@ function statsRowToLocal(row){
     gamesPlayed: row.games_played||0, wins: row.wins||0,
     guessDistribution: row.guess_distribution||{},
     lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
-    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0, cardslink: meta.eddies_cardslink||0 }
+    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0, cardslink: meta.eddies_cardslink||0, sequence: meta.eddies_sequence||0 },
+    hasPublishedCommunity: meta.hasPublishedCommunity||false,
+    lastSequencePlayed: meta.lastSequencePlayed||null, sequenceWon: meta.sequenceWon||false, lastSequenceReward: meta.lastSequenceReward||0,
+    sequencePlayed: meta.sequencePlayed||0, sequenceWins: meta.sequenceWins||0,
   };
 }
 function localToStatsRow(s, uid){
@@ -564,6 +659,9 @@ function localToStatsRow(s, uid){
       lastCardsLinkReward: s.lastCardsLinkReward||0, lastCardsLinkMistakes: s.lastCardsLinkMistakes||0,
       cardsLinkPlayed: s.cardsLinkPlayed||0, cardsLinkWins: s.cardsLinkWins||0,
       eddies_cardslink: (s.eddies&&s.eddies.cardslink)||0,
+      hasPublishedCommunity: s.hasPublishedCommunity||false,
+      lastSequencePlayed: s.lastSequencePlayed||null, sequenceWon: s.sequenceWon||false, lastSequenceReward: s.lastSequenceReward||0,
+      sequencePlayed: s.sequencePlayed||0, sequenceWins: s.sequenceWins||0, eddies_sequence: (s.eddies&&s.eddies.sequence)||0,
       lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
   };
 }
@@ -586,7 +684,7 @@ async function loadStats(){
 }
 function defaultStats(){
   return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
-    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0}, lastLegendPlayed:null, legendResult:null,
+    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0}, lastLegendPlayed:null, legendResult:null,
     lastAbilityPlayed:null, abilityWon:false, lastArtPlayed:null, artWon:false, artLost:false,
     lastClassicReward:0, lastAbilityReward:0, lastArtReward:0,
     legendPlayed:0, legendWins:0,
@@ -595,7 +693,8 @@ function defaultStats(){
     artPlayed:0, artLostCount:0,
     chromeSessions:0, chromeBestScore:0, chromeTotalCorrect:0,
     lastCardsLinkPlayed:null, cardsLinkWon:null, lastCardsLinkReward:0, lastCardsLinkMistakes:0,
-    cardsLinkPlayed:0, cardsLinkWins:0};
+    cardsLinkPlayed:0, cardsLinkWins:0,
+    lastSequencePlayed:null, sequenceWon:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0};
 }
 async function saveStats(stats){
   lsSetJSON('choomdle:stats', stats);
@@ -651,6 +750,7 @@ async function onLoggedIn(){
       showPseudoPicker(suggested);
     }
     refreshEddiesUI(); refreshStreakUI();
+    checkAdminFeedbackView();
   }catch(e){}
 }
 function showPseudoPicker(suggested){
@@ -810,6 +910,8 @@ async function getPseudo(){ return currentPseudo || "Anonyme"; }
 // ======================= COMMUNITY (podiums par jeu + cumulé) =======================
 async function publishStats(){
   const s = await loadStats();
+  s.hasPublishedCommunity = true;
+  await saveStats(s);
   if(supabaseReady && currentSession){
     try{ await supabaseClient.from('stats').upsert(localToStatsRow(s, currentSession.user.id)); }catch(e){}
     renderCommunity();
@@ -832,12 +934,13 @@ async function loadCommunityRows(){
         .limit(500);
       if(error) throw error;
       return (data||[]).map(r=>{
-        const cardslink = (r.meta && r.meta.eddies_cardslink) || 0; // eddies Cards Link stockés dans meta (pas de colonne dédiée)
+        const cardslink = (r.meta && r.meta.eddies_cardslink) || 0; // eddies Cards Link/Sequence stockés dans meta (pas de colonne dédiée)
+        const sequence = (r.meta && r.meta.eddies_sequence) || 0;
         return {
           pseudo: (r.profiles && r.profiles.pseudo) || "Choomer",
           streak: r.streak, bestStreak: r.best_streak,
-          eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art, cardslink },
-          eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink
+          eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art, cardslink, sequence },
+          eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink+sequence
         };
       });
     }catch(e){ return []; }
@@ -886,13 +989,99 @@ async function renderCommunity(){
       podiumHTML(t('podium_ability'), rows, r=>(r.eddies&&r.eddies.ability)||0) +
       podiumHTML(t('podium_art'), rows, r=>(r.eddies&&r.eddies.art)||0) +
       podiumHTML(t('podium_chrome'), rows, r=>(r.eddies&&r.eddies.chrome)||0) +
-      podiumHTML(t('podium_cardslink'), rows, r=>(r.eddies&&r.eddies.cardslink)||0);
+      podiumHTML(t('podium_cardslink'), rows, r=>(r.eddies&&r.eddies.cardslink)||0) +
+      podiumHTML(t('podium_sequence'), rows, r=>(r.eddies&&r.eddies.sequence)||0);
   }catch(e){
     grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
   }
 }
 
 // ======================= PERSONAL STATS PANEL =======================
+// ======================= ACHIEVEMENTS =======================
+// NOTE : par souci de volume, les titres/descriptions ne sont fournis qu'en FR et EN.
+// Les 8 autres langues affichent la version anglaise par défaut pour cette section.
+const ACHIEVEMENTS = [
+  // --- Classic ---
+  { id:'cl_first', icon:'🩸', fr:['Premier Contact','Gagne ta première partie Classic.'], en:['First Contact','Win your first Classic challenge.'], check:s=>(s.wins||0)>=1 },
+  { id:'cl_10', icon:'🕶️', fr:['Netrunner','10 victoires en Classic.'], en:['Netrunner','10 Classic wins.'], check:s=>(s.wins||0)>=10 },
+  { id:'cl_50', icon:'🏙️', fr:['Légende de la Rue','50 victoires en Classic.'], en:['Street Legend','50 Classic wins.'], check:s=>(s.wins||0)>=50 },
+  { id:'cl_100', icon:'👑', fr:['Icône de Night City','100 victoires en Classic.'], en:["Night City Icon",'100 Classic wins.'], check:s=>(s.wins||0)>=100 },
+  { id:'cl_streak3', icon:'🔥', fr:['Sur une Lancée','Série de 3 jours.'], en:['On A Roll','3-day streak.'], check:s=>(s.streak||0)>=3 },
+  { id:'cl_streak7', icon:'🔥', fr:['Habitué de Night City','Série de 7 jours.'], en:['Night City Regular','7-day streak.'], check:s=>(s.streak||0)>=7 },
+  { id:'cl_streak30', icon:'💀', fr:['Choom4Life','Série de 30 jours.'], en:['Choom4Life','30-day streak.'], check:s=>(s.streak||0)>=30 },
+  // --- Legend ---
+  { id:'lg_first', icon:'🪪', fr:['Identité Confirmée','Première victoire en Legend.'], en:['Identity Confirmed','First Legend win.'], check:s=>(s.legendWins||0)>=1 },
+  { id:'lg_10', icon:'🕵️', fr:['Sous Couverture','10 victoires en Legend.'], en:['Deep Cover','10 Legend wins.'], check:s=>(s.legendWins||0)>=10 },
+  { id:'lg_25', icon:'⚔️', fr:['Edgerunner','25 victoires en Legend.'], en:['Edgerunner','25 Legend wins.'], check:s=>(s.legendWins||0)>=25 },
+  { id:'lg_50', icon:'🌟', fr:['Légendaire','50 victoires en Legend.'], en:['Legendary','50 Legend wins.'], check:s=>(s.legendWins||0)>=50 },
+  { id:'lg_played5', icon:'🎭', fr:['Pas de Faux Papiers','5 parties jouées en Legend.'], en:['No Fake ID','5 Legend games played.'], check:s=>(s.legendPlayed||0)>=5 },
+  // --- Blitz ---
+  { id:'bz_first', icon:'⚡', fr:['Dégainé Rapide','Joue ta première partie Blitz.'], en:['Quickdraw','Play your first Blitz.'], check:s=>(s.blitzSessions||0)>=1 },
+  { id:'bz_score5', icon:'🏃', fr:['Vitesse Démon','Score de 5+ en une partie Blitz.'], en:['Speed Demon','Score 5+ in one Blitz run.'], check:s=>(s.blitzBestScore||0)>=5 },
+  { id:'bz_score10', icon:'💉', fr:["Montée d'Adrénaline",'Score de 10+ en une partie Blitz.'], en:['Adrenaline Rush','Score 10+ in one Blitz run.'], check:s=>(s.blitzBestScore||0)>=10 },
+  { id:'bz_total50', icon:'🏁', fr:['Marathonien','50 cartes résolues au total en Blitz.'], en:['Marathon Runner','50 total cards solved in Blitz.'], check:s=>(s.blitzTotalSolved||0)>=50 },
+  { id:'bz_sessions20', icon:'🎖️', fr:['Vétéran du Blitz','20 sessions Blitz jouées.'], en:['Blitz Veteran','20 Blitz sessions played.'], check:s=>(s.blitzSessions||0)>=20 },
+  // --- Endless ---
+  { id:'en_10', icon:'📇', fr:['Ça Commence','10 cartes résolues en Endless.'], en:['Just Getting Started','Solve 10 Endless cards.'], check:s=>(s.endlessSolved||0)>=10 },
+  { id:'en_50', icon:'🗃️', fr:['Plongeur de Deck','50 cartes résolues en Endless.'], en:['Deck Diver','Solve 50 Endless cards.'], check:s=>(s.endlessSolved||0)>=50 },
+  { id:'en_100', icon:'📚', fr:['Complétiste','100 cartes résolues en Endless.'], en:['Completionist','Solve 100 Endless cards.'], check:s=>(s.endlessSolved||0)>=100 },
+  { id:'en_250', icon:'🧠', fr:['Encyclopédie Vivante','250 cartes résolues en Endless.'], en:['Encyclopedia','Solve 250 Endless cards.'], check:s=>(s.endlessSolved||0)>=250 },
+  // --- Ability ---
+  { id:'ab_10', icon:'📜', fr:['Juriste de Comptoir','10 puzzles Ability résolus.'], en:['Rules Lawyer','Solve 10 Ability puzzles.'], check:s=>(s.abilitySolved||0)>=10 },
+  { id:'ab_25', icon:'🔍', fr:['Petites Lignes','25 puzzles Ability résolus.'], en:['Fine Print','Solve 25 Ability puzzles.'], check:s=>(s.abilitySolved||0)>=25 },
+  { id:'ab_50', icon:'🖥️', fr:['Analyste NetWatch','50 puzzles Ability résolus.'], en:['NetWatch Analyst','Solve 50 Ability puzzles.'], check:s=>(s.abilitySolved||0)>=50 },
+  { id:'ab_100', icon:'🏆', fr:["As de l'Ability",'100 puzzles Ability résolus.'], en:['Ability Ace','Solve 100 Ability puzzles.'], check:s=>(s.abilitySolved||0)>=100 },
+  // --- Art ---
+  { id:'art_first', icon:'🖼️', fr:["Critique d'Art",'Première victoire en Art.'], en:['Art Critic','First Art win.'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=1 },
+  { id:'art_sharp', icon:'👁️', fr:["L'Œil Vif",'Devine une carte au 1er essai en Art.'], en:['Sharp Eye','Guess a card on your first attempt in Art.'], check:s=>(s.lastArtReward||0)===125 },
+  { id:'art_10', icon:'🎨', fr:['Habitué de la Galerie','10 victoires en Art.'], en:['Gallery Regular','10 Art wins.'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=10 },
+  { id:'art_25', icon:'🖌️', fr:['Conservateur','25 victoires en Art.'], en:['Master Curator','25 Art wins.'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=25 },
+  { id:'art_noloss10', icon:'😎', fr:['Ne Cligne Jamais','10 parties Art sans aucune défaite.'], en:['Never Blink','10 Art games played without a single loss.'], check:s=>(s.artPlayed||0)>=10 && (s.artLostCount||0)===0 },
+  // --- Chrome Check ---
+  { id:'cc_first', icon:'⚙️', fr:['Réflexes Rapides','Joue ta première partie Chrome Check.'], en:['Quick Reflexes','Play your first Chrome Check.'], check:s=>(s.chromeSessions||0)>=1 },
+  { id:'cc_10', icon:'🔢', fr:['Double Chiffre','Score de 10+ bonnes réponses en une partie.'], en:['Double Digits','Score 10+ correct in one run.'], check:s=>(s.chromeBestScore||0)>=10 },
+  { id:'cc_20', icon:'💊', fr:["Accro à l'Adrénaline",'Score de 20+ en une partie.'], en:['Adrenaline Junkie','Score 20+ in one run.'], check:s=>(s.chromeBestScore||0)>=20 },
+  { id:'cc_100', icon:'💯', fr:['Le Club des 100','100 bonnes réponses au total.'], en:['Century Club','100 total correct answers.'], check:s=>(s.chromeTotalCorrect||0)>=100 },
+  { id:'cc_sessions20', icon:'🛠️', fr:['Vétéran du Chrome','20 sessions Chrome Check jouées.'], en:['Chrome Veteran','20 sessions played.'], check:s=>(s.chromeSessions||0)>=20 },
+  // --- Cards Link ---
+  { id:'cd_first', icon:'🔗', fr:['Reconnaissance de Motif','Première victoire en Cards Link.'], en:['Pattern Recognition','First Cards Link win.'], check:s=>(s.cardsLinkWins||0)>=1 },
+  { id:'cd_flawless', icon:'✨', fr:['Sans Faute','Gagne Cards Link sans aucune erreur.'], en:['Flawless','Win Cards Link with 0 mistakes.'], check:s=>s.cardsLinkWon===true && (s.lastCardsLinkMistakes||0)===0 },
+  { id:'cd_10', icon:'🧩', fr:['Maître des Connexions','10 victoires en Cards Link.'], en:['Connections Master','10 Cards Link wins.'], check:s=>(s.cardsLinkWins||0)>=10 },
+  { id:'cd_25', icon:'📐', fr:['Théorie des Catégories','25 victoires en Cards Link.'], en:['Category Theory','25 Cards Link wins.'], check:s=>(s.cardsLinkWins||0)>=25 },
+  { id:'cd_50', icon:'🧠', fr:['Génie de la Grille','50 victoires en Cards Link.'], en:['Grid Genius','50 Cards Link wins.'], check:s=>(s.cardsLinkWins||0)>=50 },
+  // --- Sequence ---
+  { id:'sq_first', icon:'🔢', fr:["Dans l'Ordre",'Première victoire en Sequence.'], en:['In Order','First Sequence win.'], check:s=>(s.sequenceWins||0)>=1 },
+  { id:'sq_10', icon:'📶', fr:['Bien Classé','10 victoires en Sequence.'], en:['Sorted','10 Sequence wins.'], check:s=>(s.sequenceWins||0)>=10 },
+  { id:'sq_25', icon:'🎯', fr:['Virtuose de la Séquence','25 victoires en Sequence.'], en:['Sequence Savant','25 Sequence wins.'], check:s=>(s.sequenceWins||0)>=25 },
+  // --- Eddies / Méta ---
+  { id:'ed_first', icon:'€$', fr:['Premiers Eddies','Gagne tes premiers eddies.'], en:['First Eddies','Earn your first eddies.'], check:s=>eddiesTotal(s)>=1 },
+  { id:'ed_1000', icon:'💰', fr:['Portefeuille Corpo','1 000 eddies gagnés au total.'], en:['Corpo Wallet','1,000 total eddies earned.'], check:s=>eddiesTotal(s)>=1000 },
+  { id:'ed_5000', icon:'💎', fr:['Riche des Rues','5 000 eddies gagnés au total.'], en:['Street Rich','5,000 total eddies earned.'], check:s=>eddiesTotal(s)>=5000 },
+  { id:'ed_10000', icon:'👑', fr:['Baron de Night City','10 000 eddies gagnés au total.'], en:['Night City Baron','10,000 total eddies earned.'], check:s=>eddiesTotal(s)>=10000 },
+  { id:'meta_jack', icon:'🃏', fr:['Bon à Tout Faire','Gagne au moins une fois à chaque mode de jeu.'], en:['Jack of All Trades','Win at least once in every game mode.'],
+    check:s=>(s.wins||0)>=1 && (s.legendWins||0)>=1 && (s.blitzSessions||0)>=1 && (s.endlessSolved||0)>=1 && (s.abilitySolved||0)>=1 && ((s.artPlayed||0)-(s.artLostCount||0))>=1 && (s.chromeTotalCorrect||0)>=1 && (s.cardsLinkWins||0)>=1 && (s.sequenceWins||0)>=1 },
+  { id:'meta_publish', icon:'📡', fr:['Membre de la Communauté','Publie tes stats sur le classement communautaire.'], en:['Community Member','Publish your stats to the Community leaderboard.'], check:s=>s.hasPublishedCommunity===true },
+  { id:'meta_regular', icon:'📅', fr:['Habitué de Choomdle','5 parties Classic jouées.'], en:['Choomdle Regular','5 Classic games played.'], check:s=>(s.gamesPlayed||0)>=5 },
+];
+async function renderAchievements(){
+  const s = await loadStats();
+  const grid = document.getElementById('achievementsGrid');
+  const lang = (currentLang==='fr') ? 'fr' : 'en';
+  let unlockedCount = 0;
+  grid.innerHTML = ACHIEVEMENTS.map(a=>{
+    let unlocked = false;
+    try{ unlocked = !!a.check(s); }catch(e){}
+    if(unlocked) unlockedCount++;
+    const [title, desc] = a[lang];
+    return '<div class="achievement-card'+(unlocked?' unlocked':'')+'">'+
+      '<span class="achievement-icon">'+a.icon+'</span>'+
+      '<div><div class="achievement-title">'+title+'</div><div class="achievement-desc">'+desc+'</div></div>'+
+      '</div>';
+  }).join('');
+  document.getElementById('achievementsUnlockedCount').textContent = unlockedCount;
+  document.getElementById('achievementsTotalCount').textContent = ACHIEVEMENTS.length;
+}
+
 async function renderStatsPanel(){
   const s = await loadStats();
   const container = document.getElementById('statsPerGame');
@@ -954,10 +1143,32 @@ async function renderStatsPanel(){
     statBlock(t('tab_cardslink'), [
       [t('stats_games'), s.cardsLinkPlayed||0], [t('stats_wins'), s.cardsLinkWins||0],
       [t('stats_winpct'), (s.cardsLinkPlayed? Math.round((s.cardsLinkWins||0)/s.cardsLinkPlayed*100):0)+'%']
+    ]) +
+    statBlock(t('tab_sequence'), [
+      [t('stats_games'), s.sequencePlayed||0], [t('stats_wins'), s.sequenceWins||0],
+      [t('stats_winpct'), (s.sequencePlayed? Math.round((s.sequenceWins||0)/s.sequencePlayed*100):0)+'%']
     ]);
 }
 
 // ======================= FEEDBACK =======================
+// ADMIN_UID : ton UUID Supabase (Authentication -> Users -> ton compte -> copier le UID).
+// Seul ce compte voit la liste des retours reçus dans l'onglet Feedback.
+const ADMIN_UID = "REMPLACE-MOI-PAR-TON-UUID-SUPABASE";
+async function checkAdminFeedbackView(){
+  if(!supabaseReady || !currentSession || currentSession.user.id !== ADMIN_UID) return;
+  const box = document.getElementById('feedbackAdminView');
+  box.style.display = 'block';
+  try{
+    const { data, error } = await supabaseClient.from('feedback').select('*').order('created_at', { ascending: false }).limit(200);
+    if(error) throw error;
+    document.getElementById('feedbackAdminList').innerHTML = (data||[]).map(row=>
+      '<div class="feedback-row"><div class="meta">'+(row.pseudo||'Anonyme')+' — '+new Date(row.created_at).toLocaleString()+'</div><div class="text">'+
+      String(row.text||'').replace(/</g,'&lt;')+'</div></div>'
+    ).join('') || '<div class="hint">—</div>';
+  }catch(e){
+    document.getElementById('feedbackAdminList').innerHTML = '<div class="hint">—</div>';
+  }
+}
 function initFeedback(){
   document.getElementById('sendFeedbackBtn').addEventListener('click', async ()=>{
     const text = document.getElementById('feedbackText').value.trim();
@@ -1017,7 +1228,7 @@ function initClassic(){
     if(s.lastWin === today){
       classicSolved = true; classicInput.disabled = true;
       classicBanner.className = "banner win";
-      classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastClassicReward||0)+'</span></span>'+revealCardHTML(classicSecret);
+      classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastClassicReward||0)+'</span></span>'+revealCardHTML(classicSecret)+shareButtonHTML('shareClassic');
     }
   });
 }
@@ -1036,7 +1247,7 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
     classicSolved = true; classicInput.disabled = true;
     const reward = computeReward(classicGuesses.length);
     classicBanner.className = "banner win";
-    classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', classicGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(classicSecret);
+    classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', classicGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(classicSecret)+shareButtonHTML('shareClassic');
     loadStats().then(s=>{
       const today = todayUTCString();
       if(s.lastWin !== today){
@@ -1077,7 +1288,7 @@ function initLegend(){
       legendDone = true; input.disabled = true; btn.disabled = true;
       if(s.legendResult === 'win'){
         banner.className = "banner win";
-        banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret);
+        banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret)+shareButtonHTML('shareLegend');
       } else {
         banner.className = "banner fail";
         banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>';
@@ -1103,7 +1314,7 @@ function submitLegend(){
       s.legendWins = (s.legendWins||0)+1;
       s.eddies.legend = (s.eddies.legend||0) + 50;
       banner.className = "banner win";
-      banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret);
+      banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret)+shareButtonHTML('shareLegend');
     } else {
       s.legendResult = 'lose';
       s.eddies.legend = (s.eddies.legend||0) - 25;
@@ -1483,7 +1694,111 @@ setupAutocomplete(breachInput, breachSugg, (card)=>{
   }
 }, ()=>breachGuesses);
 
-// ======================= CARDS LINK (façon Connections, défi quotidien) =======================
+// ======================= SEQUENCE (classer 5 cartes par ordre croissant, défi quotidien) =======================
+let sequenceCards = [], sequenceDisplayOrder = [], sequenceAttr = 'c', sequenceSolved = false, sequenceTries = 0;
+function buildSequencePuzzle(seedStr){
+  const rng = seededRng(seedStr);
+  const attrs = ['c','p','r'];
+  const attr = attrs[Math.floor(rng()*attrs.length)];
+  const byValue = {};
+  CARDS.forEach(c=>{ const v=c[attr]; if(v!==null && v!==undefined){ (byValue[v]=byValue[v]||[]).push(c); } });
+  const values = Object.keys(byValue).map(Number).filter(v=>byValue[v].length>0);
+  if(values.length < 5) return null;
+  const chosenValues = seededShuffle(values, rng).slice(0,5).sort((a,b)=>a-b);
+  const cards = chosenValues.map(v=>{
+    const pool = byValue[v];
+    return pool[Math.floor(rng()*pool.length)];
+  });
+  return { attr, cards };
+}
+function sequenceAttrLabel(attr){
+  return attr==='c' ? t('col_cost') : attr==='p' ? t('col_pwr') : t('col_ram');
+}
+function initSequence(){
+  const today = todayUTCString();
+  document.getElementById('sequenceDate').textContent = today + " UTC";
+  let seedTry=0, puzzle=null;
+  while(!puzzle && seedTry<5){ puzzle = buildSequencePuzzle(today+"-sequence-"+seedTry); seedTry++; }
+  sequenceCards = puzzle ? puzzle.cards : [];
+  sequenceAttr = puzzle ? puzzle.attr : 'c';
+  document.getElementById('sequenceInstruction').textContent = t('sequence_instruction').replace('{attr}', sequenceAttrLabel(sequenceAttr));
+  const rng = seededRng(today+"-sequence-order");
+  sequenceDisplayOrder = seededShuffle(sequenceCards.map((c,i)=>i), rng);
+  sequenceSolved = false; sequenceTries = 0;
+  document.getElementById('sequenceBanner').className = 'banner'; document.getElementById('sequenceBanner').innerHTML = '';
+  renderSequence();
+  loadStats().then(s=>{
+    if(s.lastSequencePlayed === today && s.sequenceWon){
+      sequenceSolved = true;
+      showSequenceEndBanner(true, s.lastSequenceReward||0);
+      renderSequence();
+    }
+  });
+}
+function renderSequence(){
+  const list = document.getElementById('sequenceList');
+  list.innerHTML = '';
+  sequenceDisplayOrder.forEach((cardIdx, pos)=>{
+    const card = sequenceCards[cardIdx];
+    const row = document.createElement('div');
+    row.className = 'sequence-row';
+    row.innerHTML =
+      '<div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div>'+
+      '<div class="sequence-name">'+card.n+'</div>'+
+      '<div class="sequence-value">'+fmtVal(card[sequenceAttr])+'</div>'+
+      '<div class="sequence-arrows">'+
+        '<button data-dir="-1" '+(pos===0||sequenceSolved?'disabled':'')+'>▲</button>'+
+        '<button data-dir="1" '+(pos===sequenceDisplayOrder.length-1||sequenceSolved?'disabled':'')+'>▼</button>'+
+      '</div>';
+    row.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>sequenceMove(pos, parseInt(btn.dataset.dir,10)));
+    });
+    list.appendChild(row);
+  });
+  document.getElementById('sequenceSubmitBtn').disabled = sequenceSolved;
+}
+function sequenceMove(pos, dir){
+  if(sequenceSolved) return;
+  const target = pos+dir;
+  if(target<0 || target>=sequenceDisplayOrder.length) return;
+  [sequenceDisplayOrder[pos], sequenceDisplayOrder[target]] = [sequenceDisplayOrder[target], sequenceDisplayOrder[pos]];
+  renderSequence();
+}
+function showSequenceEndBanner(won, reward){
+  const banner = document.getElementById('sequenceBanner');
+  banner.className = 'banner win';
+  banner.innerHTML = t('sequence_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+}
+document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
+  if(sequenceSolved) return;
+  sequenceTries++;
+  const rows = document.querySelectorAll('#sequenceList .sequence-row');
+  let allCorrect = true;
+  sequenceDisplayOrder.forEach((cardIdx, pos)=>{
+    const isCorrect = cardIdx === pos; // rangé par ordre croissant = l'index d'origine (déjà trié) doit correspondre à la position
+    rows[pos].classList.remove('correct-pos','wrong-pos');
+    rows[pos].classList.add(isCorrect ? 'correct-pos' : 'wrong-pos');
+    if(!isCorrect) allCorrect = false;
+  });
+  if(allCorrect){
+    sequenceSolved = true;
+    const reward = computeReward(sequenceTries);
+    showSequenceEndBanner(true, reward);
+    renderSequence();
+    const today = todayUTCString();
+    loadStats().then(s=>{
+      if(s.lastSequencePlayed !== today){
+        s.lastSequencePlayed = today; s.sequenceWon = true; s.lastSequenceReward = reward;
+        s.sequencePlayed = (s.sequencePlayed||0)+1; s.sequenceWins = (s.sequenceWins||0)+1;
+        s.eddies = s.eddies || {};
+        s.eddies.sequence = (s.eddies.sequence||0) + reward;
+        saveStats(s).then(refreshEddiesUI);
+      }
+    });
+  }
+});
+
+
 // PRNG déterministe (mulberry32) pour que tout le monde ait le même puzzle le même jour.
 function seededRng(seedStr){
   let h = 0; for(let i=0;i<seedStr.length;i++){ h = (h*31 + seedStr.charCodeAt(i))>>>0; }
@@ -1554,7 +1869,7 @@ function buildCardsLinkPuzzle(seedStr){
   return groups.length===4 ? groups : null;
 }
 
-let cardsLinkGroups = [], cardsLinkCells = [], cardsLinkSelected = [], cardsLinkMistakes = 0, cardsLinkSolvedCount = 0, cardsLinkActive = false;
+let cardsLinkGroups = [], cardsLinkCells = [], cardsLinkSelected = [], cardsLinkMistakes = 0, cardsLinkSolvedCount = 0, cardsLinkActive = false, cardsLinkSolveOrder = [], cardsLinkOriginalCells = [];
 function initCardsLink(){
   const today = todayUTCString();
   document.getElementById('cardsLinkDate').textContent = today + " UTC";
@@ -1567,6 +1882,8 @@ function initCardsLink(){
   document.getElementById('cardsLinkBanner').className = 'banner'; document.getElementById('cardsLinkBanner').innerHTML = '';
   const rng = seededRng(today+"-cardslink-order");
   cardsLinkCells = seededShuffle(cardsLinkGroups.flatMap((g,gi)=>g.cards.map(c=>({ card:c, groupIndex:gi }))), rng);
+  cardsLinkOriginalCells = cardsLinkCells.slice();
+  cardsLinkSolveOrder = [];
   renderCardsLinkDots();
   renderCardsLinkGrid();
   loadStats().then(s=>{
@@ -1632,10 +1949,10 @@ function showCardsLinkEndBanner(won, reward, mistakes){
   const banner = document.getElementById('cardsLinkBanner');
   if(won){
     banner.className = 'banner win';
-    banner.innerHTML = t('cardslink_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+    banner.innerHTML = t('cardslink_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+shareButtonHTML('shareCardsLink');
   } else {
     banner.className = 'banner fail';
-    banner.innerHTML = t('cardslink_lose')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
+    banner.innerHTML = t('cardslink_lose')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareCardsLink');
   }
 }
 document.getElementById('cardsLinkSubmitBtn').addEventListener('click', ()=>{
@@ -1650,6 +1967,7 @@ document.getElementById('cardsLinkSubmitBtn').addEventListener('click', ()=>{
     selectedEls.forEach(el=>el && el.classList.add('flash-correct'));
     const group = cardsLinkGroups[groupIndex];
     cardsLinkSolvedCount++;
+    cardsLinkSolveOrder.push(groupIndex);
     setTimeout(()=>{
       document.getElementById('cardsLinkSolvedGroups').insertAdjacentHTML('beforeend', solvedBarHTML(group));
       cardsLinkCells = cardsLinkCells.filter(c=>c.groupIndex!==groupIndex);
@@ -1688,7 +2006,157 @@ function cardsLinkFinish(won){
     }
   });
 }
-const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','chrome','breach','cardslink','community','stats','feedback'];
+// ======================= ARCHIVE (mode entraînement, sans eddies ni stats) =======================
+function initArchive(){
+  const dateInput = document.getElementById('archiveDateInput');
+  const launch = '2026-08-01';
+  const y = new Date(); y.setUTCDate(y.getUTCDate()-1);
+  const yesterday = y.toISOString().slice(0,10);
+  dateInput.min = launch; dateInput.max = yesterday; dateInput.value = yesterday;
+  document.getElementById('archiveLoadBtn').addEventListener('click', loadArchivePuzzle);
+}
+function loadArchivePuzzle(){
+  const game = document.getElementById('archiveGameSelect').value;
+  const date = document.getElementById('archiveDateInput').value;
+  if(!date) return;
+  const oldSugg = document.getElementById('archiveSugg'); if(oldSugg) oldSugg.remove();
+  const area = document.getElementById('archiveArea');
+  area.innerHTML = '';
+  if(game==='classic') renderArchiveGuessGame(area, 'classic', date);
+  else if(game==='ability') renderArchiveGuessGame(area, 'ability', date);
+  else if(game==='legend') renderArchiveLegend(area, date);
+  else if(game==='sequence') renderArchiveSequence(area, date);
+  else if(game==='cardslink') renderArchiveCardsLink(area, date);
+}
+function renderArchiveGuessGame(area, mode, date){
+  const pool = mode==='ability' ? ABILITY_CARDS : CARDS;
+  const seedSuffix = mode==='ability' ? '-ability' : '';
+  const secret = pool[seededIndex(date+seedSuffix, pool.length)];
+  let guesses = [];
+  area.innerHTML =
+    (mode==='ability' ? '<div class="ability-quote">« '+secret.text+' »</div>' : '') +
+    '<div class="searchrow"><input class="guessInput" id="archiveInput" type="text" placeholder="'+t('classic_input_ph')+'" autocomplete="off"><div class="suggestions" id="archiveSugg"></div></div>'+
+    '<div class="gridwrap"><table class="guesses"><thead><tr><th style="text-align:left">'+t('col_card')+'</th><th>'+t('col_type')+'</th><th>'+t('col_faction')+'</th><th>'+t('col_cost')+'</th><th>'+t('col_pwr')+'</th><th>'+t('col_ram')+'</th></tr></thead><tbody id="archiveBody"></tbody></table></div>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  const body = document.getElementById('archiveBody');
+  const input = document.getElementById('archiveInput');
+  const sugg = document.getElementById('archiveSugg');
+  const banner = document.getElementById('archiveBanner');
+  setupAutocomplete(input, sugg, (card)=>{
+    const {row, win} = renderRow(card, secret);
+    body.insertAdjacentHTML('beforeend', row);
+    guesses.push(card.n);
+    if(win){
+      input.disabled = true;
+      banner.className='banner win';
+      banner.innerHTML = t('archive_solved')+' '+secret.n+revealCardHTML(secret);
+    }
+  }, ()=>guesses);
+}
+function renderArchiveLegend(area, date){
+  const secret = LEGEND_CARDS[seededIndex(date+"-legend", LEGEND_CARDS.length)];
+  const parts = splitLegend(secret);
+  area.innerHTML =
+    '<div class="legend-quote">« '+parts.sub+' »</div>'+
+    '<div style="display:flex;gap:8px;"><input class="guessInput" id="archiveLegendInput" type="text" placeholder="'+t('legend_input_ph')+'" style="flex:1;" autocomplete="off"><button class="bigbtn" id="archiveLegendSubmit">'+t('legend_submit')+'</button></div>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  document.getElementById('archiveLegendSubmit').addEventListener('click', ()=>{
+    const guess = document.getElementById('archiveLegendInput').value.trim();
+    const correct = guess.toLowerCase() === parts.main.trim().toLowerCase();
+    const banner = document.getElementById('archiveBanner');
+    banner.className = correct ? 'banner win' : 'banner fail';
+    banner.innerHTML = (correct ? t('legend_win_prefix') : t('legend_lose_prefix'))+' '+parts.main;
+    document.getElementById('archiveLegendInput').disabled = true;
+    document.getElementById('archiveLegendSubmit').disabled = true;
+  });
+}
+function renderArchiveSequence(area, date){
+  let puzzle=null, seedTry=0;
+  while(!puzzle && seedTry<5){ puzzle = buildSequencePuzzle(date+"-sequence-"+seedTry); seedTry++; }
+  if(!puzzle){ area.innerHTML = '<div class="hint">—</div>'; return; }
+  const rng = seededRng(date+"-sequence-order");
+  let order = seededShuffle(puzzle.cards.map((c,i)=>i), rng);
+  area.innerHTML =
+    '<div class="hint">'+t('sequence_instruction').replace('{attr}', sequenceAttrLabel(puzzle.attr))+'</div>'+
+    '<div class="sequence-list" id="archiveSeqList"></div>'+
+    '<button class="bigbtn" id="archiveSeqSubmit" style="margin-top:10px;">'+t('sequence_submit')+'</button>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  function render(){
+    const list = document.getElementById('archiveSeqList');
+    list.innerHTML = order.map((idx,pos)=>{
+      const card = puzzle.cards[idx];
+      return '<div class="sequence-row"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="sequence-name">'+card.n+'</div><div class="sequence-value">'+fmtVal(card[puzzle.attr])+'</div><div class="sequence-arrows"><button data-p="'+pos+'" data-d="-1" '+(pos===0?'disabled':'')+'>▲</button><button data-p="'+pos+'" data-d="1" '+(pos===order.length-1?'disabled':'')+'>▼</button></div></div>';
+    }).join('');
+    list.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const p = parseInt(btn.dataset.p,10), d = parseInt(btn.dataset.d,10);
+        const target = p+d; if(target<0||target>=order.length) return;
+        [order[p],order[target]] = [order[target],order[p]];
+        render();
+      });
+    });
+  }
+  render();
+  document.getElementById('archiveSeqSubmit').addEventListener('click', ()=>{
+    const ok = order.every((idx,pos)=>idx===pos);
+    const banner = document.getElementById('archiveBanner');
+    banner.className = 'banner ' + (ok ? 'win' : 'fail');
+    banner.innerHTML = ok ? t('sequence_win') : t('cardslink_lose');
+  });
+}
+function renderArchiveCardsLink(area, date){
+  let groups=null, seedTry=0;
+  while(!groups && seedTry<5){ groups = buildCardsLinkPuzzle(date+"-cardslink-"+seedTry); seedTry++; }
+  if(!groups){ area.innerHTML = '<div class="hint">—</div>'; return; }
+  const rng = seededRng(date+"-cardslink-order");
+  let cells = seededShuffle(groups.flatMap((g,gi)=>g.cards.map(c=>({card:c, groupIndex:gi}))), rng);
+  let selected = [], solvedCount = 0;
+  area.innerHTML =
+    '<div id="archiveSolved"></div>'+
+    '<div class="cardslink-grid" id="archiveGrid"></div>'+
+    '<div class="cardslink-controls"><button class="bigbtn" id="archiveSubmitBtn">'+t('cardslink_submit')+'</button></div>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  function renderGrid(){
+    const grid = document.getElementById('archiveGrid');
+    grid.innerHTML = '';
+    cells.forEach(cell=>{
+      const div = document.createElement('div');
+      div.className = 'cardslink-cell';
+      div.dataset.name = cell.card.n;
+      div.style.backgroundImage = "url('"+cardImgUrl(cell.card)+"')";
+      div.addEventListener('click', ()=>{
+        const i = selected.indexOf(cell.card.n);
+        if(i>-1){ selected.splice(i,1); div.classList.remove('selected'); return; }
+        if(selected.length>=4) return;
+        selected.push(cell.card.n); div.classList.add('selected');
+      });
+      grid.appendChild(div);
+    });
+  }
+  renderGrid();
+  document.getElementById('archiveSubmitBtn').addEventListener('click', ()=>{
+    if(selected.length!==4) return;
+    const gi = cells.find(c=>c.card.n===selected[0]).groupIndex;
+    const ok = selected.every(name=>cells.find(c=>c.card.n===name).groupIndex===gi);
+    if(ok){
+      document.getElementById('archiveSolved').insertAdjacentHTML('beforeend', solvedBarHTML(groups[gi]));
+      cells = cells.filter(c=>c.groupIndex!==gi);
+      selected = [];
+      renderGrid();
+      solvedCount++;
+      if(solvedCount===4){
+        const banner = document.getElementById('archiveBanner');
+        banner.className = 'banner win';
+        banner.innerHTML = t('cardslink_win');
+      }
+    } else {
+      selected = [];
+      document.querySelectorAll('#archiveGrid .cardslink-cell.selected').forEach(el=>el.classList.remove('selected'));
+    }
+  });
+}
+
+const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','stats','achievements','archive','feedback'];
 function showPanel(name){
   ALL_PANELS.forEach(p=>{
     const el = document.getElementById('panel-'+p);
@@ -1698,6 +2166,8 @@ function showPanel(name){
   document.querySelectorAll('.fbtn[data-panel]').forEach(b=>b.classList.toggle('active', b.dataset.panel===name));
   if(name==='community') renderCommunity();
   if(name==='stats') renderStatsPanel();
+  if(name==='achievements') renderAchievements();
+  if(name==='feedback') checkAdminFeedbackView();
 }
 document.querySelectorAll('.tab[data-panel], .fbtn[data-panel]').forEach(btn=>{
   btn.addEventListener('click', ()=>showPanel(btn.dataset.panel));
@@ -1743,6 +2213,8 @@ initFeedback();
   initAbility();
   initArt();
   initCardsLink();
+  initSequence();
+  initArchive();
   refreshEddiesUI();
 })();
 document.getElementById('publishStatsBtn').addEventListener('click', publishStats);
