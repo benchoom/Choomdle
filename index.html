@@ -634,7 +634,7 @@ function statsRowToLocal(row){
     lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
     eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0, cardslink: meta.eddies_cardslink||0, sequence: meta.eddies_sequence||0 },
     hasPublishedCommunity: meta.hasPublishedCommunity||false,
-    lastSequencePlayed: meta.lastSequencePlayed||null, sequenceWon: meta.sequenceWon||false, lastSequenceReward: meta.lastSequenceReward||0,
+    lastSequencePlayed: meta.lastSequencePlayed||null, sequenceWon: meta.sequenceWon||false, sequenceLost: meta.sequenceLost||false, lastSequenceReward: meta.lastSequenceReward||0,
     sequencePlayed: meta.sequencePlayed||0, sequenceWins: meta.sequenceWins||0,
   };
 }
@@ -660,7 +660,7 @@ function localToStatsRow(s, uid){
       cardsLinkPlayed: s.cardsLinkPlayed||0, cardsLinkWins: s.cardsLinkWins||0,
       eddies_cardslink: (s.eddies&&s.eddies.cardslink)||0,
       hasPublishedCommunity: s.hasPublishedCommunity||false,
-      lastSequencePlayed: s.lastSequencePlayed||null, sequenceWon: s.sequenceWon||false, lastSequenceReward: s.lastSequenceReward||0,
+      lastSequencePlayed: s.lastSequencePlayed||null, sequenceWon: s.sequenceWon||false, sequenceLost: s.sequenceLost||false, lastSequenceReward: s.lastSequenceReward||0,
       sequencePlayed: s.sequencePlayed||0, sequenceWins: s.sequenceWins||0, eddies_sequence: (s.eddies&&s.eddies.sequence)||0,
       lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
   };
@@ -694,7 +694,7 @@ function defaultStats(){
     chromeSessions:0, chromeBestScore:0, chromeTotalCorrect:0,
     lastCardsLinkPlayed:null, cardsLinkWon:null, lastCardsLinkReward:0, lastCardsLinkMistakes:0,
     cardsLinkPlayed:0, cardsLinkWins:0,
-    lastSequencePlayed:null, sequenceWon:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0};
+    lastSequencePlayed:null, sequenceWon:false, sequenceLost:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0};
 }
 async function saveStats(stats){
   lsSetJSON('choomdle:stats', stats);
@@ -1696,6 +1696,7 @@ setupAutocomplete(breachInput, breachSugg, (card)=>{
 
 // ======================= SEQUENCE (classer 5 cartes par ordre croissant, défi quotidien) =======================
 let sequenceCards = [], sequenceDisplayOrder = [], sequenceAttr = 'c', sequenceSolved = false, sequenceTries = 0;
+const SEQUENCE_REWARD_TABLE = [100,80,60,40,20]; // récompense selon la tentative (1re à 5e) en cas de victoire
 function buildSequencePuzzle(seedStr){
   const rng = seededRng(seedStr);
   const attrs = ['c','p','r'];
@@ -1728,9 +1729,10 @@ function initSequence(){
   document.getElementById('sequenceBanner').className = 'banner'; document.getElementById('sequenceBanner').innerHTML = '';
   renderSequence();
   loadStats().then(s=>{
-    if(s.lastSequencePlayed === today && s.sequenceWon){
+    if(s.lastSequencePlayed === today && (s.sequenceWon || s.sequenceLost)){
       sequenceSolved = true;
-      showSequenceEndBanner(true, s.lastSequenceReward||0);
+      if(s.sequenceWon) showSequenceEndBanner(true, s.lastSequenceReward||0);
+      else showSequenceLossBanner();
       renderSequence();
     }
   });
@@ -1745,7 +1747,7 @@ function renderSequence(){
     row.innerHTML =
       '<div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div>'+
       '<div class="sequence-name">'+card.n+'</div>'+
-      '<div class="sequence-value">'+fmtVal(card[sequenceAttr])+'</div>'+
+      '<div class="sequence-hint" id="sequenceHint-'+pos+'"></div>'+
       '<div class="sequence-arrows">'+
         '<button data-dir="-1" '+(pos===0||sequenceSolved?'disabled':'')+'>▲</button>'+
         '<button data-dir="1" '+(pos===sequenceDisplayOrder.length-1||sequenceSolved?'disabled':'')+'>▼</button>'+
@@ -1769,6 +1771,12 @@ function showSequenceEndBanner(won, reward){
   banner.className = 'banner win';
   banner.innerHTML = t('sequence_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
 }
+function showSequenceLossBanner(){
+  const banner = document.getElementById('sequenceBanner');
+  banner.className = 'banner fail';
+  const correctOrder = sequenceCards.map(c=>c.n).join(' → ');
+  banner.innerHTML = t('sequence_lose')+' '+correctOrder+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
+}
 document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
   if(sequenceSolved) return;
   sequenceTries++;
@@ -1779,20 +1787,35 @@ document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
     rows[pos].classList.remove('correct-pos','wrong-pos');
     rows[pos].classList.add(isCorrect ? 'correct-pos' : 'wrong-pos');
     if(!isCorrect) allCorrect = false;
+    // Indice : + la carte doit monter, - elle doit descendre, = elle est bien placée.
+    const hint = document.getElementById('sequenceHint-'+pos);
+    if(hint) hint.textContent = isCorrect ? '=' : (cardIdx < pos ? '+' : '-');
   });
   if(allCorrect){
     sequenceSolved = true;
-    const reward = computeReward(sequenceTries);
+    const reward = SEQUENCE_REWARD_TABLE[sequenceTries-1] || 0;
     showSequenceEndBanner(true, reward);
     renderSequence();
     const today = todayUTCString();
     loadStats().then(s=>{
-      if(s.lastSequencePlayed !== today){
-        s.lastSequencePlayed = today; s.sequenceWon = true; s.lastSequenceReward = reward;
+      if(s.lastSequencePlayed !== today || (!s.sequenceWon && !s.sequenceLost)){
+        s.lastSequencePlayed = today; s.sequenceWon = true; s.sequenceLost = false; s.lastSequenceReward = reward;
         s.sequencePlayed = (s.sequencePlayed||0)+1; s.sequenceWins = (s.sequenceWins||0)+1;
         s.eddies = s.eddies || {};
         s.eddies.sequence = (s.eddies.sequence||0) + reward;
         saveStats(s).then(refreshEddiesUI);
+      }
+    });
+  } else if(sequenceTries>=5){
+    sequenceSolved = true;
+    showSequenceLossBanner();
+    renderSequence();
+    const today = todayUTCString();
+    loadStats().then(s=>{
+      if(s.lastSequencePlayed !== today || (!s.sequenceWon && !s.sequenceLost)){
+        s.lastSequencePlayed = today; s.sequenceWon = false; s.sequenceLost = true; s.lastSequenceReward = 0;
+        s.sequencePlayed = (s.sequencePlayed||0)+1;
+        saveStats(s);
       }
     });
   }
@@ -2085,7 +2108,7 @@ function renderArchiveSequence(area, date){
     const list = document.getElementById('archiveSeqList');
     list.innerHTML = order.map((idx,pos)=>{
       const card = puzzle.cards[idx];
-      return '<div class="sequence-row"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="sequence-name">'+card.n+'</div><div class="sequence-value">'+fmtVal(card[puzzle.attr])+'</div><div class="sequence-arrows"><button data-p="'+pos+'" data-d="-1" '+(pos===0?'disabled':'')+'>▲</button><button data-p="'+pos+'" data-d="1" '+(pos===order.length-1?'disabled':'')+'>▼</button></div></div>';
+      return '<div class="sequence-row" id="archiveSeqRow-'+pos+'"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="sequence-name">'+card.n+'</div><div class="sequence-hint" id="archiveSeqHint-'+pos+'"></div><div class="sequence-arrows"><button data-p="'+pos+'" data-d="-1" '+(pos===0?'disabled':'')+'>▲</button><button data-p="'+pos+'" data-d="1" '+(pos===order.length-1?'disabled':'')+'>▼</button></div></div>';
     }).join('');
     list.querySelectorAll('button').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -2099,6 +2122,14 @@ function renderArchiveSequence(area, date){
   render();
   document.getElementById('archiveSeqSubmit').addEventListener('click', ()=>{
     const ok = order.every((idx,pos)=>idx===pos);
+    order.forEach((idx,pos)=>{
+      const row = document.getElementById('archiveSeqRow-'+pos);
+      const hint = document.getElementById('archiveSeqHint-'+pos);
+      const isCorrect = idx===pos;
+      row.classList.remove('correct-pos','wrong-pos');
+      row.classList.add(isCorrect ? 'correct-pos' : 'wrong-pos');
+      hint.textContent = isCorrect ? '=' : (idx < pos ? '+' : '-');
+    });
     const banner = document.getElementById('archiveBanner');
     banner.className = 'banner ' + (ok ? 'win' : 'fail');
     banner.innerHTML = ok ? t('sequence_win') : t('cardslink_lose');
