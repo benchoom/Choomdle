@@ -1589,8 +1589,11 @@ function renderCardsLinkGrid(){
     const div = document.createElement('div');
     div.className = 'cardslink-cell';
     div.dataset.name = cell.card.n;
-    div.innerHTML = '<img src="'+cardImgUrl(cell.card)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'+
-      '<div class="fallback" style="display:none;">'+cell.card.n+'</div>';
+    const url = cardImgUrl(cell.card);
+    const preload = new Image();
+    preload.onload = ()=>{ div.style.backgroundImage = "url('"+url+"')"; };
+    preload.onerror = ()=>{ div.innerHTML = '<div class="fallback">'+cell.card.n+'</div>'; };
+    preload.src = url;
     div.addEventListener('click', ()=>cardsLinkToggle(cell.card.n, div));
     grid.appendChild(div);
   });
