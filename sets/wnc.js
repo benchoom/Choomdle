@@ -118,4 +118,12 @@ const WNC_CARDS = [
 {n:"Pyramid Song",t:"Program",f:["Braindance"],c:3,p:null,r:3,text:"Choose one effect. If a friendly d4 is a min Gig, choose both instead. Give a rival Unit -4 power this turn. Bottom-deck a rival Unit with power 0."},
 {n:"Safety Override",t:"Program",f:["Quickhack"],c:2,p:null,r:3,text:"{Quick} The next time a friendly Unit loses a fight this turn, defeat the opposing rival Unit."},
 {n:"Maxtac Squadron",t:"Unit",f:["NCPD"],c:3,p:4,r:3,text:"At the end of your turn, if this Unit is spent, ready a friendly face-up Legend."},
+
+// ---- Cartes ajoutées le 06/08/2026 (images fournies par Benjamin, RAM lu sur les visuels) ----
+{n:"Wild in the Streets",t:"Program",f:["Ganger"],c:5,p:null,r:4,text:"Defeat a spent Unit."},
+{n:"Animals Wrecker",t:"Unit",f:["Animal","Ganger"],c:6,p:10,r:3,text:"Takes a lot of juice to break bones like they do."},
+{n:"Les Élémens",t:"Program",f:["Corpo"],c:5,p:null,r:4,text:"Bottom-deck a Rival's lowest-power Unit. (If there are multiple, choose 1.)"},
+{n:"V — Roamer of the Badlands",t:"Unit",f:["Merc","Nomad"],c:5,p:6,r:2,text:"When this Unit steals a Gig, increase it by up to 5. At the end of your turn, if you control 2 or more Gigs with 8+ value, draw 1."},
+{n:"Rockn' Rockerboy",t:"Unit",f:["Rocker"],c:5,p:8,r:1,text:"Scream your throat raw for something. Anything."},
+{n:"Unlikely Bond",t:"Program",f:["Maelstrom","Mox"],c:4,p:null,r:2,text:"Bottom-deck a ready friendly Unit. If you do, bottom-deck a spent rival Unit."},
 ];
