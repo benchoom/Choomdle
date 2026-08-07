@@ -162,7 +162,7 @@
       <span><span data-i18n="classic_daily">Défi du jour</span> · <span id="dailyDate"></span></span>
       <span class="stat"><span data-i18n="classic_streak">Série</span> <b id="streakVal">0</b> 🔥 · <span data-i18n="classic_best">Meilleure</span> <b id="bestStreakVal">0</b></span>
     </div>
-    <div class="hint" data-i18n="classic_hint">Compare TYPE · FACTION · COÛT (€$) · PUISSANCE · RAM. Orange = au moins une faction commune (sans dire laquelle).</div>
+    <div class="hint" data-i18n-html="classic_hint">Compare <span class="hl">TYPE · FACTION · COÛT (€$) · PUISSANCE · RAM</span>. <span class="hl-orange">Orange</span> = au moins une faction commune (sans dire laquelle).</div>
     <div class="searchrow">
       <input class="guessInput" id="guessInput" type="text" data-i18n-ph="classic_input_ph" placeholder="Tape le nom d'une carte..." autocomplete="off">
       <div class="suggestions" id="suggestions"></div>
@@ -458,6 +458,10 @@ function applyLanguage(code){
   document.querySelectorAll('[data-i18n-title]').forEach(el=>{
     const key = el.getAttribute('data-i18n-title');
     if(dict[key]!==undefined) el.title = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-html');
+    if(dict[key]!==undefined) el.innerHTML = dict[key];
   });
   document.documentElement.lang = code;
   try{ localStorage.setItem('choomdle:lang', code); }catch(e){}
@@ -1817,7 +1821,7 @@ function buildSequencePuzzle(seedStr){
   return { attr, cards };
 }
 function sequenceAttrLabel(attr){
-  return attr==='c' ? t('col_cost') : attr==='p' ? t('col_pwr') : t('col_ram');
+  return attr==='c' ? t('attr_cost_full') : attr==='p' ? t('attr_pwr_full') : t('attr_ram_full');
 }
 function initSequence(){
   const today = todayUTCString();
