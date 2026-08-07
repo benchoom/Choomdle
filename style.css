@@ -306,7 +306,7 @@
   }
   .sequence-row.correct-pos{ border-color:var(--green); }
   .sequence-row.wrong-pos{ border-color:var(--magenta); }
-  .sequence-thumb{ width:336px; aspect-ratio:623/420; background-repeat:no-repeat; background-size:118% 244%; background-position:33% 25%; flex-shrink:0; border:1px solid var(--line); }
+  .sequence-thumb{ width:224px; aspect-ratio:623/420; background-repeat:no-repeat; background-size:118% 244%; background-position:33% 25%; flex-shrink:0; border:1px solid var(--line); }
   .sequence-name{ flex:1; font-family:'Chakra Petch',sans-serif; font-weight:600; font-size:13px; }
   .sequence-hint{ min-width:32px; text-align:center; font-size:20px; font-weight:700; font-family:'Chakra Petch',sans-serif; }
   .sequence-row.correct-pos .sequence-hint{ color:var(--green); }
@@ -319,7 +319,7 @@
   .seq-compare-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px; }
   .seq-compare-cell{ display:flex; align-items:center; gap:8px; background:var(--bg2); border:1px solid var(--line); padding:6px; }
   .seq-compare-cell .sequence-thumb{
-    width:120px; aspect-ratio:733/1024; background-size:contain; background-position:center; background-color:var(--bg2);
+    width:180px; aspect-ratio:733/1024; background-size:contain; background-position:center; background-color:var(--bg2);
   }
   .seq-compare-name{ font-family:'Chakra Petch',sans-serif; font-size:12px; font-weight:600; }
   .sequence-arrows{ display:flex; flex-direction:column; gap:2px; }
