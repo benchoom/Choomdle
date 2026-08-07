@@ -1826,7 +1826,7 @@ function initSequence(){
   while(!puzzle && seedTry<5){ puzzle = buildSequencePuzzle(today+"-sequence-"+seedTry); seedTry++; }
   sequenceCards = puzzle ? puzzle.cards : [];
   sequenceAttr = puzzle ? puzzle.attr : 'c';
-  document.getElementById('sequenceInstruction').textContent = t('sequence_instruction').replace('{attr}', sequenceAttrLabel(sequenceAttr));
+  document.getElementById('sequenceInstruction').innerHTML = t('sequence_instruction').replace('{attr}', '<span class="hl">'+sequenceAttrLabel(sequenceAttr)+'</span>');
   const rng = seededRng(today+"-sequence-order");
   sequenceDisplayOrder = seededShuffle(sequenceCards.map((c,i)=>i), rng);
   sequenceSolved = false; sequenceTries = 0;
@@ -2217,7 +2217,7 @@ function renderArchiveSequence(area, date){
   const rng = seededRng(date+"-sequence-order");
   let order = seededShuffle(puzzle.cards.map((c,i)=>i), rng);
   area.innerHTML =
-    '<div class="hint">'+t('sequence_instruction').replace('{attr}', sequenceAttrLabel(puzzle.attr))+'</div>'+
+    '<div class="hint">'+t('sequence_instruction').replace('{attr}', '<span class="hl">'+sequenceAttrLabel(puzzle.attr)+'</span>')+'</div>'+
     '<div class="sequence-list" id="archiveSeqList"></div>'+
     '<button class="bigbtn" id="archiveSeqSubmit" style="margin-top:10px;">'+t('sequence_submit')+'</button>'+
     '<div class="banner" id="archiveBanner"></div>';
