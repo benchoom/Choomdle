@@ -467,6 +467,20 @@ function applyLanguage(code){
   try{ localStorage.setItem('choomdle:lang', code); }catch(e){}
   // Le nom du badge profil est généré dynamiquement (pas via data-i18n) : on le rafraîchit ici.
   if(typeof currentSession !== 'undefined' && !currentSession){ try{ setLoggedOutUI(); }catch(e){} }
+  // Certains panneaux sont générés en JS (pas via data-i18n) : on les reconstruit s'ils sont
+  // actuellement affichés, pour que changer de langue sans quitter la page fonctionne aussi.
+  try{
+    const achEl = document.getElementById('panel-achievements');
+    if(achEl && achEl.style.display === 'block') renderAchievements();
+    const statsEl = document.getElementById('panel-stats');
+    if(statsEl && statsEl.style.display === 'block') renderStatsPanel();
+    const commEl = document.getElementById('panel-community');
+    if(commEl && commEl.style.display === 'block') renderCommunity();
+    const seqEl = document.getElementById('panel-sequence');
+    if(seqEl && seqEl.style.display === 'block' && typeof sequenceAttr !== 'undefined'){
+      document.getElementById('sequenceInstruction').innerHTML = t('sequence_instruction').replace('{attr}', '<span class="hl">'+sequenceAttrLabel(sequenceAttr)+'</span>');
+    }
+  }catch(e){}
 }
 function t(key){ return (I18N[currentLang]||I18N.fr)[key] || key; }
 
