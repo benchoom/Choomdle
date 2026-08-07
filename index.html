@@ -355,6 +355,7 @@
   <div class="panel" id="panel-stats" style="display:none">
     <div class="statusline"><span data-i18n="stats_title">Mes statistiques</span></div>
     <div id="statsPerGame"></div>
+    <button class="share-btn" onclick="shareStats(this)" data-i18n="share_button">Partager</button>
   </div>
 
   <!-- ACHIEVEMENTS -->
@@ -364,6 +365,7 @@
       <span class="stat"><b id="achievementsUnlockedCount">0</b> / <b id="achievementsTotalCount">0</b></span>
     </div>
     <div id="achievementsGrid" class="achievements-grid"></div>
+    <button class="share-btn" onclick="shareAchievements(this)" data-i18n="share_button">Partager</button>
   </div>
 
   <!-- ARCHIVE -->
@@ -474,6 +476,7 @@ function randCard(){ return CARDS[Math.floor(Math.random()*CARDS.length)]; }
 // Barème de récompense (÷10) : 100 eddies au 1er essai, -10 par essai supplémentaire, plancher 10.
 function computeReward(tries){ return Math.max(10, 100 - (tries-1)*10); }
 function shareToClipboard(text, btnEl){
+  loadStats().then(s=>{ if(!s.hasShared){ s.hasShared = true; saveStats(s); } });
   const done = ()=>{
     if(!btnEl) return;
     const orig = btnEl.textContent;
@@ -518,6 +521,35 @@ function shareCardsLink(btn){
     rows.push(cells.slice(i,i+4).map(c=>colorFor(c.groupIndex)).join(''));
   }
   const text = 'Choomdle Cards Link — '+todayUTCString()+'\n'+rows.join('\n')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+async function shareStats(btn){
+  const s = await loadStats();
+  const artWins = (s.artPlayed||0)-(s.artLostCount||0);
+  const lines = [
+    'Choomdle — '+t('stats_title'),
+    '🎯 '+t('tab_classic')+': '+(s.wins||0)+' ('+t('stats_streak')+' '+(s.streak||0)+', '+t('stats_best')+' '+(s.bestStreak||0)+')',
+    '🪪 '+t('tab_legend')+': '+(s.legendWins||0),
+    '⚡ '+t('tab_blitz')+': '+t('stats_best_score')+' '+(s.blitzBestScore||0),
+    '♾️ '+t('tab_endless')+': '+(s.endlessSolved||0),
+    '📜 '+t('tab_ability')+': '+(s.abilitySolved||0),
+    '🖼️ '+t('tab_art')+': '+artWins,
+    '⚙️ '+t('tab_chrome')+': '+t('stats_best_score')+' '+(s.chromeBestScore||0),
+    '🔗 '+t('tab_cardslink')+': '+(s.cardsLinkWins||0),
+    '🔢 '+t('tab_sequence')+': '+(s.sequenceWins||0),
+    '€$ '+eddiesTotal(s),
+    'choomdle.com'
+  ];
+  shareToClipboard(lines.join('\n'), btn);
+}
+async function shareAchievements(btn){
+  const s = await loadStats();
+  let unlocked = 0;
+  ACHIEVEMENTS.forEach(a=>{ try{ if(a.check(s)) unlocked++; }catch(e){} });
+  const total = ACHIEVEMENTS.length;
+  const filled = Math.round((unlocked/total)*10);
+  const bar = '🟨'.repeat(filled) + '⬛'.repeat(10-filled);
+  const text = 'Choomdle — '+t('achievements_title')+' : '+unlocked+'/'+total+'\n'+bar+'\nchoomdle.com';
   shareToClipboard(text, btn);
 }
 
@@ -636,6 +668,9 @@ function statsRowToLocal(row){
     hasPublishedCommunity: meta.hasPublishedCommunity||false,
     lastSequencePlayed: meta.lastSequencePlayed||null, sequenceWon: meta.sequenceWon||false, sequenceLost: meta.sequenceLost||false, lastSequenceReward: meta.lastSequenceReward||0,
     sequencePlayed: meta.sequencePlayed||0, sequenceWins: meta.sequenceWins||0,
+    artFirstTryWins: meta.artFirstTryWins||0, cardsLinkFlawlessCount: meta.cardsLinkFlawlessCount||0,
+    sequenceFirstTryWins: meta.sequenceFirstTryWins||0, hasUsedArchive: meta.hasUsedArchive||false,
+    hasShared: meta.hasShared||false, hasChangedPseudo: meta.hasChangedPseudo||false,
   };
 }
 function localToStatsRow(s, uid){
@@ -662,7 +697,10 @@ function localToStatsRow(s, uid){
       hasPublishedCommunity: s.hasPublishedCommunity||false,
       lastSequencePlayed: s.lastSequencePlayed||null, sequenceWon: s.sequenceWon||false, sequenceLost: s.sequenceLost||false, lastSequenceReward: s.lastSequenceReward||0,
       sequencePlayed: s.sequencePlayed||0, sequenceWins: s.sequenceWins||0, eddies_sequence: (s.eddies&&s.eddies.sequence)||0,
-      lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null }
+      lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null,
+      artFirstTryWins: s.artFirstTryWins||0, cardsLinkFlawlessCount: s.cardsLinkFlawlessCount||0,
+      sequenceFirstTryWins: s.sequenceFirstTryWins||0, hasUsedArchive: s.hasUsedArchive||false,
+      hasShared: s.hasShared||false, hasChangedPseudo: s.hasChangedPseudo||false }
   };
 }
 
@@ -694,7 +732,8 @@ function defaultStats(){
     chromeSessions:0, chromeBestScore:0, chromeTotalCorrect:0,
     lastCardsLinkPlayed:null, cardsLinkWon:null, lastCardsLinkReward:0, lastCardsLinkMistakes:0,
     cardsLinkPlayed:0, cardsLinkWins:0,
-    lastSequencePlayed:null, sequenceWon:false, sequenceLost:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0};
+    lastSequencePlayed:null, sequenceWon:false, sequenceLost:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0,
+    artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false};
 }
 async function saveStats(stats){
   lsSetJSON('choomdle:stats', stats);
@@ -850,6 +889,7 @@ async function initAccount(){
             currentPseudo = newPseudo;
             document.getElementById('legendProfileName').textContent = newPseudo;
             msg.textContent = t('acc_pseudo_updated');
+            loadStats().then(st=>{ if(!st.hasChangedPseudo){ st.hasChangedPseudo = true; saveStats(st); } });
           }catch(e){ msg.textContent = t('acc_error_generic'); }
         });
       }
@@ -1062,6 +1102,70 @@ const ACHIEVEMENTS = [
     check:s=>(s.wins||0)>=1 && (s.legendWins||0)>=1 && (s.blitzSessions||0)>=1 && (s.endlessSolved||0)>=1 && (s.abilitySolved||0)>=1 && ((s.artPlayed||0)-(s.artLostCount||0))>=1 && (s.chromeTotalCorrect||0)>=1 && (s.cardsLinkWins||0)>=1 && (s.sequenceWins||0)>=1 },
   { id:'meta_publish', icon:'📡', fr:['Membre de la Communauté','Publie tes stats sur le classement communautaire.'], en:['Community Member','Publish your stats to the Community leaderboard.'], check:s=>s.hasPublishedCommunity===true },
   { id:'meta_regular', icon:'📅', fr:['Habitué de Choomdle','5 parties Classic jouées.'], en:['Choomdle Regular','5 Classic games played.'], check:s=>(s.gamesPlayed||0)>=5 },
+  // ===================================================================
+  // ---- Lot 2 : 50 succès supplémentaires ----
+  // ===================================================================
+  // --- Classic ---
+  { id:'cl_200', icon:'🏚️', fr:['Vétéran des Rues','200 victoires en Classic.'], en:['Veteran of the Streets','200 Classic wins.'], check:s=>(s.wins||0)>=200 },
+  { id:'cl_streak100', icon:'💯', fr:['Série Centenaire','Série de 100 jours.'], en:['Century Streak','100-day streak.'], check:s=>(s.streak||0)>=100 || (s.bestStreak||0)>=100 },
+  { id:'cl_streak180', icon:'🌗', fr:['Demi-Année Héroïque','Série de 180 jours.'], en:['Half-Year Hero','180-day streak.'], check:s=>(s.bestStreak||0)>=180 },
+  { id:'cl_clutch', icon:'😅', fr:['Sauvé de Justesse','Une victoire Classic en 8 essais ou plus.'], en:['Clutch Win','A Classic win in 8+ guesses.'], check:s=>{ const d=s.guessDistribution||{}; return Object.keys(d).some(k=>Number(k)>=8 && d[k]>0); } },
+  { id:'cl_perfectionist', icon:'🎯', fr:['Perfectionniste','5 victoires Classic au 1er essai.'], en:['Perfectionist','5 Classic wins on the first guess.'], check:s=>((s.guessDistribution||{})[1]||0)>=5 },
+  // --- Legend ---
+  { id:'lg_100', icon:'🥷', fr:['Maître du Déguisement','100 victoires en Legend.'], en:['Master of Disguise','100 Legend wins.'], check:s=>(s.legendWins||0)>=100 },
+  { id:'lg_winrate90', icon:'🛡️', fr:['Couverture Parfaite','90%+ de victoires en Legend (20 parties min).'], en:['Flawless Cover','90%+ Legend win rate (20+ played).'], check:s=>(s.legendPlayed||0)>=20 && (s.legendWins||0)/(s.legendPlayed||1)>=0.9 },
+  { id:'lg_75', icon:'🎭', fr:['Habitué Confirmé','75 victoires en Legend.'], en:['Seasoned Runner','75 Legend wins.'], check:s=>(s.legendWins||0)>=75 },
+  { id:'lg_played100', icon:'📇', fr:['Vieux de la Vieille','100 parties jouées en Legend.'], en:['Old Hand','100 Legend games played.'], check:s=>(s.legendPlayed||0)>=100 },
+  { id:'lg_played50', icon:'🗂️', fr:['Coureur Vétéran','50 parties jouées en Legend.'], en:['Veteran Runner','50 Legend games played.'], check:s=>(s.legendPlayed||0)>=50 },
+  // --- Blitz ---
+  { id:'bz_score15', icon:'🚀', fr:['Surrégime','Score de 15+ en une partie Blitz.'], en:['Overdrive','Score 15+ in one Blitz run.'], check:s=>(s.blitzBestScore||0)>=15 },
+  { id:'bz_score20', icon:'🛑', fr:['Imparable','Score de 20+ en une partie Blitz.'], en:['Unstoppable','Score 20+ in one Blitz run.'], check:s=>(s.blitzBestScore||0)>=20 },
+  { id:'bz_sessions50', icon:'🏋️', fr:['Maître du Blitz','50 sessions Blitz jouées.'], en:['Blitz Master','50 Blitz sessions played.'], check:s=>(s.blitzSessions||0)>=50 },
+  { id:'bz_total100', icon:'💯', fr:['Centurion du Blitz','100 cartes résolues au total en Blitz.'], en:['Century of Cards','100 total cards solved in Blitz.'], check:s=>(s.blitzTotalSolved||0)>=100 },
+  { id:'bz_total500', icon:'🏆', fr:['Club des 500','500 cartes résolues au total en Blitz.'], en:['Half-K Club','500 total cards solved in Blitz.'], check:s=>(s.blitzTotalSolved||0)>=500 },
+  // --- Endless ---
+  { id:'en_500', icon:'📦', fr:['Demi-Millier','500 cartes résolues en Endless.'], en:['Half a Thousand','500 Endless solved.'], check:s=>(s.endlessSolved||0)>=500 },
+  { id:'en_750', icon:'🧙', fr:['Sage des Cartes','750 cartes résolues en Endless.'], en:['Card Sage','750 Endless solved.'], check:s=>(s.endlessSolved||0)>=750 },
+  { id:'en_1000', icon:'🗄️', fr:['Base de Données Vivante','1000 cartes résolues en Endless.'], en:['Living Database','1000 Endless solved.'], check:s=>(s.endlessSolved||0)>=1000 },
+  { id:'en_2000', icon:'♾️', fr:['Dévotion Sans Fin','2000 cartes résolues en Endless.'], en:['Endless Devotion','2000 Endless solved.'], check:s=>(s.endlessSolved||0)>=2000 },
+  // --- Ability ---
+  { id:'ab_150', icon:'⚖️', fr:['Avocat de Contrat','150 puzzles Ability résolus.'], en:['Contract Lawyer','150 Ability puzzles solved.'], check:s=>(s.abilitySolved||0)>=150 },
+  { id:'ab_200', icon:'🔓', fr:['Casseur de Code','200 puzzles Ability résolus.'], en:['Codebreaker','200 Ability puzzles solved.'], check:s=>(s.abilitySolved||0)>=200 },
+  { id:'ab_300', icon:'🧙‍♂️', fr:['Gourou des Règles','300 puzzles Ability résolus.'], en:['Rules Guru','300 Ability puzzles solved.'], check:s=>(s.abilitySolved||0)>=300 },
+  { id:'ab_500', icon:'🏛️', fr:["Légende de l'Ability",'500 puzzles Ability résolus.'], en:['Ability Legend','500 Ability puzzles solved.'], check:s=>(s.abilitySolved||0)>=500 },
+  // --- Art ---
+  { id:'art_50', icon:'🏛️', fr:['Propriétaire de Galerie','50 victoires en Art.'], en:['Gallery Owner','50 Art wins.'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=50 },
+  { id:'art_75', icon:'📖', fr:["Historien de l'Art",'75 victoires en Art.'], en:['Art Historian','75 Art wins.'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=75 },
+  { id:'art_firsttry5', icon:'👁️‍🗨️', fr:['Vision Parfaite','5 victoires Art au tout premier essai.'], en:['Perfect Vision','5 Art wins on the very first attempt.'], check:s=>(s.artFirstTryWins||0)>=5 },
+  { id:'art_noloss25', icon:'🕶️', fr:['Série Sans Faille','25 parties Art sans aucune défaite.'], en:['Flawless Streak','25 Art games without a single loss.'], check:s=>(s.artPlayed||0)>=25 && (s.artLostCount||0)===0 },
+  { id:'art_noloss50', icon:'😎', fr:['Œil Intouchable','50 parties Art sans aucune défaite.'], en:['Untouchable Eye','50 Art games without a single loss.'], check:s=>(s.artPlayed||0)>=50 && (s.artLostCount||0)===0 },
+  // --- Chrome Check ---
+  { id:'cc_30', icon:'🔋', fr:["Surcharge d'Adrénaline",'Score de 30+ en une partie.'], en:['Adrenaline Overload','Score 30+ in one run.'], check:s=>(s.chromeBestScore||0)>=30 },
+  { id:'cc_40', icon:'⚡', fr:['Réflexes Parfaits','Score de 40+ en une partie.'], en:['Perfect Reflexes','Score 40+ in one run.'], check:s=>(s.chromeBestScore||0)>=40 },
+  { id:'cc_sessions50', icon:'🛠️', fr:['Maître du Chrome','50 sessions Chrome Check jouées.'], en:['Chrome Master','50 sessions played.'], check:s=>(s.chromeSessions||0)>=50 },
+  { id:'cc_500', icon:'🔟', fr:['Club des 500 Réponses','500 bonnes réponses au total.'], en:['Half-K Correct','500 total correct answers.'], check:s=>(s.chromeTotalCorrect||0)>=500 },
+  { id:'cc_1000', icon:'🏅', fr:['Légende du Chrome','1000 bonnes réponses au total.'], en:['Chrome Legend','1000 total correct answers.'], check:s=>(s.chromeTotalCorrect||0)>=1000 },
+  // --- Cards Link ---
+  { id:'cd_75', icon:'🧵', fr:['Maître des Puzzles','75 victoires en Cards Link.'], en:['Puzzle Master','75 Cards Link wins.'], check:s=>(s.cardsLinkWins||0)>=75 },
+  { id:'cd_100', icon:'🕸️', fr:['Grand Maître de la Grille','100 victoires en Cards Link.'], en:['Grandmaster of Grids','100 Cards Link wins.'], check:s=>(s.cardsLinkWins||0)>=100 },
+  { id:'cd_flawless5', icon:'⭐', fr:['Solveur 5 Étoiles','5 victoires sans aucune erreur en Cards Link.'], en:['Five-Star Solver','5 flawless Cards Link wins.'], check:s=>(s.cardsLinkFlawlessCount||0)>=5 },
+  { id:'cd_flawless10', icon:'🌟', fr:['Perfection x10','10 victoires sans aucune erreur en Cards Link.'], en:['Perfect Ten','10 flawless Cards Link wins.'], check:s=>(s.cardsLinkFlawlessCount||0)>=10 },
+  { id:'cd_150', icon:'🔮', fr:['Prophète des Motifs','150 victoires en Cards Link.'], en:['Pattern Prophet','150 Cards Link wins.'], check:s=>(s.cardsLinkWins||0)>=150 },
+  // --- Sequence ---
+  { id:'sq_50', icon:'📶', fr:['Trieur Rapide','50 victoires en Sequence.'], en:['Speed Sorter','50 Sequence wins.'], check:s=>(s.sequenceWins||0)>=50 },
+  { id:'sq_100', icon:'🧮', fr:["Maître de l'Ordre",'100 victoires en Sequence.'], en:['Order Master','100 Sequence wins.'], check:s=>(s.sequenceWins||0)>=100 },
+  { id:'sq_firsttry5', icon:'🎓', fr:['Génie du 1er Coup','5 victoires Sequence dès la 1ère tentative.'], en:['First-Try Genius','5 Sequence wins on the first attempt.'], check:s=>(s.sequenceFirstTryWins||0)>=5 },
+  { id:'sq_firsttry10', icon:'🏅', fr:['Tri Sans Faille','10 victoires Sequence dès la 1ère tentative.'], en:['Flawless Sorting','10 Sequence wins on the first attempt.'], check:s=>(s.sequenceFirstTryWins||0)>=10 },
+  { id:'sq_200', icon:'📜', fr:['Sage de la Séquence','200 victoires en Sequence.'], en:['Sequence Sage','200 Sequence wins.'], check:s=>(s.sequenceWins||0)>=200 },
+  // --- Eddies / Méta ---
+  { id:'ed_25000', icon:'💵', fr:["Élite Corpo",'25 000 eddies gagnés au total.'], en:['Corpo Elite','25,000 total eddies earned.'], check:s=>eddiesTotal(s)>=25000 },
+  { id:'ed_50000', icon:'🏦', fr:['Légende de Night City','50 000 eddies gagnés au total.'], en:['Night City Legend','50,000 total eddies earned.'], check:s=>eddiesTotal(s)>=50000 },
+  { id:'ed_100000', icon:'🏯', fr:["Actionnaire d'Arasaka",'100 000 eddies gagnés au total.'], en:['Arasaka Shareholder','100,000 total eddies earned.'], check:s=>eddiesTotal(s)>=100000 },
+  { id:'meta_archive', icon:'🗓️', fr:['Voyageur Temporel','Utilise le mode Archive au moins une fois.'], en:['Time Traveler','Use the Archive mode at least once.'], check:s=>s.hasUsedArchive===true },
+  { id:'meta_share', icon:'📣', fr:['Le Partage, Ça Compte','Partage un résultat au moins une fois.'], en:['Sharing is Caring','Share a result at least once.'], check:s=>s.hasShared===true },
+  { id:'meta_pseudo', icon:'🪞', fr:["Changement d'Identité",'Change ton pseudo au moins une fois.'], en:['Identity Change','Change your handle at least once.'], check:s=>s.hasChangedPseudo===true },
+  { id:'meta_hunter', icon:'🏹', fr:['Chasseur de Succès','Débloque au moins 40 des 50 premiers succès.'], en:['Achievement Hunter','Unlock at least 40 of the first 50 achievements.'],
+    check:s=>ACHIEVEMENTS.slice(0,50).filter(a=>{ try{ return a.check(s); }catch(e){ return false; } }).length>=40 },
 ];
 async function renderAchievements(){
   const s = await loadStats();
@@ -1544,6 +1648,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
         s.lastArtPlayed = today; s.artWon = true; s.artLost = false;
         s.artPlayed = (s.artPlayed||0)+1;
         s.artSolved = (s.artSolved||0)+1;
+        if(artAttempt===1) s.artFirstTryWins = (s.artFirstTryWins||0)+1;
         s.eddies = s.eddies || {};
         s.eddies.art = (s.eddies.art||0) + reward;
         s.lastArtReward = reward;
@@ -1774,8 +1879,18 @@ function showSequenceEndBanner(won, reward){
 function showSequenceLossBanner(){
   const banner = document.getElementById('sequenceBanner');
   banner.className = 'banner fail';
-  const correctOrder = sequenceCards.map(c=>c.n).join(' → ');
-  banner.innerHTML = t('sequence_lose')+' '+correctOrder+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
+  const playerCol = sequenceDisplayOrder.map(idx=>sequenceCards[idx]);
+  const correctCol = sequenceCards; // déjà trié par ordre croissant à la construction du puzzle
+  const rows = playerCol.map((card, i)=>{
+    const correctCard = correctCol[i];
+    return '<div class="seq-compare-row">'+
+      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
+      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
+      '</div>';
+  }).join('');
+  banner.innerHTML = t('sequence_lose')+
+    '<div class="seq-compare"><div class="seq-compare-header"><span>'+t('sequence_your_order')+'</span><span>'+t('sequence_correct_order')+'</span></div>'+rows+'</div>'+
+    '<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
 }
 document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
   if(sequenceSolved) return;
@@ -1801,6 +1916,7 @@ document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
       if(s.lastSequencePlayed !== today || (!s.sequenceWon && !s.sequenceLost)){
         s.lastSequencePlayed = today; s.sequenceWon = true; s.sequenceLost = false; s.lastSequenceReward = reward;
         s.sequencePlayed = (s.sequencePlayed||0)+1; s.sequenceWins = (s.sequenceWins||0)+1;
+        if(sequenceTries===1) s.sequenceFirstTryWins = (s.sequenceFirstTryWins||0)+1;
         s.eddies = s.eddies || {};
         s.eddies.sequence = (s.eddies.sequence||0) + reward;
         saveStats(s).then(refreshEddiesUI);
@@ -2023,6 +2139,7 @@ function cardsLinkFinish(won){
       s.lastCardsLinkMistakes = cardsLinkMistakes;
       s.cardsLinkPlayed = (s.cardsLinkPlayed||0)+1;
       if(won) s.cardsLinkWins = (s.cardsLinkWins||0)+1;
+      if(won && cardsLinkMistakes===0) s.cardsLinkFlawlessCount = (s.cardsLinkFlawlessCount||0)+1;
       s.eddies = s.eddies || {};
       s.eddies.cardslink = (s.eddies.cardslink||0) + reward;
       saveStats(s).then(refreshEddiesUI);
@@ -2042,6 +2159,7 @@ function loadArchivePuzzle(){
   const game = document.getElementById('archiveGameSelect').value;
   const date = document.getElementById('archiveDateInput').value;
   if(!date) return;
+  loadStats().then(s=>{ if(!s.hasUsedArchive){ s.hasUsedArchive = true; saveStats(s); } });
   const oldSugg = document.getElementById('archiveSugg'); if(oldSugg) oldSugg.remove();
   const area = document.getElementById('archiveArea');
   area.innerHTML = '';
@@ -2131,8 +2249,22 @@ function renderArchiveSequence(area, date){
       hint.textContent = isCorrect ? '=' : (idx < pos ? '+' : '-');
     });
     const banner = document.getElementById('archiveBanner');
-    banner.className = 'banner ' + (ok ? 'win' : 'fail');
-    banner.innerHTML = ok ? t('sequence_win') : t('cardslink_lose');
+    if(ok){
+      banner.className = 'banner win';
+      banner.innerHTML = t('sequence_win');
+    } else {
+      banner.className = 'banner fail';
+      const playerCol = order.map(idx=>puzzle.cards[idx]);
+      const correctCol = puzzle.cards;
+      const rows = playerCol.map((card,i)=>{
+        const correctCard = correctCol[i];
+        return '<div class="seq-compare-row">'+
+          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
+          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
+          '</div>';
+      }).join('');
+      banner.innerHTML = t('sequence_lose')+'<div class="seq-compare"><div class="seq-compare-header"><span>'+t('sequence_your_order')+'</span><span>'+t('sequence_correct_order')+'</span></div>'+rows+'</div>';
+    }
   });
 }
 function renderArchiveCardsLink(area, date){
