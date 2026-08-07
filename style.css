@@ -331,9 +331,10 @@
   }
   .sequence-arrows button:disabled{ opacity:.3; cursor:not-allowed; }
   .sequence-arrows button:hover:not(:disabled){ background:rgba(38,229,229,.15); }
-  #cardsLinkDots{ letter-spacing:.15em; }
+  #cardsLinkDots{ letter-spacing:.15em; font-size:2em; }
   #cardsLinkDots .dot{ color:var(--yellow); }
   #cardsLinkDots .dot.used{ color:var(--line); }
+  .cardslink-mistakes-row{ display:flex; justify-content:flex-end; margin-top:10px; }
   .cardslink-solved-bar{
     background:var(--panel2); border-left:4px solid var(--cyan); margin-bottom:8px; padding:10px 12px;
     display:flex; align-items:center; gap:10px; flex-wrap:wrap;
