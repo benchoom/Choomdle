@@ -1356,9 +1356,17 @@ function totalGamesPlayed(s){
 async function renderAchievements(){
   const grid = document.getElementById('achievementsGrid');
   const shareBtns = document.querySelectorAll('.panel#panel-achievements .share-btn');
+  const lang = ACHIEVEMENTS[0][currentLang] ? currentLang : 'en';
   if(!supabaseReady || !currentSession){
-    document.getElementById('rarityTiersLine').textContent = '';
-    grid.innerHTML = '<div class="hint" style="grid-column:1/-1; font-size:13px; padding:20px 10px; text-align:center;">'+t('achievements_guest_notice')+'</div>';
+    document.getElementById('rarityTiersLine').innerHTML = '<strong class="hl">'+t('achievements_guest_notice')+'</strong>';
+    // On affiche quand même les 150 succès (tous verrouillés) pour donner envie de créer un compte.
+    grid.innerHTML = ACHIEVEMENTS.map(a=>{
+      const [title, desc] = a[lang];
+      return '<div class="achievement-card">'+
+        '<span class="achievement-icon">'+a.icon+'</span>'+
+        '<div><div class="achievement-title">'+title+'</div><div class="achievement-desc">'+desc+'</div></div>'+
+        '</div>';
+    }).join('');
     document.getElementById('achievementsUnlockedCount').textContent = '—';
     document.getElementById('achievementsTotalCount').textContent = ACHIEVEMENTS.length;
     shareBtns.forEach(b=>b.style.display = 'none');
@@ -1366,7 +1374,6 @@ async function renderAchievements(){
   }
   shareBtns.forEach(b=>b.style.display = '');
   const s = await loadStats();
-  const lang = ACHIEVEMENTS[0][currentLang] ? currentLang : 'en';
   const tiers = [
     ['rarity_common',0], ['rarity_uncommon',25], ['rarity_rare',50], ['rarity_epic',77],
     ['rarity_secret',95], ['rarity_iconic',120], ['rarity_nova',150]
