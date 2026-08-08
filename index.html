@@ -61,13 +61,10 @@
 </script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://img.choomdle.com">
+<link rel="preconnect" href="https://btaidgywgabzzzfnuxhv.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
-<!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
-<script src="/sets/wnc.js"></script>
-<script src="/sets/promo.js"></script>
-<script src="/i18n.js"></script>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -405,6 +402,12 @@
   </footer>
 </div>
 
+<!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
+<script src="/sets/wnc.js"></script>
+<script src="/sets/promo.js"></script>
+<script src="/i18n.js"></script>
 <script>
 // ======================= CARTES =======================
 // Les cartes viennent des fichiers de sets inclus plus haut (voir sets/wnc.js, sets/promo.js).
@@ -1536,6 +1539,9 @@ function slugify(name){
     .replace(/^-+|-+$/g,'');
 }
 function cardImgUrl(card){ return 'https://img.choomdle.com/cards/' + slugify(card.n) + '.jpg'; }
+// Miniature légère (300px, qualité 70) pour Cards Link et Sequence — pas besoin de la pleine résolution
+// dans ces jeux, contrairement à Art où l'image est le cœur du défi.
+function cardThumbUrl(card){ return 'https://img.choomdle.com/cards-thumb/' + slugify(card.n) + '.jpg'; }
 function revealCardHTML(card){
   return '<img class="win-card-img" src="'+cardImgUrl(card)+'" alt="'+card.n.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
 }
@@ -1869,7 +1875,7 @@ function renderSequence(){
     const row = document.createElement('div');
     row.className = 'sequence-row';
     row.innerHTML =
-      '<div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div>'+
+      '<div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div>'+
       '<div class="sequence-name">'+card.n+'</div>'+
       '<div class="sequence-hint" id="sequenceHint-'+pos+'"></div>'+
       '<div class="sequence-arrows">'+
@@ -1903,8 +1909,8 @@ function showSequenceLossBanner(){
   const rows = playerCol.map((card, i)=>{
     const correctCard = correctCol[i];
     return '<div class="seq-compare-row">'+
-      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
-      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
+      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
+      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
       '</div>';
   }).join('');
   banner.innerHTML = t('sequence_lose')+
@@ -2064,7 +2070,7 @@ function renderCardsLinkGrid(){
     const div = document.createElement('div');
     div.className = 'cardslink-cell';
     div.dataset.name = cell.card.n;
-    const url = cardImgUrl(cell.card);
+    const url = cardThumbUrl(cell.card);
     const preload = new Image();
     preload.onload = ()=>{ div.style.backgroundImage = "url('"+url+"')"; };
     preload.onerror = ()=>{ div.innerHTML = '<div class="fallback">'+cell.card.n+'</div>'; };
@@ -2100,7 +2106,7 @@ function revealAllCardsLinkGroups(){
 }
 function solvedBarHTML(g){
   return '<div class="cardslink-solved-bar"><span class="label">'+g.label+'</span><span class="thumbs">'+
-    g.cards.map(c=>'<img src="'+cardImgUrl(c)+'" alt="" onerror="this.style.display=\'none\'">').join('')+
+    g.cards.map(c=>'<img src="'+cardThumbUrl(c)+'" alt="" onerror="this.style.display=\'none\'">').join('')+
     '</span></div>';
 }
 function showCardsLinkEndBanner(won, reward, mistakes){
@@ -2245,7 +2251,7 @@ function renderArchiveSequence(area, date){
     const list = document.getElementById('archiveSeqList');
     list.innerHTML = order.map((idx,pos)=>{
       const card = puzzle.cards[idx];
-      return '<div class="sequence-row" id="archiveSeqRow-'+pos+'"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="sequence-name">'+card.n+'</div><div class="sequence-hint" id="archiveSeqHint-'+pos+'"></div><div class="sequence-arrows"><button data-p="'+pos+'" data-d="-1" '+(pos===0?'disabled':'')+'>▲</button><button data-p="'+pos+'" data-d="1" '+(pos===order.length-1?'disabled':'')+'>▼</button></div></div>';
+      return '<div class="sequence-row" id="archiveSeqRow-'+pos+'"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="sequence-name">'+card.n+'</div><div class="sequence-hint" id="archiveSeqHint-'+pos+'"></div><div class="sequence-arrows"><button data-p="'+pos+'" data-d="-1" '+(pos===0?'disabled':'')+'>▲</button><button data-p="'+pos+'" data-d="1" '+(pos===order.length-1?'disabled':'')+'>▼</button></div></div>';
     }).join('');
     list.querySelectorAll('button').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -2278,8 +2284,8 @@ function renderArchiveSequence(area, date){
       const rows = playerCol.map((card,i)=>{
         const correctCard = correctCol[i];
         return '<div class="seq-compare-row">'+
-          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
-          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardImgUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
+          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
+          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
           '</div>';
       }).join('');
       banner.innerHTML = t('sequence_lose')+'<div class="seq-compare"><div class="seq-compare-header"><span>'+t('sequence_your_order')+'</span><span>'+t('sequence_correct_order')+'</span></div>'+rows+'</div>';
@@ -2305,7 +2311,7 @@ function renderArchiveCardsLink(area, date){
       const div = document.createElement('div');
       div.className = 'cardslink-cell';
       div.dataset.name = cell.card.n;
-      div.style.backgroundImage = "url('"+cardImgUrl(cell.card)+"')";
+      div.style.backgroundImage = "url('"+cardThumbUrl(cell.card)+"')";
       div.addEventListener('click', ()=>{
         const i = selected.indexOf(cell.card.n);
         if(i>-1){ selected.splice(i,1); div.classList.remove('selected'); return; }
