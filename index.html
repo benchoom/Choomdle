@@ -1597,7 +1597,7 @@ function initLegend(){
         banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret)+shareButtonHTML('shareLegend');
       } else {
         banner.className = "banner fail";
-        banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>';
+        banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>'+revealCardHTML(legendSecret);
       }
     }
   });
@@ -1625,7 +1625,7 @@ function submitLegend(){
       s.legendResult = 'lose';
       s.eddies.legend = (s.eddies.legend||0) - 25;
       banner.className = "banner fail";
-      banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>';
+      banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>'+revealCardHTML(legendSecret);
     }
     saveStats(s).then(refreshEddiesUI);
   });
@@ -2414,7 +2414,7 @@ function renderArchiveLegend(area, date){
     const correct = guess.toLowerCase() === parts.main.trim().toLowerCase();
     const banner = document.getElementById('archiveBanner');
     banner.className = correct ? 'banner win' : 'banner fail';
-    banner.innerHTML = (correct ? t('legend_win_prefix') : t('legend_lose_prefix'))+' '+parts.main;
+    banner.innerHTML = (correct ? t('legend_win_prefix') : t('legend_lose_prefix'))+' '+parts.main+revealCardHTML(secret);
     document.getElementById('archiveLegendInput').disabled = true;
     document.getElementById('archiveLegendSubmit').disabled = true;
   });
