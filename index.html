@@ -10,14 +10,14 @@
 <meta name="keywords" content="Cyberpunk TCG, Cyberpunk 2077 card game, Cyberpunk Wordle, Choomdle, Cyberpunk trading card game, daily card game, WeirdCo, Night City">
 <meta name="robots" content="index, follow">
 <meta name="author" content="Choomdle">
-<link rel="canonical" href="https://choomdle.com/">
+<link rel="canonical" href="https://choomdle.com/en">
 
 <!-- ===== Favicon ===== -->
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
 
 <!-- ===== hreflang : indique à Google les versions par langue ===== -->
-<link rel="alternate" hreflang="x-default" href="https://choomdle.com/">
+<link rel="alternate" hreflang="x-default" href="https://choomdle.com/en">
 <link rel="alternate" hreflang="en" href="https://choomdle.com/en">
 <link rel="alternate" hreflang="fr" href="https://choomdle.com/fr">
 <link rel="alternate" hreflang="es" href="https://choomdle.com/es">
@@ -2377,7 +2377,7 @@ initLangSelect();
   if(btn) btn.textContent = lang.toUpperCase() + ' ▾';
   document.querySelectorAll('#langSelectList button').forEach(b=>b.classList.toggle('active', b.dataset.code===lang));
   // Canonique auto-référencée selon la langue de l'URL (bonne pratique SEO avec hreflang)
-  const canonicalUrl = "https://choomdle.com/" + (LANG_LABELS[seg] ? seg : "");
+  const canonicalUrl = "https://choomdle.com/" + lang;
   const canonicalTag = document.querySelector('link[rel="canonical"]');
   if(canonicalTag) canonicalTag.href = canonicalUrl;
   const ogUrlTag = document.querySelector('meta[property="og:url"]');
