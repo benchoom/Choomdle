@@ -2163,7 +2163,11 @@ function sequenceMove(pos, dir){
 function showSequenceEndBanner(won, reward){
   const banner = document.getElementById('sequenceBanner');
   banner.className = 'banner win';
-  banner.innerHTML = t('sequence_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+  const rows = sequenceCards.map(card=>
+    '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'
+  ).join('');
+  banner.innerHTML = t('sequence_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+
+    '<div class="seq-compare seq-compare-single">'+rows+'</div>';
 }
 function showSequenceLossBanner(){
   const banner = document.getElementById('sequenceBanner');
@@ -2556,7 +2560,10 @@ function renderArchiveSequence(area, date){
     const banner = document.getElementById('archiveBanner');
     if(ok){
       banner.className = 'banner win';
-      banner.innerHTML = t('sequence_win');
+      const rows = puzzle.cards.map(card=>
+        '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'
+      ).join('');
+      banner.innerHTML = t('sequence_win')+'<div class="seq-compare seq-compare-single">'+rows+'</div>';
     } else {
       banner.className = 'banner fail';
       const playerCol = order.map(idx=>puzzle.cards[idx]);
