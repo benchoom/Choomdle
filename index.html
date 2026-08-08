@@ -135,6 +135,7 @@
     <div class="eyebrow" data-i18n="eyebrow">Netdeck // Breach Protocol</div>
     <h1>CHOOMDLE</h1>
     <div class="subtitle" data-i18n="subtitle">Guess today's Cyberpunk TCG card — fan-made, not affiliated with CD Projekt Red / WeirdCo</div>
+    <div class="subtitle" id="accountNoticeLine" data-i18n="account_notice" style="font-size:11px; margin-top:2px;">Jouable en invité, mais succès et eddies cumulés dans le temps sont réservés aux comptes créés (gratuit).</div>
 
     <div class="featurebar">
       <button class="fbtn" data-panel="community" data-i18n="fbtn_community">Communauté</button>
@@ -844,6 +845,13 @@ function updateEngagementStats(){
   loadStats().then(s=>{
     const today = todayUTCString();
     let changed = false;
+    const isGuest = !(supabaseReady && currentSession);
+    // Les eddies des invités ne s'accumulent que sur la journée en cours — remis à zéro chaque
+    // jour. Seuls les comptes créés conservent un total cumulé dans la durée.
+    if(isGuest && s.lastActiveDate !== today){
+      s.eddies = {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0};
+      changed = true;
+    }
     if(s.lastActiveDate !== today){
       s.activityStreak = (s.lastActiveDate === yesterdayUTCString()) ? (s.activityStreak||0)+1 : 1;
       s.bestActivityStreak = Math.max(s.bestActivityStreak||0, s.activityStreak);
@@ -1039,8 +1047,10 @@ function setLoggedInUI(pseudo){
   document.getElementById('pseudoPickForm').style.display = 'none';
   document.getElementById('loggedInMenu').style.display = 'block';
   document.getElementById('authMsg').textContent = '';
+  const notice = document.getElementById('accountNoticeLine'); if(notice) notice.style.display = 'none';
 }
 function setLoggedOutUI(){
+  const notice = document.getElementById('accountNoticeLine'); if(notice) notice.style.display = '';
   document.getElementById('rarityBadge').style.display = 'none';
   document.getElementById('legendProfile').classList.remove('is-logged-in');
   document.getElementById('legendProfileMenu').style.display = 'none';
@@ -1344,8 +1354,18 @@ function totalGamesPlayed(s){
   return (s.gamesPlayed||0)+(s.legendPlayed||0)+(s.blitzSessions||0)+(s.endlessSolved||0)+(s.abilitySolved||0)+(s.artPlayed||0)+(s.chromeSessions||0)+(s.cardsLinkPlayed||0)+(s.sequencePlayed||0);
 }
 async function renderAchievements(){
-  const s = await loadStats();
   const grid = document.getElementById('achievementsGrid');
+  const shareBtns = document.querySelectorAll('.panel#panel-achievements .share-btn');
+  if(!supabaseReady || !currentSession){
+    document.getElementById('rarityTiersLine').textContent = '';
+    grid.innerHTML = '<div class="hint" style="grid-column:1/-1; font-size:13px; padding:20px 10px; text-align:center;">'+t('achievements_guest_notice')+'</div>';
+    document.getElementById('achievementsUnlockedCount').textContent = '—';
+    document.getElementById('achievementsTotalCount').textContent = ACHIEVEMENTS.length;
+    shareBtns.forEach(b=>b.style.display = 'none');
+    return;
+  }
+  shareBtns.forEach(b=>b.style.display = '');
+  const s = await loadStats();
   const lang = ACHIEVEMENTS[0][currentLang] ? currentLang : 'en';
   const tiers = [
     ['rarity_common',0], ['rarity_uncommon',25], ['rarity_rare',50], ['rarity_epic',77],
