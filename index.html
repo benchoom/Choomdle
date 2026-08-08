@@ -71,7 +71,12 @@
 <div class="wrap">
   <div class="topbar">
     <div class="topbar-right">
-      <div class="legend-profile" id="legendProfile">
+      <div class="topbar-row">
+        <div class="rarity-badge" id="rarityBadge" style="display:none;">
+          <span id="rarityIcon"></span>
+          <span id="rarityLabel"></span>
+        </div>
+        <div class="legend-profile" id="legendProfile">
         <button class="legend-profile-btn" id="legendProfileBtn">
           <span class="legend-profile-banner">LEGEND</span>
           <span class="legend-profile-name" id="legendProfileName">
@@ -112,6 +117,7 @@
           </div>
 
         </div>
+      </div>
       </div>
       <div class="topbar-row">
         <span class="tab-eddies" id="eddiesChip" data-i18n-title="eddies_purpose" title="Les eddies ne servent qu'au classement communautaire et à tes stats — aucune autre utilité.">
@@ -452,6 +458,12 @@ function initLangSelect(){
 function applyLanguage(code){
   currentLang = code;
   const dict = I18N[code] || I18N.fr;
+  if(typeof loadStats === 'function'){
+    loadStats().then(s=>{
+      s.languagesUsed = s.languagesUsed || [];
+      if(!s.languagesUsed.includes(code)){ s.languagesUsed.push(code); saveStats(s); }
+    });
+  }
   document.querySelectorAll('[data-i18n]').forEach(el=>{
     const key = el.getAttribute('data-i18n');
     if(dict[key]!==undefined) el.textContent = dict[key];
@@ -475,6 +487,7 @@ function applyLanguage(code){
   // Certains panneaux sont générés en JS (pas via data-i18n) : on les reconstruit s'ils sont
   // actuellement affichés, pour que changer de langue sans quitter la page fonctionne aussi.
   try{
+    if(typeof renderRarityBadge === 'function') renderRarityBadge();
     const achEl = document.getElementById('panel-achievements');
     if(achEl && achEl.style.display === 'block') renderAchievements();
     const statsEl = document.getElementById('panel-stats');
@@ -694,6 +707,10 @@ function statsRowToLocal(row){
     artFirstTryWins: meta.artFirstTryWins||0, cardsLinkFlawlessCount: meta.cardsLinkFlawlessCount||0,
     sequenceFirstTryWins: meta.sequenceFirstTryWins||0, hasUsedArchive: meta.hasUsedArchive||false,
     hasShared: meta.hasShared||false, hasChangedPseudo: meta.hasChangedPseudo||false,
+    activityStreak: meta.activityStreak||0, bestActivityStreak: meta.bestActivityStreak||0, lastActiveDate: meta.lastActiveDate||null,
+    cardsDiscovered: meta.cardsDiscovered||[], languagesUsed: meta.languagesUsed||[],
+    communityVisited: meta.communityVisited||false, feedbackCount: meta.feedbackCount||0,
+    earlyBirdWin: meta.earlyBirdWin||false, nightOwlWin: meta.nightOwlWin||false,
   };
 }
 function localToStatsRow(s, uid){
@@ -723,7 +740,11 @@ function localToStatsRow(s, uid){
       lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null,
       artFirstTryWins: s.artFirstTryWins||0, cardsLinkFlawlessCount: s.cardsLinkFlawlessCount||0,
       sequenceFirstTryWins: s.sequenceFirstTryWins||0, hasUsedArchive: s.hasUsedArchive||false,
-      hasShared: s.hasShared||false, hasChangedPseudo: s.hasChangedPseudo||false }
+      hasShared: s.hasShared||false, hasChangedPseudo: s.hasChangedPseudo||false,
+      activityStreak: s.activityStreak||0, bestActivityStreak: s.bestActivityStreak||0, lastActiveDate: s.lastActiveDate||null,
+      cardsDiscovered: s.cardsDiscovered||[], languagesUsed: s.languagesUsed||[],
+      communityVisited: s.communityVisited||false, feedbackCount: s.feedbackCount||0,
+      earlyBirdWin: s.earlyBirdWin||false, nightOwlWin: s.nightOwlWin||false }
   };
 }
 
@@ -756,7 +777,10 @@ function defaultStats(){
     lastCardsLinkPlayed:null, cardsLinkWon:null, lastCardsLinkReward:0, lastCardsLinkMistakes:0,
     cardsLinkPlayed:0, cardsLinkWins:0,
     lastSequencePlayed:null, sequenceWon:false, sequenceLost:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0,
-    artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false};
+    artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false,
+    activityStreak:0, bestActivityStreak:0, lastActiveDate:null,
+    cardsDiscovered:[], languagesUsed:[], communityVisited:false, feedbackCount:0,
+    earlyBirdWin:false, nightOwlWin:false};
 }
 async function saveStats(stats){
   lsSetJSON('choomdle:stats', stats);
@@ -773,7 +797,61 @@ async function addEddies(game, amount){
   return s;
 }
 function eddiesTotal(s){ const e = s.eddies||{}; return Object.values(e).reduce((a,b)=>a+(b||0),0); }
-function refreshEddiesUI(){ loadStats().then(s=>{ document.getElementById('eddiesTotal').textContent = eddiesTotal(s); }); }
+// ======================= RARETÉ (basée sur le nombre de succès débloqués) =======================
+const RARITY_ICONS = {
+  common: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  uncommon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  rare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l6-6 6 6"/><path d="M6 14l6 6 6-6"/></svg>',
+  epic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" transform="rotate(45 12 12)"/></svg>',
+  secret: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" transform="rotate(45 12 12)"/><rect x="9" y="9" width="6" height="6" transform="rotate(45 12 12)"/></svg>',
+  iconic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 2L15 9L22 12L15 15L12 22L9 15L2 12L9 9Z"/></svg>',
+  nova: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="14" height="14" transform="rotate(45 12 12)" fill-opacity="0.3"/><rect x="10" y="10" width="4" height="4" transform="rotate(45 12 12)"/></svg>',
+};
+function rarityForCount(n){
+  if(n>=150) return { id:'nova', key:'rarity_nova' };
+  if(n>=120) return { id:'iconic', key:'rarity_iconic' };
+  if(n>=95) return { id:'secret', key:'rarity_secret' };
+  if(n>=77) return { id:'epic', key:'rarity_epic' };
+  if(n>=40) return { id:'rare', key:'rarity_rare' };
+  if(n>=25) return { id:'uncommon', key:'rarity_uncommon' };
+  return { id:'common', key:'rarity_common' };
+}
+function renderRarityBadge(){
+  const badge = document.getElementById('rarityBadge');
+  if(!supabaseReady || !currentSession){ badge.style.display = 'none'; return; }
+  loadStats().then(s=>{
+    let unlocked = 0;
+    ACHIEVEMENTS.forEach(a=>{ try{ if(a.check(s)) unlocked++; }catch(e){} });
+    const rarity = rarityForCount(unlocked);
+    badge.className = 'rarity-badge rarity-' + rarity.id;
+    document.getElementById('rarityIcon').innerHTML = RARITY_ICONS[rarity.id];
+    document.getElementById('rarityLabel').textContent = t(rarity.key);
+    badge.title = t(rarity.key) + ' (' + unlocked + '/' + ACHIEVEMENTS.length + ')';
+    badge.style.display = 'inline-flex';
+  });
+}
+function refreshEddiesUI(){ loadStats().then(s=>{ document.getElementById('eddiesTotal').textContent = eddiesTotal(s); }); renderRarityBadge(); }
+function addDiscoveredCard(s, name){
+  s.cardsDiscovered = s.cardsDiscovered || [];
+  if(!s.cardsDiscovered.includes(name)) s.cardsDiscovered.push(name);
+}
+// Série de jours d'affilée où le joueur s'est connecté/a joué (tous jeux confondus), + petits succès horaires.
+function updateEngagementStats(){
+  loadStats().then(s=>{
+    const today = todayUTCString();
+    let changed = false;
+    if(s.lastActiveDate !== today){
+      s.activityStreak = (s.lastActiveDate === yesterdayUTCString()) ? (s.activityStreak||0)+1 : 1;
+      s.bestActivityStreak = Math.max(s.bestActivityStreak||0, s.activityStreak);
+      s.lastActiveDate = today;
+      changed = true;
+    }
+    const hour = new Date().getUTCHours();
+    if(hour>=4 && hour<7 && !s.earlyBirdWin){ s.earlyBirdWin = true; changed = true; }
+    if(hour>=0 && hour<3 && !s.nightOwlWin){ s.nightOwlWin = true; changed = true; }
+    if(changed) saveStats(s).then(refreshEddiesUI);
+  });
+}
 
 // ======================= ACCOUNT (email+mot de passe avec confirmation, ou Google) =======================
 // L'ancien "compte gratuit" par pseudo seul (connexion anonyme) est retiré : une session
@@ -955,6 +1033,7 @@ function setLoggedInUI(pseudo){
   document.getElementById('authMsg').textContent = '';
 }
 function setLoggedOutUI(){
+  document.getElementById('rarityBadge').style.display = 'none';
   document.getElementById('legendProfile').classList.remove('is-logged-in');
   document.getElementById('legendProfileMenu').style.display = 'none';
   document.getElementById('legendProfileName').innerHTML =
@@ -1039,6 +1118,7 @@ function podiumHTML(title, rows, keyFn){
   return html;
 }
 async function renderCommunity(){
+  loadStats().then(s=>{ if(!s.communityVisited){ s.communityVisited = true; saveStats(s); } });
   const grid = document.getElementById('podiumGrid');
   grid.innerHTML = '<div class="podiumbox">…</div>';
   try{
@@ -1188,7 +1268,73 @@ const ACHIEVEMENTS = [
   { id:'meta_pseudo', icon:'🪞', fr:["Changement d'Identité",'Change ton pseudo au moins une fois.'], en:['Identity Change','Change your handle at least once.'],es:['Cambio de Identidad','Cambia tu apodo al menos una vez.'],de:['Identitätswechsel','Ändere deinen Nickname mindestens einmal.'],pt:['Mudança de Identidade','Mude seu apelido pelo menos uma vez.'],it:['Cambio d\'Identità','Cambia il tuo nickname almeno una volta.'],pl:['Zmiana Tożsamości','Zmień swój nick przynajmniej raz.'],ko:['신원 변경','닉네임을 최소 1회 변경하세요.'],zh:['身份变更','至少更改一次昵称。'],ja:['アイデンティティ変更','ニックネームを1回以上変更。'], check:s=>s.hasChangedPseudo===true },
   { id:'meta_hunter', icon:'🏹', fr:['Chasseur de Succès','Débloque au moins 40 des 50 premiers succès.'], en:['Achievement Hunter','Unlock at least 40 of the first 50 achievements.'],es:['Cazador de Logros','Desbloquea al menos 40 de los primeros 50 logros.'],de:['Erfolgsjäger','Schalte mindestens 40 der ersten 50 Erfolge frei.'],pt:['Caçador de Conquistas','Desbloqueie ao menos 40 das primeiras 50 conquistas.'],it:['Cacciatore di Obiettivi','Sblocca almeno 40 dei primi 50 obiettivi.'],pl:['Łowca Osiągnięć','Odblokuj co najmniej 40 z pierwszych 50 osiągnięć.'],ko:['업적 사냥꾼','첫 50개 업적 중 40개 이상 달성하세요.'],zh:['成就猎人','解锁前50个成就中的至少40个。'],ja:['実績ハンター','最初の50個の実績のうち40個以上を解除。'],
     check:s=>ACHIEVEMENTS.slice(0,50).filter(a=>{ try{ return a.check(s); }catch(e){ return false; } }).length>=40 },
+  // ===================================================================
+  // ---- Lot 3 : 50 succès supplémentaires (total 150, pour Nova Rare) ----
+  // NOTE : traduits en FR/EN pour l'instant, les 8 autres langues à suivre.
+  // ===================================================================
+  // --- Série d'activité quotidienne (tous jeux confondus) ---
+  { id:'act_3', icon:'📆', fr:['Trois Jours de Suite',"Connecté et actif 3 jours d'affilée."], en:['Three in a Row','Active on Choomdle 3 days in a row.'],es:['Tres Días Seguidos','Activo en Choomdle 3 días seguidos.'],de:['Drei Tage in Folge','3 Tage in Folge aktiv auf Choomdle.'],pt:['Três Dias Seguidos','Ativo no Choomdle por 3 dias seguidos.'],it:['Tre Giorni di Fila','Attivo su Choomdle per 3 giorni di fila.'],pl:['Trzy Dni z Rzędu','Aktywny na Choomdle 3 dni z rzędu.'],ko:['3일 연속','Choomdle에서 3일 연속 활동.'],zh:['连续三天','连续3天在Choomdle活跃。'],ja:['3日連続','Choomdleで3日連続活動。'], check:s=>(s.activityStreak||0)>=3 || (s.bestActivityStreak||0)>=3 },
+  { id:'act_7', icon:'📆', fr:['Une Semaine Choom','7 jours d\'affilée.'], en:['A Choom Week','7 days in a row.'],es:['Una Semana Choom','7 días seguidos.'],de:['Eine Choom-Woche','7 Tage in Folge.'],pt:['Uma Semana Choom','7 dias seguidos.'],it:['Una Settimana Choom','7 giorni di fila.'],pl:['Tydzień Chooma','7 dni z rzędu.'],ko:['Choom의 일주일','7일 연속.'],zh:['Choom的一周','连续7天。'],ja:['チュームの一週間','7日連続。'], check:s=>(s.bestActivityStreak||0)>=7 },
+  { id:'act_14', icon:'📆', fr:['Deux Semaines Non-Stop','14 jours d\'affilée.'], en:['Two Weeks Straight','14 days in a row.'],es:['Dos Semanas Sin Parar','14 días seguidos.'],de:['Zwei Wochen Ohne Pause','14 Tage in Folge.'],pt:['Duas Semanas Sem Parar','14 dias seguidos.'],it:['Due Settimane di Fila','14 giorni di fila.'],pl:['Dwa Tygodnie bez Przerwy','14 dni z rzędu.'],ko:['2주 연속','14일 연속.'],zh:['连续两周','连续14天。'],ja:['2週間連続','14日連続。'], check:s=>(s.bestActivityStreak||0)>=14 },
+  { id:'act_30', icon:'📆', fr:['Un Mois Entier','30 jours d\'affilée.'], en:['A Full Month','30 days in a row.'],es:['Un Mes Completo','30 días seguidos.'],de:['Ein Ganzer Monat','30 Tage in Folge.'],pt:['Um Mês Inteiro','30 dias seguidos.'],it:['Un Mese Intero','30 giorni di fila.'],pl:['Cały Miesiąc','30 dni z rzędu.'],ko:['한 달 내내','30일 연속.'],zh:['整整一个月','连续30天。'],ja:['まる一ヶ月','30日連続。'], check:s=>(s.bestActivityStreak||0)>=30 },
+  { id:'act_60', icon:'📆', fr:['Deux Mois de Rigueur','60 jours d\'affilée.'], en:['Two Months Strong','60 days in a row.'],es:['Dos Meses Firmes','60 días seguidos.'],de:['Zwei Starke Monate','60 Tage in Folge.'],pt:['Dois Meses Firmes','60 dias seguidos.'],it:['Due Mesi Solidi','60 giorni di fila.'],pl:['Dwa Solidne Miesiące','60 dni z rzędu.'],ko:['두 달간 꾸준히','60일 연속.'],zh:['坚持两个月','连续60天。'],ja:['2ヶ月間の継続','60日連続。'], check:s=>(s.bestActivityStreak||0)>=60 },
+  { id:'act_100', icon:'📆', fr:['Cent Jours de Fidélité','100 jours d\'affilée.'], en:['Hundred Days Loyal','100 days in a row.'],es:['Cien Días de Fidelidad','100 días seguidos.'],de:['Hundert Treue Tage','100 Tage in Folge.'],pt:['Cem Dias de Fidelidade','100 dias seguidos.'],it:['Cento Giorni di Fedeltà','100 giorni di fila.'],pl:['Sto Dni Wierności','100 dni z rzędu.'],ko:['100일간의 충성','100일 연속.'],zh:['百日忠诚','连续100天。'],ja:['100日間の忠誠','100日連続。'], check:s=>(s.bestActivityStreak||0)>=100 },
+  { id:'act_200', icon:'📆', fr:['Deux Cents Jours','200 jours d\'affilée.'], en:['Two Hundred Days','200 days in a row.'],es:['Doscientos Días','200 días seguidos.'],de:['Zweihundert Tage','200 Tage in Folge.'],pt:['Duzentos Dias','200 dias seguidos.'],it:['Duecento Giorni','200 giorni di fila.'],pl:['Dwieście Dni','200 dni z rzędu.'],ko:['200일','200일 연속.'],zh:['两百天','连续200天。'],ja:['200日間','200日連続。'], check:s=>(s.bestActivityStreak||0)>=200 },
+  { id:'act_365', icon:'📆', fr:['Une Année Entière','365 jours d\'affilée.'], en:['A Full Year','365 days in a row.'],es:['Un Año Completo','365 días seguidos.'],de:['Ein Ganzes Jahr','365 Tage in Folge.'],pt:['Um Ano Inteiro','365 dias seguidos.'],it:['Un Anno Intero','365 giorni di fila.'],pl:['Cały Rok','365 dni z rzędu.'],ko:['꼬박 1년','365일 연속.'],zh:['整整一年','连续365天。'],ja:['まる一年','365日連続。'], check:s=>(s.bestActivityStreak||0)>=365 },
+  // --- Eddies, palier propre par tranche de 10 000 ---
+  { id:'ed10_10', icon:'€$', fr:['Premiers 10K','10 000 eddies gagnés au total.'], en:['First 10K','10,000 total eddies earned.'],es:['Primeros 10K','10.000 eddies ganados en total.'],de:['Erste 10K','10.000 Eddies insgesamt verdient.'],pt:['Primeiros 10K','10.000 eddies ganhos no total.'],it:['Primi 10K','10.000 eddies guadagnati in totale.'],pl:['Pierwsze 10K','10 000 eddies zdobytych łącznie.'],ko:['첫 10K','누적 10,000 eddies 획득.'],zh:['首个10K','累计赚取10000 eddies。'],ja:['最初の10K','累計10,000eddies獲得。'], check:s=>eddiesTotal(s)>=10000 },
+  { id:'ed10_20', icon:'€$', fr:['20K au Compteur','20 000 eddies gagnés au total.'], en:['20K on the Clock','20,000 total eddies earned.'],es:['20K en el Marcador','20.000 eddies ganados en total.'],de:['20K auf der Uhr','20.000 Eddies insgesamt verdient.'],pt:['20K no Placar','20.000 eddies ganhos no total.'],it:['20K sul Groppone','20.000 eddies guadagnati in totale.'],pl:['20K na Liczniku','20 000 eddies zdobytych łącznie.'],ko:['20K 달성','누적 20,000 eddies 획득.'],zh:['20K在手','累计赚取20000 eddies。'],ja:['20K達成','累計20,000eddies獲得。'], check:s=>eddiesTotal(s)>=20000 },
+  { id:'ed10_30', icon:'€$', fr:['30K de Réputation','30 000 eddies gagnés au total.'], en:['30K Reputation','30,000 total eddies earned.'],es:['30K de Reputación','30.000 eddies ganados en total.'],de:['30K Ansehen','30.000 Eddies insgesamt verdient.'],pt:['30K de Reputação','30.000 eddies ganhos no total.'],it:['30K di Reputazione','30.000 eddies guadagnati in totale.'],pl:['30K Reputacji','30 000 eddies zdobytych łącznie.'],ko:['평판 30K','누적 30,000 eddies 획득.'],zh:['30K声望','累计赚取30000 eddies。'],ja:['30Kの評判','累計30,000eddies獲得。'], check:s=>eddiesTotal(s)>=30000 },
+  { id:'ed10_40', icon:'€$', fr:['40K de Contrats','40 000 eddies gagnés au total.'], en:['40K in Contracts','40,000 total eddies earned.'],es:['40K en Contratos','40.000 eddies ganados en total.'],de:['40K in Aufträgen','40.000 Eddies insgesamt verdient.'],pt:['40K em Contratos','40.000 eddies ganhos no total.'],it:['40K in Contratti','40.000 eddies guadagnati in totale.'],pl:['40K w Kontraktach','40 000 eddies zdobytych łącznie.'],ko:['계약금 40K','누적 40,000 eddies 획득.'],zh:['40K合约酬劳','累计赚取40000 eddies。'],ja:['契約で40K','累計40,000eddies獲得。'], check:s=>eddiesTotal(s)>=40000 },
+  { id:'ed10_50', icon:'€$', fr:['Demi-Cent-Mille','50 000 eddies gagnés au total.'], en:['Halfway to 100K','50,000 total eddies earned.'],es:['A Mitad de Camino a 100K','50.000 eddies ganados en total.'],de:['Auf Halbem Weg zu 100K','50.000 Eddies insgesamt verdient.'],pt:['Na Metade do Caminho para 100K','50.000 eddies ganhos no total.'],it:['A Metà Strada per i 100K','50.000 eddies guadagnati in totale.'],pl:['W Połowie Drogi do 100K','50 000 eddies zdobytych łącznie.'],ko:['100K의 절반','누적 50,000 eddies 획득.'],zh:['迈向10万的一半','累计赚取50000 eddies。'],ja:['100Kへの折り返し','累計50,000eddies獲得。'], check:s=>eddiesTotal(s)>=50000 },
+  { id:'ed10_60', icon:'€$', fr:['60K Bien Gagnés','60 000 eddies gagnés au total.'], en:['60K Well Earned','60,000 total eddies earned.'],es:['60K Bien Ganados','60.000 eddies ganados en total.'],de:['60K Wohlverdient','60.000 Eddies insgesamt verdient.'],pt:['60K Bem Merecidos','60.000 eddies ganhos no total.'],it:['60K Ben Meritati','60.000 eddies guadagnati in totale.'],pl:['60K Solidnie Zarobionych','60 000 eddies zdobytych łącznie.'],ko:['잘 벌어들인 60K','누적 60,000 eddies 획득.'],zh:['稳赚的60K','累计赚取60000 eddies。'],ja:['稼ぎ出した60K','累計60,000eddies獲得。'], check:s=>eddiesTotal(s)>=60000 },
+  { id:'ed10_70', icon:'€$', fr:['70K de Butin','70 000 eddies gagnés au total.'], en:['70K in Loot','70,000 total eddies earned.'],es:['70K en Botín','70.000 eddies ganados en total.'],de:['70K an Beute','70.000 Eddies insgesamt verdient.'],pt:['70K em Espólio','70.000 eddies ganhos no total.'],it:['70K di Bottino','70.000 eddies guadagnati in totale.'],pl:['70K Łupu','70 000 eddies zdobytych łącznie.'],ko:['전리품 70K','누적 70,000 eddies 획득.'],zh:['70K战利品','累计赚取70000 eddies。'],ja:['戦利品70K','累計70,000eddies獲得。'], check:s=>eddiesTotal(s)>=70000 },
+  { id:'ed10_80', icon:'€$', fr:['80K Solides','80 000 eddies gagnés au total.'], en:['80K Solid','80,000 total eddies earned.'],es:['80K Sólidos','80.000 eddies ganados en total.'],de:['80K Stabil','80.000 Eddies insgesamt verdient.'],pt:['80K Sólidos','80.000 eddies ganhos no total.'],it:['80K Solidi','80.000 eddies guadagnati in totale.'],pl:['Solidne 80K','80 000 eddies zdobytych łącznie.'],ko:['탄탄한 80K','누적 80,000 eddies 획득.'],zh:['稳固的80K','累计赚取80000 eddies。'],ja:['盤石の80K','累計80,000eddies獲得。'], check:s=>eddiesTotal(s)>=80000 },
+  { id:'ed10_90', icon:'€$', fr:['90K, Presque Là','90 000 eddies gagnés au total.'], en:['90K, Almost There','90,000 total eddies earned.'],es:['90K, Casi Ahí','90.000 eddies ganados en total.'],de:['90K, Fast Geschafft','90.000 Eddies insgesamt verdient.'],pt:['90K, Quase Lá','90.000 eddies ganhos no total.'],it:['90K, Quasi Fatta','90.000 eddies guadagnati in totale.'],pl:['90K, Prawie Tam','90 000 eddies zdobytych łącznie.'],ko:['90K, 거의 다 왔다','누적 90,000 eddies 획득.'],zh:['90K，快到了','累计赚取90000 eddies。'],ja:['90K、もうすぐ','累計90,000eddies獲得。'], check:s=>eddiesTotal(s)>=90000 },
+  { id:'ed10_100', icon:'€$', fr:['Cent Mille Eddies','100 000 eddies gagnés au total.'], en:['One Hundred K','100,000 total eddies earned.'],es:['Cien Mil Eddies','100.000 eddies ganados en total.'],de:['Hunderttausend Eddies','100.000 Eddies insgesamt verdient.'],pt:['Cem Mil Eddies','100.000 eddies ganhos no total.'],it:['Centomila Eddies','100.000 eddies guadagnati in totale.'],pl:['Sto Tysięcy Eddies','100 000 eddies zdobytych łącznie.'],ko:['십만 eddies','누적 100,000 eddies 획득.'],zh:['十万Eddies','累计赚取100000 eddies。'],ja:['10万eddies','累計100,000eddies獲得。'], check:s=>eddiesTotal(s)>=100000 },
+  // --- Collection de cartes découvertes (Classic/Endless/Ability/Art) ---
+  { id:'col_25', icon:'🗂️', fr:['Collectionneur Débutant','Devine 25 cartes différentes.'], en:['Budding Collector','Correctly guess 25 different cards.'],es:['Coleccionista Novato','Adivina 25 cartas diferentes.'],de:['Angehender Sammler','Errate 25 verschiedene Karten.'],pt:['Colecionador Iniciante','Acerte 25 cartas diferentes.'],it:['Collezionista in Erba','Indovina 25 carte diverse.'],pl:['Początkujący Kolekcjoner','Odgadnij 25 różnych kart.'],ko:['새싹 수집가','25장의 서로 다른 카드 맞히기.'],zh:['新晋收藏家','猜中25张不同的卡牌。'],ja:['駆け出しコレクター','25枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=25 },
+  { id:'col_50', icon:'🗂️', fr:['Bon Œil pour les Cartes','Devine 50 cartes différentes.'], en:['Good Eye for Cards','Correctly guess 50 different cards.'],es:['Buen Ojo para las Cartas','Adivina 50 cartas diferentes.'],de:['Gutes Auge für Karten','Errate 50 verschiedene Karten.'],pt:['Bom Olho para Cartas','Acerte 50 cartas diferentes.'],it:['Buon Occhio per le Carte','Indovina 50 carte diverse.'],pl:['Dobre Oko do Kart','Odgadnij 50 różnych kart.'],ko:['카드 보는 눈','50장의 서로 다른 카드 맞히기.'],zh:['识卡慧眼','猜中50张不同的卡牌。'],ja:['カードを見る目','50枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=50 },
+  { id:'col_75', icon:'🗂️', fr:['Archiviste','Devine 75 cartes différentes.'], en:['Archivist','Correctly guess 75 different cards.'],es:['Archivista','Adivina 75 cartas diferentes.'],de:['Archivar','Errate 75 verschiedene Karten.'],pt:['Arquivista','Acerte 75 cartas diferentes.'],it:['Archivista','Indovina 75 carte diverse.'],pl:['Archiwista','Odgadnij 75 różnych kart.'],ko:['기록 보관자','75장의 서로 다른 카드 맞히기.'],zh:['档案管理员','猜中75张不同的卡牌。'],ja:['アーキビスト','75枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=75 },
+  { id:'col_100', icon:'🗂️', fr:['Encyclopédie sur Pattes','Devine 100 cartes différentes.'], en:['Walking Encyclopedia','Correctly guess 100 different cards.'],es:['Enciclopedia Andante','Adivina 100 cartas diferentes.'],de:['Wandelnde Enzyklopädie','Errate 100 verschiedene Karten.'],pt:['Enciclopédia Ambulante','Acerte 100 cartas diferentes.'],it:['Enciclopedia Ambulante','Indovina 100 carte diverse.'],pl:['Chodząca Encyklopedia','Odgadnij 100 różnych kart.'],ko:['걸어다니는 백과사전','100장의 서로 다른 카드 맞히기.'],zh:['行走的百科全书','猜中100张不同的卡牌。'],ja:['歩く百科事典','100枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=100 },
+  { id:'col_all', icon:'📖', fr:['Toutes les Cartes','Devine chaque carte du jeu au moins une fois.'], en:['Every Single Card','Correctly guess every card in the game at least once.'],es:['Todas las Cartas','Adivina cada carta del juego al menos una vez.'],de:['Jede Einzelne Karte','Errate jede Karte im Spiel mindestens einmal.'],pt:['Todas as Cartas','Acerte cada carta do jogo pelo menos uma vez.'],it:['Tutte le Carte','Indovina ogni carta del gioco almeno una volta.'],pl:['Każda Karta','Odgadnij każdą kartę w grze przynajmniej raz.'],ko:['모든 카드','게임의 모든 카드를 한 번씩 맞히기.'],zh:['集齐所有卡牌','猜中游戏中的每一张卡牌至少一次。'],ja:['全カード制覇','ゲーム内の全カードを1回以上正解。'], check:s=>(s.cardsDiscovered||[]).length>=CARDS.length },
+  // --- Total de parties jouées, tous jeux confondus ---
+  { id:'tot_50', icon:'🎮', fr:['50 Parties au Total','50 parties jouées, tous jeux confondus.'], en:['50 Games Total','50 games played across every mode.'],es:['50 Partidas en Total','50 partidas jugadas en todos los modos.'],de:['50 Runden Insgesamt','50 gespielte Runden über alle Modi.'],pt:['50 Partidas no Total','50 partidas jogadas em todos os modos.'],it:['50 Partite in Totale','50 partite giocate in tutte le modalità.'],pl:['50 Gier Łącznie','50 rozegranych gier we wszystkich trybach.'],ko:['총 50게임','모든 모드에서 50게임 플레이.'],zh:['总计50局','所有模式累计游玩50局。'],ja:['合計50ゲーム','全モードで50ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=50 },
+  { id:'tot_100', icon:'🎮', fr:['100 Parties au Total','100 parties jouées, tous jeux confondus.'], en:['100 Games Total','100 games played across every mode.'],es:['100 Partidas en Total','100 partidas jugadas en todos los modos.'],de:['100 Runden Insgesamt','100 gespielte Runden über alle Modi.'],pt:['100 Partidas no Total','100 partidas jogadas em todos os modos.'],it:['100 Partite in Totale','100 partite giocate in tutte le modalità.'],pl:['100 Gier Łącznie','100 rozegranych gier we wszystkich trybach.'],ko:['총 100게임','모든 모드에서 100게임 플레이.'],zh:['总计100局','所有模式累计游玩100局。'],ja:['合計100ゲーム','全モードで100ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=100 },
+  { id:'tot_250', icon:'🎮', fr:['250 Parties au Total','250 parties jouées, tous jeux confondus.'], en:['250 Games Total','250 games played across every mode.'],es:['250 Partidas en Total','250 partidas jugadas en todos los modos.'],de:['250 Runden Insgesamt','250 gespielte Runden über alle Modi.'],pt:['250 Partidas no Total','250 partidas jogadas em todos os modos.'],it:['250 Partite in Totale','250 partite giocate in tutte le modalità.'],pl:['250 Gier Łącznie','250 rozegranych gier we wszystkich trybach.'],ko:['총 250게임','모든 모드에서 250게임 플레이.'],zh:['总计250局','所有模式累计游玩250局。'],ja:['合計250ゲーム','全モードで250ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=250 },
+  { id:'tot_500', icon:'🎮', fr:['500 Parties au Total','500 parties jouées, tous jeux confondus.'], en:['500 Games Total','500 games played across every mode.'],es:['500 Partidas en Total','500 partidas jugadas en todos los modos.'],de:['500 Runden Insgesamt','500 gespielte Runden über alle Modi.'],pt:['500 Partidas no Total','500 partidas jogadas em todos os modos.'],it:['500 Partite in Totale','500 partite giocate in tutte le modalità.'],pl:['500 Gier Łącznie','500 rozegranych gier we wszystkich trybach.'],ko:['총 500게임','모든 모드에서 500게임 플레이.'],zh:['总计500局','所有模式累计游玩500局。'],ja:['合計500ゲーム','全モードで500ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=500 },
+  { id:'tot_1000', icon:'🎮', fr:['Mille Parties','1000 parties jouées, tous jeux confondus.'], en:['One Thousand Games','1000 games played across every mode.'],es:['Mil Partidas','1000 partidas jugadas en todos los modos.'],de:['Tausend Runden','1000 gespielte Runden über alle Modi.'],pt:['Mil Partidas','1000 partidas jogadas em todos os modos.'],it:['Mille Partite','1000 partite giocate in tutte le modalità.'],pl:['Tysiąc Gier','1000 rozegranych gier we wszystkich trybach.'],ko:['천 게임','모든 모드에서 1000게임 플레이.'],zh:['千局达成','所有模式累计游玩1000局。'],ja:['1000ゲーム達成','全モードで1000ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=1000 },
+  // --- Langues utilisées ---
+  { id:'lang_3', icon:'🌐', fr:['Un Peu Polyglotte','Joue dans 3 langues différentes.'], en:['A Bit Polyglot','Play in 3 different languages.'],es:['Un Poco Políglota','Juega en 3 idiomas diferentes.'],de:['Etwas Mehrsprachig','Spiele in 3 verschiedenen Sprachen.'],pt:['Um Pouco Poliglota','Jogue em 3 idiomas diferentes.'],it:['Un Po\' Poliglotta','Gioca in 3 lingue diverse.'],pl:['Trochę Poliglota','Zagraj w 3 różnych językach.'],ko:['조금은 다국어','3개 언어로 플레이.'],zh:['小小语言通','使用3种不同语言游玩。'],ja:['ちょっとポリグロット','3つの異なる言語でプレイ。'], check:s=>(s.languagesUsed||[]).length>=3 },
+  { id:'lang_5', icon:'🌐', fr:['Globe-Trotter','Joue dans 5 langues différentes.'], en:['World Traveler','Play in 5 different languages.'],es:['Viajero Mundial','Juega en 5 idiomas diferentes.'],de:['Weltenbummler','Spiele in 5 verschiedenen Sprachen.'],pt:['Viajante do Mundo','Jogue em 5 idiomas diferentes.'],it:['Giramondo','Gioca in 5 lingue diverse.'],pl:['Podróżnik po Świecie','Zagraj w 5 różnych językach.'],ko:['세계 여행자','5개 언어로 플레이.'],zh:['环球旅行者','使用5种不同语言游玩。'],ja:['世界の旅人','5つの異なる言語でプレイ。'], check:s=>(s.languagesUsed||[]).length>=5 },
+  { id:'lang_all', icon:'🌍', fr:['Vrai Polyglotte','Joue dans les 10 langues disponibles.'], en:['True Polyglot','Play in all 10 available languages.'],es:['Verdadero Políglota','Juega en los 10 idiomas disponibles.'],de:['Echter Vielsprachler','Spiele in allen 10 verfügbaren Sprachen.'],pt:['Verdadeiro Poliglota','Jogue nos 10 idiomas disponíveis.'],it:['Vero Poliglotta','Gioca in tutte le 10 lingue disponibili.'],pl:['Prawdziwy Poliglota','Zagraj we wszystkich 10 dostępnych językach.'],ko:['진정한 다국어 사용자','제공되는 10개 언어 모두로 플레이.'],zh:['真正的语言通','使用全部10种可用语言游玩。'],ja:['真のポリグロット','利用可能な全10言語でプレイ。'], check:s=>(s.languagesUsed||[]).length>=10 },
+  // --- Moment de la journée ---
+  { id:'early_bird', icon:'🌅', fr:['Lève-Tôt','Actif entre 4h et 7h UTC.'], en:['Early Bird','Active between 4am and 7am UTC.'],es:['Madrugador','Activo entre las 4h y las 7h UTC.'],de:['Frühaufsteher','Aktiv zwischen 4 und 7 Uhr UTC.'],pt:['Madrugador','Ativo entre 4h e 7h UTC.'],it:['Mattiniero','Attivo tra le 4 e le 7 UTC.'],pl:['Ranny Ptaszek','Aktywny między 4:00 a 7:00 UTC.'],ko:['얼리버드','UTC 기준 오전 4시~7시 사이 활동.'],zh:['早起鸟','在UTC 4点至7点之间活跃。'],ja:['早起き鳥','UTC 4時〜7時の間に活動。'], check:s=>s.earlyBirdWin===true },
+  { id:'night_owl', icon:'🌙', fr:['Oiseau de Nuit','Actif entre minuit et 3h UTC.'], en:['Night Owl','Active between midnight and 3am UTC.'],es:['Búho Nocturno','Activo entre medianoche y las 3h UTC.'],de:['Nachteule','Aktiv zwischen Mitternacht und 3 Uhr UTC.'],pt:['Coruja Noturna','Ativo entre meia-noite e 3h UTC.'],it:['Nottambulo','Attivo tra mezzanotte e le 3 UTC.'],pl:['Nocna Sowa','Aktywny między północą a 3:00 UTC.'],ko:['올빼미족','UTC 기준 자정~오전 3시 사이 활동.'],zh:['夜猫子','在UTC午夜至3点之间活跃。'],ja:['夜型人間','UTC 深夜0時〜3時の間に活動。'], check:s=>s.nightOwlWin===true },
+  // --- Engagement méta ---
+  { id:'meta_community', icon:'👥', fr:['Curieux du Classement',"Consulte l'onglet Communauté."], en:['Curious Observer','Check out the Community tab.'],es:['Observador Curioso','Consulta la pestaña Comunidad.'],de:['Neugieriger Beobachter','Schau dir den Community-Tab an.'],pt:['Observador Curioso','Confira a aba Comunidade.'],it:['Osservatore Curioso','Dai un\'occhiata alla scheda Community.'],pl:['Ciekawski Obserwator','Sprawdź zakładkę Społeczność.'],ko:['호기심 많은 관찰자','커뮤니티 탭을 확인하세요.'],zh:['好奇的观察者','查看社区标签页。'],ja:['好奇心旺盛な観察者','コミュニティタブをチェック。'], check:s=>s.communityVisited===true },
+  { id:'meta_feedback3', icon:'💬', fr:['Voix Persistante','Envoie 3 retours via Feedback.'], en:['Persistent Voice','Send feedback 3 times.'],es:['Voz Persistente','Envía comentarios 3 veces.'],de:['Beharrliche Stimme','Sende 3 Mal Feedback.'],pt:['Voz Persistente','Envie feedback 3 vezes.'],it:['Voce Persistente','Invia feedback 3 volte.'],pl:['Wytrwały Głos','Wyślij opinię 3 razy.'],ko:['끈질긴 목소리','피드백을 3번 보내세요.'],zh:['坚持发声','发送3次反馈。'],ja:['粘り強い声','フィードバックを3回送信。'], check:s=>(s.feedbackCount||0)>=3 },
+  { id:'meta_hunter2', icon:'🎯', fr:['Maître des Succès','Débloque au moins 90 des 100 premiers succès.'], en:['Achievement Master','Unlock at least 90 of the first 100 achievements.'],es:['Maestro de Logros','Desbloquea al menos 90 de los primeros 100 logros.'],de:['Erfolgsmeister','Schalte mindestens 90 der ersten 100 Erfolge frei.'],pt:['Mestre das Conquistas','Desbloqueie ao menos 90 das primeiras 100 conquistas.'],it:['Maestro degli Obiettivi','Sblocca almeno 90 dei primi 100 obiettivi.'],pl:['Mistrz Osiągnięć','Odblokuj co najmniej 90 z pierwszych 100 osiągnięć.'],ko:['업적의 달인','첫 100개 업적 중 90개 이상 달성하세요.'],zh:['成就大师','解锁前100个成就中的至少90个。'],ja:['実績マスター','最初の100個の実績のうち90個以上を解除。'],
+    check:s=>ACHIEVEMENTS.slice(0,100).filter(a=>{ try{ return a.check(s); }catch(e){ return false; } }).length>=90 },
+  // --- Paliers plus profonds sur les jeux existants ---
+  { id:'cl_500', icon:'🏙️', fr:['Icône Vivante','500 victoires en Classic.'], en:['Living Icon','500 Classic wins.'],es:['Ícono Viviente','500 victorias en Classic.'],de:['Lebende Ikone','500 Classic-Siege.'],pt:['Ícone Vivo','500 vitórias em Classic.'],it:['Icona Vivente','500 vittorie in Classic.'],pl:['Żywa Ikona','500 zwycięstw w Classic.'],ko:['살아있는 아이콘','Classic 500승.'],zh:['活标志','Classic模式500场胜利。'],ja:['生ける象徴','Classicで500勝。'], check:s=>(s.wins||0)>=500 },
+  { id:'cl_beststreak365', icon:'🔥', fr:['Résilience Absolue','Meilleure série de 365 jours en Classic.'], en:['Absolute Resilience','365-day best streak in Classic.'],es:['Resiliencia Absoluta','Mejor racha de 365 días en Classic.'],de:['Absolute Widerstandskraft','365-Tage-Bestserie in Classic.'],pt:['Resiliência Absoluta','Melhor sequência de 365 dias em Classic.'],it:['Resilienza Assoluta','Migliore serie di 365 giorni in Classic.'],pl:['Absolutna Wytrzymałość','Najlepsza 365-dniowa seria w Classic.'],ko:['절대적인 회복력','Classic 최고 기록 365일 연속.'],zh:['绝对韧性','Classic模式最佳连续记录365天。'],ja:['絶対的な回復力','Classicでの最高連続記録365日。'], check:s=>(s.bestStreak||0)>=365 },
+  { id:'lg_150', icon:'🥷', fr:['Ombre Éternelle','150 victoires en Legend.'], en:['Eternal Shadow','150 Legend wins.'],es:['Sombra Eterna','150 victorias en Legend.'],de:['Ewiger Schatten','150 Legend-Siege.'],pt:['Sombra Eterna','150 vitórias em Legend.'],it:['Ombra Eterna','150 vittorie in Legend.'],pl:['Wieczny Cień','150 zwycięstw w Legend.'],ko:['영원한 그림자','Legend 150승.'],zh:['永恒之影','Legend模式150场胜利。'],ja:['永遠の影','Legendで150勝。'], check:s=>(s.legendWins||0)>=150 },
+  { id:'lg_played200', icon:'🗂️', fr:['Toujours en Mission','200 parties jouées en Legend.'], en:['Always on the Job','200 Legend games played.'],es:['Siempre en Misión','200 partidas jugadas en Legend.'],de:['Immer im Einsatz','200 gespielte Legend-Runden.'],pt:['Sempre em Missão','200 partidas jogadas em Legend.'],it:['Sempre in Missione','200 partite giocate in Legend.'],pl:['Zawsze w Akcji','200 rozegranych gier w Legend.'],ko:['항상 임무 중','Legend 200회 플레이.'],zh:['始终在任务中','游玩200场Legend。'],ja:['常に任務遂行中','Legendを200回プレイ。'], check:s=>(s.legendPlayed||0)>=200 },
+  { id:'bz_score25', icon:'⚡', fr:['Vitesse Lumière','Score de 25+ en une partie Blitz.'], en:['Lightspeed','Score 25+ in one Blitz run.'],es:['Velocidad de la Luz','Puntuación de 25+ en una partida Blitz.'],de:['Lichtgeschwindigkeit','25+ Punkte in einer Blitz-Runde.'],pt:['Velocidade da Luz','Pontuação de 25+ em uma partida Blitz.'],it:['Velocità della Luce','Punteggio di 25+ in una partita Blitz.'],pl:['Prędkość Światła','Wynik 25+ w jednej rundzie Blitz.'],ko:['광속','한 Blitz 게임에서 25점 이상.'],zh:['光速','单场Blitz得分25+。'],ja:['光速','1回のBlitzで25点以上。'], check:s=>(s.blitzBestScore||0)>=25 },
+  { id:'bz_sessions100', icon:'🏋️', fr:['Cent Sessions Blitz','100 sessions Blitz jouées.'], en:['A Hundred Blitz Runs','100 Blitz sessions played.'],es:['Cien Sesiones Blitz','100 sesiones de Blitz jugadas.'],de:['Hundert Blitz-Läufe','100 gespielte Blitz-Sitzungen.'],pt:['Cem Sessões de Blitz','100 sessões de Blitz jogadas.'],it:['Cento Sessioni di Blitz','100 sessioni di Blitz giocate.'],pl:['Sto Sesji Blitz','100 rozegranych sesji Blitz.'],ko:['100번의 Blitz','Blitz 100세션 플레이.'],zh:['百场Blitz','游玩100场Blitz。'],ja:['100回のBlitz','Blitzを100セッションプレイ。'], check:s=>(s.blitzSessions||0)>=100 },
+  { id:'bz_total1000', icon:'🏆', fr:['Millier de Cartes Blitz','1000 cartes résolues au total en Blitz.'], en:['A Thousand in Blitz','1000 total cards solved in Blitz.'],es:['Millar de Blitz','1000 cartas resueltas en total en Blitz.'],de:['Tausend in Blitz','1000 gelöste Karten insgesamt in Blitz.'],pt:['Milhar no Blitz','1000 cartas resolvidas no total em Blitz.'],it:['Migliaio in Blitz','1000 carte risolte in totale in Blitz.'],pl:['Tysiąc w Blitz','1000 rozwiązanych kart łącznie w Blitz.'],ko:['Blitz 천 장','Blitz 누적 1000장 해결.'],zh:['Blitz千张','Blitz累计解出1000张卡牌。'],ja:['Blitzで1000枚','Blitz累計1000枚解決。'], check:s=>(s.blitzTotalSolved||0)>=1000 },
+  { id:'en_3000', icon:'♾️', fr:['Puits sans Fond','3000 cartes résolues en Endless.'], en:['Bottomless Well','3000 Endless solved.'],es:['Pozo sin Fondo','3000 cartas resueltas en Endless.'],de:['Bodenloser Brunnen','3000 gelöste Karten in Endless.'],pt:['Poço sem Fundo','3000 cartas resolvidas em Endless.'],it:['Pozzo Senza Fondo','3000 carte risolte in Endless.'],pl:['Bezdenna Studnia','3000 rozwiązanych kart w Endless.'],ko:['바닥없는 우물','Endless 3000장 해결.'],zh:['无底之井','Endless模式解出3000张卡牌。'],ja:['底なしの井戸','Endlessで3000枚解決。'], check:s=>(s.endlessSolved||0)>=3000 },
+  { id:'ab_750', icon:'⚖️', fr:['Juriste en Chef','750 puzzles Ability résolus.'], en:['Chief Counsel','750 Ability puzzles solved.'],es:['Consejero Principal','750 puzzles de Ability resueltos.'],de:['Chefberater','750 gelöste Ability-Rätsel.'],pt:['Conselheiro-Chefe','750 puzzles de Ability resolvidos.'],it:['Consigliere Capo','750 puzzle di Ability risolti.'],pl:['Główny Doradca','750 rozwiązanych zagadek Ability.'],ko:['수석 고문','Ability 750문제 해결.'],zh:['首席顾问','解出750道Ability谜题。'],ja:['首席顧問','Abilityを750問解決。'], check:s=>(s.abilitySolved||0)>=750 },
+  { id:'ab_1000', icon:'🏛️', fr:['Mille Puzzles Ability','1000 puzzles Ability résolus.'], en:['A Thousand Ability Puzzles','1000 Ability puzzles solved.'],es:['Mil Puzzles de Ability','1000 puzzles de Ability resueltos.'],de:['Tausend Ability-Rätsel','1000 gelöste Ability-Rätsel.'],pt:['Mil Puzzles de Ability','1000 puzzles de Ability resolvidos.'],it:['Mille Puzzle di Ability','1000 puzzle di Ability risolti.'],pl:['Tysiąc Zagadek Ability','1000 rozwiązanych zagadek Ability.'],ko:['Ability 천 문제','Ability 1000문제 해결.'],zh:['千道Ability谜题','解出1000道Ability谜题。'],ja:['Ability1000問','Abilityを1000問解決。'], check:s=>(s.abilitySolved||0)>=1000 },
+  { id:'art_100', icon:'🏛️', fr:['Conservateur en Chef','100 victoires en Art.'], en:['Chief Curator','100 Art wins.'],es:['Curador en Jefe','100 victorias en Art.'],de:['Chefkurator','100 Art-Siege.'],pt:['Curador-Chefe','100 vitórias em Art.'],it:['Curatore Capo','100 vittorie in Art.'],pl:['Główny Kurator','100 zwycięstw w Art.'],ko:['수석 큐레이터','Art 100승.'],zh:['首席策展人','Art模式100场胜利。'],ja:['チーフキュレーター','Artで100勝。'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=100 },
+  { id:'art_noloss100', icon:'😎', fr:['Vision Absolue','100 parties Art sans aucune défaite.'], en:['Absolute Vision','100 Art games without a single loss.'],es:['Visión Absoluta','100 partidas de Art sin ninguna derrota.'],de:['Absolute Sicht','100 Art-Runden ohne eine einzige Niederlage.'],pt:['Visão Absoluta','100 partidas de Art sem nenhuma derrota.'],it:['Visione Assoluta','100 partite di Art senza nemmeno una sconfitta.'],pl:['Absolutna Wizja','100 gier w Art bez ani jednej porażki.'],ko:['절대적인 시야','Art 100게임 무패.'],zh:['绝对视觉','100场Art无一失败。'],ja:['絶対的な視力','Artを100回無敗でプレイ。'], check:s=>(s.artPlayed||0)>=100 && (s.artLostCount||0)===0 },
+  { id:'cc_score50', icon:'⚡', fr:['Vitesse Surhumaine','Score de 50+ en une partie Chrome Check.'], en:['Superhuman Speed','Score 50+ in one Chrome Check run.'],es:['Velocidad Sobrehumana','Puntuación de 50+ en una partida de Chrome Check.'],de:['Übermenschliche Geschwindigkeit','50+ Punkte in einer Chrome-Check-Runde.'],pt:['Velocidade Sobre-humana','Pontuação de 50+ em uma partida de Chrome Check.'],it:['Velocità Sovrumana','Punteggio di 50+ in una partita di Chrome Check.'],pl:['Nadludzka Prędkość','Wynik 50+ w jednej rundzie Chrome Check.'],ko:['초인적인 속도','한 Chrome Check 게임에서 50점 이상.'],zh:['超凡速度','单局Chrome Check得分50+。'],ja:['超人的スピード','1回のChrome Checkで50点以上。'], check:s=>(s.chromeBestScore||0)>=50 },
+  { id:'cc_2000', icon:'💯', fr:['Deux Mille Réponses','2000 bonnes réponses au total.'], en:['Two Thousand Correct','2000 total correct answers.'],es:['Dos Mil Respuestas','2000 respuestas correctas en total.'],de:['Zweitausend Richtige','2000 richtige Antworten insgesamt.'],pt:['Duas Mil Respostas','2000 respostas corretas no total.'],it:['Duemila Risposte','2000 risposte corrette in totale.'],pl:['Dwa Tysiące Odpowiedzi','2000 poprawnych odpowiedzi łącznie.'],ko:['2000개의 정답','누적 2000개 정답.'],zh:['两千答对','累计答对2000题。'],ja:['2000問正解','累計2000問正解。'], check:s=>(s.chromeTotalCorrect||0)>=2000 },
 ];
+function totalGamesPlayed(s){
+  return (s.gamesPlayed||0)+(s.legendPlayed||0)+(s.blitzSessions||0)+(s.endlessSolved||0)+(s.abilitySolved||0)+(s.artPlayed||0)+(s.chromeSessions||0)+(s.cardsLinkPlayed||0)+(s.sequencePlayed||0);
+}
 async function renderAchievements(){
   const s = await loadStats();
   const grid = document.getElementById('achievementsGrid');
@@ -1323,6 +1469,7 @@ function initFeedback(){
         await supabaseClient.from('feedback').insert({ user_id: currentSession ? currentSession.user.id : null, pseudo, text });
         confirmEl.textContent = t('feedback_ok');
         document.getElementById('feedbackText').value = "";
+        loadStats().then(s=>{ s.feedbackCount = (s.feedbackCount||0)+1; saveStats(s); });
       }catch(e){ confirmEl.textContent = "…"; }
       return;
     }
@@ -1384,6 +1531,7 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
         s.wins = (s.wins||0)+1;
         s.guessDistribution = s.guessDistribution || {};
         s.guessDistribution[classicGuesses.length] = (s.guessDistribution[classicGuesses.length]||0)+1;
+        addDiscoveredCard(s, classicSecret.n);
         s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
         s.eddies.classic += reward;
         s.lastClassicReward = reward;
@@ -1520,6 +1668,7 @@ setupAutocomplete(endlessInput, endlessSugg, (card)=>{
     endlessBanner.innerHTML = t('endless_found')+' '+endlessSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', endlessGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span> <button class="bigbtn" id="playAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
     loadStats().then(s=>{
       s.endlessSolved = (s.endlessSolved||0)+1;
+      addDiscoveredCard(s, endlessSecret.n);
       s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
       s.eddies.endless += reward;
       saveStats(s).then(()=>{
@@ -1583,6 +1732,7 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
       if(s.lastAbilityPlayed !== today || !s.abilityWon){
         s.lastAbilityPlayed = today; s.abilityWon = true;
         s.abilitySolved = (s.abilitySolved||0)+1;
+        addDiscoveredCard(s, abilitySecret.n);
         s.eddies = s.eddies || {};
         s.eddies.ability = (s.eddies.ability||0) + reward;
         s.lastAbilityReward = reward;
@@ -1673,6 +1823,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
         s.lastArtPlayed = today; s.artWon = true; s.artLost = false;
         s.artPlayed = (s.artPlayed||0)+1;
         s.artSolved = (s.artSolved||0)+1;
+        addDiscoveredCard(s, artSecret.n);
         if(artAttempt===1) s.artFirstTryWins = (s.artFirstTryWins||0)+1;
         s.eddies = s.eddies || {};
         s.eddies.art = (s.eddies.art||0) + reward;
@@ -2403,6 +2554,7 @@ initFeedback();
   initCardsLink();
   initSequence();
   initArchive();
+  updateEngagementStats();
   refreshEddiesUI();
 })();
 document.getElementById('publishStatsBtn').addEventListener('click', publishStats);
