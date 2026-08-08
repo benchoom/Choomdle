@@ -1497,6 +1497,19 @@ const classicInput = document.getElementById('guessInput');
 const classicSugg = document.getElementById('suggestions');
 const classicBanner = document.getElementById('classicBanner');
 
+// Essais du jour en cours (Classic) : sauvegardés dans le navigateur pour survivre à un rechargement
+// de page (ex: clic sur le lien de confirmation d'email en pleine partie), pas seulement la victoire finale.
+function saveInProgressGuesses(key, dateStr, guesses){
+  try{ localStorage.setItem(key, JSON.stringify({date:dateStr, guesses})); }catch(e){}
+}
+function loadInProgressGuesses(key, dateStr){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return [];
+    const obj = JSON.parse(raw);
+    return obj.date === dateStr ? (obj.guesses||[]) : [];
+  }catch(e){ return []; }
+}
 function initClassic(){
   const today = todayUTCString();
   document.getElementById('dailyDate').textContent = today + " UTC";
@@ -1504,6 +1517,15 @@ function initClassic(){
   classicGuesses = []; classicSolved = false;
   classicBody.innerHTML = ""; classicBanner.className = "banner"; classicBanner.innerHTML = "";
   classicInput.disabled = false;
+  // Restaure les essais déjà faits aujourd'hui si la page a été rechargée en cours de partie.
+  loadInProgressGuesses('choomdle:classic:inprogress', today).forEach(name=>{
+    const card = CARDS.find(c=>c.n===name);
+    if(card){
+      const {row} = renderRow(card, classicSecret);
+      classicBody.insertAdjacentHTML('beforeend', row);
+      classicGuesses.push(name);
+    }
+  });
   loadStats().then(s=>{
     document.getElementById('streakVal').textContent = s.streak;
     document.getElementById('bestStreakVal').textContent = s.bestStreak;
@@ -1525,6 +1547,7 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
   const {row, win} = renderRow(card, classicSecret);
   classicBody.insertAdjacentHTML('beforeend', row);
   classicGuesses.push(card.n);
+  saveInProgressGuesses('choomdle:classic:inprogress', todayUTCString(), classicGuesses);
   if(win){
     classicSolved = true; classicInput.disabled = true;
     const reward = computeReward(classicGuesses.length);
