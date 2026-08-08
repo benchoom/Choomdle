@@ -713,6 +713,7 @@ function statsRowToLocal(row){
     cardsDiscovered: meta.cardsDiscovered||[], languagesUsed: meta.languagesUsed||[],
     communityVisited: meta.communityVisited||false, feedbackCount: meta.feedbackCount||0,
     earlyBirdWin: meta.earlyBirdWin||false, nightOwlWin: meta.nightOwlWin||false,
+    inProgress: meta.inProgress||{},
   };
 }
 function localToStatsRow(s, uid){
@@ -746,7 +747,8 @@ function localToStatsRow(s, uid){
       activityStreak: s.activityStreak||0, bestActivityStreak: s.bestActivityStreak||0, lastActiveDate: s.lastActiveDate||null,
       cardsDiscovered: s.cardsDiscovered||[], languagesUsed: s.languagesUsed||[],
       communityVisited: s.communityVisited||false, feedbackCount: s.feedbackCount||0,
-      earlyBirdWin: s.earlyBirdWin||false, nightOwlWin: s.nightOwlWin||false }
+      earlyBirdWin: s.earlyBirdWin||false, nightOwlWin: s.nightOwlWin||false,
+      inProgress: s.inProgress||{} }
   };
 }
 
@@ -782,7 +784,7 @@ function defaultStats(){
     artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false,
     activityStreak:0, bestActivityStreak:0, lastActiveDate:null,
     cardsDiscovered:[], languagesUsed:[], communityVisited:false, feedbackCount:0,
-    earlyBirdWin:false, nightOwlWin:false};
+    earlyBirdWin:false, nightOwlWin:false, inProgress:{}};
 }
 async function saveStats(stats){
   lsSetJSON('choomdle:stats', stats);
@@ -1022,7 +1024,10 @@ async function initAccount(){
   document.getElementById('menuLogout').addEventListener('click', async ()=>{
     try{ await supabaseClient.auth.signOut(); }catch(e){}
     currentSession = null; currentPseudo = null;
-    try{ localStorage.removeItem('choomdle:stats'); }catch(e){} // évite d'afficher les stats du compte précédent en tant qu'invité
+    try{
+      localStorage.removeItem('choomdle:stats');
+      ['classic','ability','art','sequence','cardslink'].forEach(k=>localStorage.removeItem('choomdle:progress:'+k));
+    }catch(e){} // évite d'afficher les données du compte précédent en tant qu'invité
     setLoggedOutUI();
     refreshEddiesUI(); refreshStreakUI();
   });
@@ -1497,18 +1502,34 @@ const classicInput = document.getElementById('guessInput');
 const classicSugg = document.getElementById('suggestions');
 const classicBanner = document.getElementById('classicBanner');
 
-// Essais du jour en cours (Classic) : sauvegardés dans le navigateur pour survivre à un rechargement
-// de page (ex: clic sur le lien de confirmation d'email en pleine partie), pas seulement la victoire finale.
-function saveInProgressGuesses(key, dateStr, guesses){
-  try{ localStorage.setItem(key, JSON.stringify({date:dateStr, guesses})); }catch(e){}
+// Essais/état en cours du jour (tous jeux à essais multiples) : sauvegardés dans le navigateur
+// ET, si connecté, dans le compte (Supabase) — pour que déconnexion/reconnexion sur le MÊME
+// compte retrouve exactement les mêmes essais. Un simple invité (ou un autre compte) repart
+// logiquement du cache local du navigateur, propre à cette session.
+function saveInProgress(gameKey, dateStr, data){
+  try{ localStorage.setItem('choomdle:progress:'+gameKey, JSON.stringify({date:dateStr, data})); }catch(e){}
+  if(supabaseReady && currentSession){
+    loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress[gameKey] = {date:dateStr, data};
+      saveStats(s);
+    });
+  }
 }
-function loadInProgressGuesses(key, dateStr){
+async function loadInProgress(gameKey, dateStr){
+  if(supabaseReady && currentSession){
+    const s = await loadStats();
+    if(s.inProgress && s.inProgress[gameKey] && s.inProgress[gameKey].date === dateStr){
+      return s.inProgress[gameKey].data;
+    }
+    return null;
+  }
   try{
-    const raw = localStorage.getItem(key);
-    if(!raw) return [];
+    const raw = localStorage.getItem('choomdle:progress:'+gameKey);
+    if(!raw) return null;
     const obj = JSON.parse(raw);
-    return obj.date === dateStr ? (obj.guesses||[]) : [];
-  }catch(e){ return []; }
+    return obj.date === dateStr ? obj.data : null;
+  }catch(e){ return null; }
 }
 function initClassic(){
   const today = todayUTCString();
@@ -1517,14 +1538,17 @@ function initClassic(){
   classicGuesses = []; classicSolved = false;
   classicBody.innerHTML = ""; classicBanner.className = "banner"; classicBanner.innerHTML = "";
   classicInput.disabled = false;
-  // Restaure les essais déjà faits aujourd'hui si la page a été rechargée en cours de partie.
-  loadInProgressGuesses('choomdle:classic:inprogress', today).forEach(name=>{
-    const card = CARDS.find(c=>c.n===name);
-    if(card){
-      const {row} = renderRow(card, classicSecret);
-      classicBody.insertAdjacentHTML('beforeend', row);
-      classicGuesses.push(name);
-    }
+  // Restaure les essais déjà faits aujourd'hui (compte si connecté, sinon cache navigateur).
+  loadInProgress('classic', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = CARDS.find(c=>c.n===name);
+      if(card && !classicSolved){
+        const {row} = renderRow(card, classicSecret);
+        classicBody.insertAdjacentHTML('beforeend', row);
+        classicGuesses.push(name);
+      }
+    });
   });
   loadStats().then(s=>{
     document.getElementById('streakVal').textContent = s.streak;
@@ -1547,7 +1571,7 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
   const {row, win} = renderRow(card, classicSecret);
   classicBody.insertAdjacentHTML('beforeend', row);
   classicGuesses.push(card.n);
-  saveInProgressGuesses('choomdle:classic:inprogress', todayUTCString(), classicGuesses);
+  saveInProgress('classic', todayUTCString(), {guesses: classicGuesses});
   if(win){
     classicSolved = true; classicInput.disabled = true;
     const reward = computeReward(classicGuesses.length);
@@ -1741,6 +1765,17 @@ function initAbility(){
   abilityGuesses = []; abilitySolved = false;
   abilityBody.innerHTML = ""; abilityBanner.className = "banner"; abilityBanner.innerHTML = "";
   abilityInput.disabled = false;
+  loadInProgress('ability', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = CARDS.find(c=>c.n===name);
+      if(card && !abilitySolved){
+        const {row} = renderRow(card, abilitySecret);
+        abilityBody.insertAdjacentHTML('beforeend', row);
+        abilityGuesses.push(name);
+      }
+    });
+  });
   loadStats().then(s=>{
     if(s.lastAbilityPlayed === today && s.abilityWon){
       abilitySolved = true; abilityInput.disabled = true;
@@ -1754,6 +1789,7 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
   const {row, win} = renderRow(card, abilitySecret);
   abilityBody.insertAdjacentHTML('beforeend', row);
   abilityGuesses.push(card.n);
+  saveInProgress('ability', todayUTCString(), {guesses: abilityGuesses});
   if(win){
     abilitySolved = true; abilityInput.disabled = true;
     const reward = computeReward(abilityGuesses.length);
@@ -1835,6 +1871,20 @@ function initArt(){
         artBanner.className = "banner fail";
         artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
       }
+    } else {
+      loadInProgress('art', today).then(data=>{
+        if(!data || !data.guesses || artSolved) return;
+        data.guesses.forEach(name=>{
+          const card = CARDS.find(c=>c.n===name);
+          if(card && !artSolved){
+            const {row} = renderRow(card, artSecret);
+            artBody.insertAdjacentHTML('beforeend', row);
+            artGuesses.push(name);
+          }
+        });
+        artAttempt = data.attempt || artAttempt;
+        applyArtBlur(artAttempt);
+      });
     }
   });
 }
@@ -1882,6 +1932,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
       });
     } else {
       applyArtBlur(artAttempt);
+      saveInProgress('art', today, {guesses: artGuesses, attempt: artAttempt});
     }
   }
 }, ()=>artGuesses);
@@ -2047,6 +2098,15 @@ function initSequence(){
       if(s.sequenceWon) showSequenceEndBanner(true, s.lastSequenceReward||0);
       else showSequenceLossBanner();
       renderSequence();
+    } else {
+      loadInProgress('sequence', today).then(data=>{
+        if(!data || sequenceSolved) return;
+        if(Array.isArray(data.order) && data.order.length === sequenceDisplayOrder.length){
+          sequenceDisplayOrder = data.order;
+        }
+        sequenceTries = data.tries || 0;
+        renderSequence();
+      });
     }
   });
 }
@@ -2078,6 +2138,7 @@ function sequenceMove(pos, dir){
   if(target<0 || target>=sequenceDisplayOrder.length) return;
   [sequenceDisplayOrder[pos], sequenceDisplayOrder[target]] = [sequenceDisplayOrder[target], sequenceDisplayOrder[pos]];
   renderSequence();
+  saveInProgress('sequence', todayUTCString(), {order: sequenceDisplayOrder, tries: sequenceTries});
 }
 function showSequenceEndBanner(won, reward){
   const banner = document.getElementById('sequenceBanner');
@@ -2103,6 +2164,7 @@ function showSequenceLossBanner(){
 document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
   if(sequenceSolved) return;
   sequenceTries++;
+  saveInProgress('sequence', todayUTCString(), {order: sequenceDisplayOrder, tries: sequenceTries});
   const rows = document.querySelectorAll('#sequenceList .sequence-row');
   let allCorrect = true;
   sequenceDisplayOrder.forEach((cardIdx, pos)=>{
@@ -2238,6 +2300,19 @@ function initCardsLink(){
       cardsLinkActive = false;
       revealAllCardsLinkGroups();
       showCardsLinkEndBanner(s.cardsLinkWon, s.lastCardsLinkReward||0, s.lastCardsLinkMistakes||0);
+    } else {
+      loadInProgress('cardslink', today).then(data=>{
+        if(!data) return;
+        cardsLinkMistakes = data.mistakes || 0;
+        (data.solveOrder||[]).forEach(gi=>{
+          cardsLinkSolveOrder.push(gi);
+          cardsLinkSolvedCount++;
+          document.getElementById('cardsLinkSolvedGroups').insertAdjacentHTML('beforeend', solvedBarHTML(cardsLinkGroups[gi]));
+          cardsLinkCells = cardsLinkCells.filter(c=>c.groupIndex!==gi);
+        });
+        renderCardsLinkDots();
+        renderCardsLinkGrid();
+      });
     }
   });
 }
@@ -2321,6 +2396,7 @@ document.getElementById('cardsLinkSubmitBtn').addEventListener('click', ()=>{
       cardsLinkSelected = [];
       renderCardsLinkGrid();
       if(cardsLinkSolvedCount===4) cardsLinkFinish(true);
+      else saveInProgress('cardslink', todayUTCString(), {mistakes: cardsLinkMistakes, solveOrder: cardsLinkSolveOrder});
     },300);
   } else {
     selectedEls.forEach(el=>el && el.classList.add('flash-wrong'));
@@ -2330,6 +2406,7 @@ document.getElementById('cardsLinkSubmitBtn').addEventListener('click', ()=>{
     cardsLinkSelected = [];
     document.querySelectorAll('.cardslink-cell.selected').forEach(el=>el.classList.remove('selected'));
     if(cardsLinkMistakes>=4) cardsLinkFinish(false);
+    else saveInProgress('cardslink', todayUTCString(), {mistakes: cardsLinkMistakes, solveOrder: cardsLinkSolveOrder});
   }
 });
 const CARDSLINK_REWARD_TABLE = [200,150,100,50]; // selon le nombre d'erreurs faites (0 à 3) en cas de victoire
