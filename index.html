@@ -369,7 +369,7 @@
       <span data-i18n="achievements_title">Succès</span>
       <span class="stat"><b id="achievementsUnlockedCount">0</b> / <b id="achievementsTotalCount">0</b></span>
     </div>
-    <div class="hint" id="rarityTiersLine"></div>
+    <div class="hint" id="rarityTiersLine" style="margin-bottom:14px;"></div>
     <button class="share-btn" onclick="shareAchievements(this)" data-i18n="share_button" style="margin:0 auto 14px;">Partager</button>
     <div id="achievementsGrid" class="achievements-grid"></div>
     <button class="share-btn" onclick="shareAchievements(this)" data-i18n="share_button">Partager</button>
@@ -814,7 +814,7 @@ function rarityForCount(n){
   if(n>=120) return { id:'iconic', key:'rarity_iconic' };
   if(n>=95) return { id:'secret', key:'rarity_secret' };
   if(n>=77) return { id:'epic', key:'rarity_epic' };
-  if(n>=40) return { id:'rare', key:'rarity_rare' };
+  if(n>=50) return { id:'rare', key:'rarity_rare' };
   if(n>=25) return { id:'uncommon', key:'rarity_uncommon' };
   return { id:'common', key:'rarity_common' };
 }
@@ -1342,7 +1342,7 @@ async function renderAchievements(){
   const grid = document.getElementById('achievementsGrid');
   const lang = ACHIEVEMENTS[0][currentLang] ? currentLang : 'en';
   const tiers = [
-    ['rarity_common',0], ['rarity_uncommon',25], ['rarity_rare',40], ['rarity_epic',77],
+    ['rarity_common',0], ['rarity_uncommon',25], ['rarity_rare',50], ['rarity_epic',77],
     ['rarity_secret',95], ['rarity_iconic',120], ['rarity_nova',150]
   ];
   document.getElementById('rarityTiersLine').innerHTML =
