@@ -126,4 +126,7 @@ const WNC_CARDS = [
 {n:"V — Roamer of the Badlands",t:"Unit",f:["Merc","Nomad"],c:5,p:6,r:2,text:"When this Unit steals a Gig, increase it by up to 5. At the end of your turn, if you control 2 or more Gigs with 8+ value, draw 1."},
 {n:"Rockn' Rockerboy",t:"Unit",f:["Rocker"],c:5,p:8,r:1,text:"Scream your throat raw for something. Anything."},
 {n:"Unlikely Bond",t:"Program",f:["Maelstrom","Mox"],c:4,p:null,r:2,text:"Bottom-deck a ready friendly Unit. If you do, bottom-deck a spent rival Unit."},
+
+// ---- Carte ajoutée le 08/08/2026 ----
+{n:"Rogue Amendiares — Preem Solo",t:"Legend",f:["Merc"],c:7,p:7,r:2,text:"{Go Solo} (Pay this Legend's cost to play it as a ready Unit. It can attack this turn. If it leaves the field, remove it from the game.) When a friendly Legend steals a Gig, if its value is even, draw 1. If its value is odd, a Rival discards 1."},
 ];
