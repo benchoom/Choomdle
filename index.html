@@ -369,6 +369,8 @@
       <span data-i18n="achievements_title">Succès</span>
       <span class="stat"><b id="achievementsUnlockedCount">0</b> / <b id="achievementsTotalCount">0</b></span>
     </div>
+    <div class="hint" id="rarityTiersLine"></div>
+    <button class="share-btn" onclick="shareAchievements(this)" data-i18n="share_button" style="margin:0 0 14px;">Partager</button>
     <div id="achievementsGrid" class="achievements-grid"></div>
     <button class="share-btn" onclick="shareAchievements(this)" data-i18n="share_button">Partager</button>
   </div>
@@ -1339,6 +1341,12 @@ async function renderAchievements(){
   const s = await loadStats();
   const grid = document.getElementById('achievementsGrid');
   const lang = ACHIEVEMENTS[0][currentLang] ? currentLang : 'en';
+  const tiers = [
+    ['rarity_common',0], ['rarity_uncommon',25], ['rarity_rare',40], ['rarity_epic',77],
+    ['rarity_secret',95], ['rarity_iconic',120], ['rarity_nova',150]
+  ];
+  document.getElementById('rarityTiersLine').textContent =
+    t('rarity_tiers_intro')+' '+tiers.map(([key,n])=>t(key)+' ('+n+')').join(' · ');
   let unlockedCount = 0;
   grid.innerHTML = ACHIEVEMENTS.map(a=>{
     let unlocked = false;
