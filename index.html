@@ -1748,7 +1748,7 @@ setupAutocomplete(endlessInput, endlessSugg, (card)=>{
   if(win){
     const reward = computeReward(endlessGuesses.length);
     endlessBanner.className = "banner win";
-    endlessBanner.innerHTML = t('endless_found')+' '+endlessSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', endlessGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span> <button class="bigbtn" id="playAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
+    endlessBanner.innerHTML = t('endless_found')+' '+endlessSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', endlessGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(endlessSecret)+' <button class="bigbtn" id="playAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
     loadStats().then(s=>{
       s.endlessSolved = (s.endlessSolved||0)+1;
       addDiscoveredCard(s, endlessSecret.n);
