@@ -514,6 +514,8 @@ function randCard(){ return CARDS[Math.floor(Math.random()*CARDS.length)]; }
 
 // Barème de récompense (÷10) : 100 eddies au 1er essai, -10 par essai supplémentaire, plancher 10.
 function computeReward(tries){ return Math.max(10, 100 - (tries-1)*10); }
+const ENDLESS_REWARD_TABLE = [25,22,19,16,14,11,9,6,4,2]; // essai 1 à 10 ; au-delà, plancher à 2
+function endlessReward(tries){ return ENDLESS_REWARD_TABLE[Math.min(tries,10)-1]; }
 function shareToClipboard(text, btnEl){
   loadStats().then(s=>{ if(!s.hasShared){ s.hasShared = true; saveStats(s); } });
   const done = ()=>{
@@ -560,6 +562,38 @@ function shareCardsLink(btn){
     rows.push(cells.slice(i,i+4).map(c=>colorFor(c.groupIndex)).join(''));
   }
   const text = 'Choomdle Cards Link — '+todayUTCString()+'\n'+rows.join('\n')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareGuessGrid(gameName, secret, guesses, tries, btn){
+  const rows = guesses.map(name=>{
+    const card = CARDS.find(c=>c.n===name);
+    if(!card) return '';
+    const r = compareCard(card, secret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const text = 'Choomdle '+gameName+' — '+todayUTCString()+'\n'+(rows||'✅')+'\n'+t('win_tries').replace('{n}', tries||'?')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareAbility(btn){ shareGuessGrid('Ability', abilitySecret, abilityGuesses, abilityGuesses.length, btn); }
+function shareArt(btn){
+  const rows = artGuesses.map(name=>{
+    const card = CARDS.find(c=>c.n===name);
+    if(!card) return '';
+    const r = compareCard(card, artSecret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const resultLine = artSolved && artGuesses.length && artAttempt<=5 ? t('win_tries').replace('{n}', artAttempt) : t('art_failed');
+  const text = 'Choomdle Art — '+todayUTCString()+'\n'+(rows||'')+'\n'+resultLine+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareBlitz(btn){
+  const text = 'Choomdle Blitz\n'+t('blitz_timeup')+' '+blitzScore+'\n'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareChrome(btn){
+  const text = 'Choomdle Chrome Check\n'+t('chrome_timeup')+' '+chromeScore+'\n'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'\nchoomdle.com';
   shareToClipboard(text, btn);
 }
 async function shareStats(btn){
@@ -846,10 +880,13 @@ function updateEngagementStats(){
     const today = todayUTCString();
     let changed = false;
     const isGuest = !(supabaseReady && currentSession);
-    // Les eddies des invités ne s'accumulent que sur la journée en cours — remis à zéro chaque
-    // jour. Seuls les comptes créés conservent un total cumulé dans la durée.
+    // Sans compte, TOUTES les stats (pas seulement les eddies) repartent de zéro chaque jour —
+    // seul un compte créé garde un historique cumulé dans la durée.
     if(isGuest && s.lastActiveDate !== today){
-      s.eddies = {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0};
+      const wasFirstEver = !s.lastActiveDate;
+      s = defaultStats();
+      s.lastActiveDate = today;
+      s.activityStreak = 1; s.bestActivityStreak = Math.max(1, wasFirstEver?1:0);
       changed = true;
     }
     if(s.lastActiveDate !== today){
@@ -1705,7 +1742,7 @@ function startBlitz(){
     if(blitzTimeLeft<=0){
       clearInterval(blitzTimer); blitzActive = false; blitzInput.disabled = true;
       blitzBanner.className = "banner win";
-      blitzBanner.innerHTML = t('blitz_timeup')+' '+blitzScore+'<span class="sub">'+t('blitz_answer')+' '+blitzSecret.n+'. <span class="rw">'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'</span></span>';
+      blitzBanner.innerHTML = t('blitz_timeup')+' '+blitzScore+'<span class="sub">'+t('blitz_answer')+' '+blitzSecret.n+'. <span class="rw">'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'</span></span>'+shareButtonHTML('shareBlitz');
       loadStats().then(s=>{
         s.blitzSessions = (s.blitzSessions||0)+1;
         s.blitzBestScore = Math.max(s.blitzBestScore||0, blitzScore);
@@ -1746,7 +1783,7 @@ setupAutocomplete(endlessInput, endlessSugg, (card)=>{
   endlessBody.insertAdjacentHTML('beforeend', row);
   endlessGuesses.push(card.n);
   if(win){
-    const reward = computeReward(endlessGuesses.length);
+    const reward = endlessReward(endlessGuesses.length);
     endlessBanner.className = "banner win";
     endlessBanner.innerHTML = t('endless_found')+' '+endlessSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', endlessGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(endlessSecret)+' <button class="bigbtn" id="playAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
     loadStats().then(s=>{
@@ -1807,7 +1844,7 @@ function initAbility(){
     if(s.lastAbilityPlayed === today && s.abilityWon){
       abilitySolved = true; abilityInput.disabled = true;
       abilityBanner.className = "banner win";
-      abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastAbilityReward||0)+'</span></span>'+revealCardHTML(abilitySecret);
+      abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastAbilityReward||0)+'</span></span>'+revealCardHTML(abilitySecret)+shareButtonHTML('shareAbility');
     }
   });
 }
@@ -1821,7 +1858,7 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
     abilitySolved = true; abilityInput.disabled = true;
     const reward = computeReward(abilityGuesses.length);
     abilityBanner.className = "banner win";
-    abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub">'+t('win_tries').replace('{n}', abilityGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(abilitySecret);
+    abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub">'+t('win_tries').replace('{n}', abilityGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(abilitySecret)+shareButtonHTML('shareAbility');
     const today = todayUTCString();
     loadStats().then(s=>{
       if(s.lastAbilityPlayed !== today || !s.abilityWon){
@@ -1893,10 +1930,10 @@ function initArt(){
       applyArtBlur(6);
       if(s.artWon){
         artBanner.className = "banner win";
-        artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>';
+        artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>'+shareButtonHTML('shareArt');
       } else {
         artBanner.className = "banner fail";
-        artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
+        artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareArt');
       }
     } else {
       loadInProgress('art', today).then(data=>{
@@ -1926,7 +1963,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
     applyArtBlur(6);
     const reward = ART_REWARD_TABLE[artAttempt-1];
     artBanner.className = "banner win";
-    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+shareButtonHTML('shareArt');
     loadStats().then(s=>{
       if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
         s.lastArtPlayed = today; s.artWon = true; s.artLost = false;
@@ -1949,7 +1986,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
       artSolved = true; artInput.disabled = true;
       applyArtBlur(6);
       artBanner.className = "banner fail";
-      artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
+      artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareArt');
       loadStats().then(s=>{
         if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
           s.lastArtPlayed = today; s.artWon = false; s.artLost = true;
@@ -2018,7 +2055,7 @@ function endChrome(){
       '<span class="recap-reward">+'+h.reward+'</span>'+
       '</div>';
   }).join('');
-  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+'<div class="chrome-recap">'+recap+'<div class="chrome-recap-total">'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'</div></div>';
+  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+'<div class="chrome-recap">'+recap+'<div class="chrome-recap-total">'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'</div></div>'+shareButtonHTML('shareChrome');
 }
 function chromeAnswer(userSaysTrue){
   if(!chromeActive) return;
