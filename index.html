@@ -593,7 +593,19 @@ function shareBlitz(btn){
   shareToClipboard(text, btn);
 }
 function shareChrome(btn){
-  const text = 'Choomdle Chrome Check\n'+t('chrome_timeup')+' '+chromeScore+'\n'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'\nchoomdle.com';
+  const totalCorrect = chromeHistory.filter(h=>h.correct).length;
+  const totalWrong = chromeHistory.filter(h=>!h.correct).length;
+  const text = 'Choomdle Chrome Check — '+todayUTCString()+'\n'+t('chrome_timeup')+' '+chromeScore+'\n🟩='+totalCorrect+' 🟥='+totalWrong+'\n'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareSequence(btn){
+  const rows = sequenceAttemptHistory.map(h=>{
+    return '🟩='+h.correct+(h.wrong>0 ? ' 🟥='+h.wrong : ' ');
+  }).join('\n');
+  const resultLine = sequenceAttemptHistory.length && sequenceAttemptHistory[sequenceAttemptHistory.length-1].wrong===0
+    ? t('win_tries').replace('{n}', sequenceAttemptHistory.length)
+    : t('sequence_lose');
+  const text = 'Choomdle Sequence — '+todayUTCString()+'\n'+rows+'\n'+resultLine+'\nchoomdle.com';
   shareToClipboard(text, btn);
 }
 async function shareStats(btn){
@@ -2123,7 +2135,7 @@ setupAutocomplete(breachInput, breachSugg, (card)=>{
 }, ()=>breachGuesses);
 
 // ======================= SEQUENCE (classer 5 cartes par ordre croissant, défi quotidien) =======================
-let sequenceCards = [], sequenceDisplayOrder = [], sequenceAttr = 'c', sequenceSolved = false, sequenceTries = 0;
+let sequenceCards = [], sequenceDisplayOrder = [], sequenceAttr = 'c', sequenceSolved = false, sequenceTries = 0, sequenceAttemptHistory = [];
 const SEQUENCE_REWARD_TABLE = [100,80,60,40,20]; // récompense selon la tentative (1re à 5e) en cas de victoire
 function buildSequencePuzzle(seedStr){
   const rng = seededRng(seedStr);
@@ -2153,7 +2165,7 @@ function initSequence(){
   document.getElementById('sequenceInstruction').innerHTML = t('sequence_instruction').replace('{attr}', '<span class="hl">'+sequenceAttrLabel(sequenceAttr)+'</span>');
   const rng = seededRng(today+"-sequence-order");
   sequenceDisplayOrder = seededShuffle(sequenceCards.map((c,i)=>i), rng);
-  sequenceSolved = false; sequenceTries = 0;
+  sequenceSolved = false; sequenceTries = 0; sequenceAttemptHistory = [];
   document.getElementById('sequenceBanner').className = 'banner'; document.getElementById('sequenceBanner').innerHTML = '';
   renderSequence();
   loadStats().then(s=>{
@@ -2211,7 +2223,7 @@ function showSequenceEndBanner(won, reward){
     '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'
   ).join('');
   banner.innerHTML = t('sequence_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+
-    '<div class="seq-compare seq-compare-single">'+rows+'</div>';
+    '<div class="seq-compare seq-compare-single">'+rows+'</div>'+shareButtonHTML('shareSequence');
 }
 function showSequenceLossBanner(){
   const banner = document.getElementById('sequenceBanner');
@@ -2227,7 +2239,7 @@ function showSequenceLossBanner(){
   }).join('');
   banner.innerHTML = t('sequence_lose')+
     '<div class="seq-compare"><div class="seq-compare-header"><span>'+t('sequence_your_order')+'</span><span>'+t('sequence_correct_order')+'</span></div>'+rows+'</div>'+
-    '<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>';
+    '<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareSequence');
 }
 document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
   if(sequenceSolved) return;
@@ -2235,15 +2247,17 @@ document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
   saveInProgress('sequence', todayUTCString(), {order: sequenceDisplayOrder, tries: sequenceTries});
   const rows = document.querySelectorAll('#sequenceList .sequence-row');
   let allCorrect = true;
+  let correctCount = 0;
   sequenceDisplayOrder.forEach((cardIdx, pos)=>{
     const isCorrect = cardIdx === pos; // rangé par ordre croissant = l'index d'origine (déjà trié) doit correspondre à la position
     rows[pos].classList.remove('correct-pos','wrong-pos');
     rows[pos].classList.add(isCorrect ? 'correct-pos' : 'wrong-pos');
-    if(!isCorrect) allCorrect = false;
+    if(isCorrect) correctCount++; else allCorrect = false;
     // Indice : + la carte doit monter, - elle doit descendre, = elle est bien placée.
     const hint = document.getElementById('sequenceHint-'+pos);
     if(hint) hint.textContent = isCorrect ? '=' : (cardIdx < pos ? '+' : '-');
   });
+  sequenceAttemptHistory.push({correct: correctCount, wrong: sequenceDisplayOrder.length - correctCount});
   if(allCorrect){
     sequenceSolved = true;
     const reward = SEQUENCE_REWARD_TABLE[sequenceTries-1] || 0;
