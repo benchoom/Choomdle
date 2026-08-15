@@ -592,6 +592,10 @@ function shareBlitz(btn){
   const text = 'Choomdle Blitz\n'+t('blitz_timeup')+' '+blitzScore+'\n'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'\nchoomdle.com';
   shareToClipboard(text, btn);
 }
+function shareCommunityRank(title, rank, value, btn){
+  const text = 'Choomdle — '+title+'\n#'+rank+' — '+value+' eddies\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
 function shareChrome(btn){
   const totalCorrect = chromeHistory.filter(h=>h.correct).length;
   const totalWrong = chromeHistory.filter(h=>!h.correct).length;
@@ -634,7 +638,8 @@ async function shareAchievements(btn){
   const total = ACHIEVEMENTS.length;
   const filled = Math.round((unlocked/total)*10);
   const bar = '🟨'.repeat(filled) + '⬛'.repeat(10-filled);
-  const text = 'Choomdle — '+t('achievements_title')+' : '+unlocked+'/'+total+'\n'+bar+'\nchoomdle.com';
+  const rarity = rarityForCount(unlocked);
+  const text = 'Choomdle — '+t('achievements_title')+' : '+unlocked+'/'+total+' ('+t(rarity.key)+')\n'+bar+'\nchoomdle.com';
   shareToClipboard(text, btn);
 }
 
@@ -1173,13 +1178,19 @@ function podiumHTML(title, rows, keyFn){
     html += '<div class="podiumrow'+(isMe?' podiumrow-me':'')+'"><span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
   });
   // Si le joueur connecté n'est pas dans le top 50, on l'affiche séparément avec son vrai rang.
+  let myRank = null, myValue = null;
   if(currentPseudo){
     const myIndex = sorted.findIndex(r=>r.pseudo === currentPseudo);
+    if(myIndex > -1){ myRank = myIndex+1; myValue = keyFn(sorted[myIndex]); }
     if(myIndex >= 50){
       const r = sorted[myIndex];
       html += '<div class="podium-separator"></div>';
       html += '<div class="podiumrow podiumrow-me"><span>#'+(myIndex+1)+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
     }
+  }
+  if(myRank !== null){
+    const safeTitle = title.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    html += '<button class="share-btn" style="margin:8px 0 0;font-size:10px;padding:6px 12px;" onclick="shareCommunityRank(\''+safeTitle+'\','+myRank+','+myValue+',this)">'+t('share_button')+'</button>';
   }
   html += '</div>';
   return html;
