@@ -354,7 +354,9 @@
     </div>
     <div class="hint" data-i18n="community_hint" style="margin-bottom:6px;">Classement basé sur les eddies et séries publiés volontairement par les joueurs (pseudo visible de tous).</div>
     <div class="hint" data-i18n="eddies_purpose" style="margin-bottom:6px;">Les eddies ne servent qu'au classement communautaire et à tes stats — aucune autre utilité.</div>
+    <button class="share-btn" onclick="shareAllRanks(this)" data-i18n="share_all_ranks" style="margin:0 auto 14px;">Partager tous mes rangs</button>
     <div class="podiumgrid" id="podiumGrid"></div>
+    <button class="share-btn" onclick="shareAllRanks(this)" data-i18n="share_all_ranks">Partager tous mes rangs</button>
   </div>
 
   <!-- STATS -->
@@ -631,6 +633,7 @@ async function shareStats(btn){
   ];
   shareToClipboard(lines.join('\n'), btn);
 }
+const RARITY_EMOJI = { common:'🔽', uncommon:'🔼', rare:'🔷', epic:'💠', secret:'🔶', iconic:'✴️', nova:'🌟' };
 async function shareAchievements(btn){
   const s = await loadStats();
   let unlocked = 0;
@@ -639,7 +642,8 @@ async function shareAchievements(btn){
   const filled = Math.round((unlocked/total)*10);
   const bar = '🟨'.repeat(filled) + '⬛'.repeat(10-filled);
   const rarity = rarityForCount(unlocked);
-  const text = 'Choomdle — '+t('achievements_title')+' : '+unlocked+'/'+total+' ('+t(rarity.key)+')\n'+bar+'\nchoomdle.com';
+  const emoji = RARITY_EMOJI[rarity.id] || '';
+  const text = 'Choomdle — '+t('achievements_title')+' : '+unlocked+'/'+total+' ('+emoji+' '+t(rarity.key)+' '+emoji+')\n'+bar+'\nchoomdle.com';
   shareToClipboard(text, btn);
 }
 
@@ -1195,25 +1199,47 @@ function podiumHTML(title, rows, keyFn){
   html += '</div>';
   return html;
 }
+function communityCategories(){
+  return [
+    [t('podium_cumul'), r=>r.eddiesTotal||0],
+    [t('podium_classic'), r=>(r.eddies&&r.eddies.classic)||0],
+    [t('podium_legend'), r=>(r.eddies&&r.eddies.legend)||0],
+    [t('podium_blitz'), r=>(r.eddies&&r.eddies.blitz)||0],
+    [t('podium_endless'), r=>(r.eddies&&r.eddies.endless)||0],
+    [t('podium_ability'), r=>(r.eddies&&r.eddies.ability)||0],
+    [t('podium_art'), r=>(r.eddies&&r.eddies.art)||0],
+    [t('podium_chrome'), r=>(r.eddies&&r.eddies.chrome)||0],
+    [t('podium_cardslink'), r=>(r.eddies&&r.eddies.cardslink)||0],
+    [t('podium_sequence'), r=>(r.eddies&&r.eddies.sequence)||0],
+  ];
+}
 async function renderCommunity(){
   loadStats().then(s=>{ if(!s.communityVisited){ s.communityVisited = true; saveStats(s); } });
   const grid = document.getElementById('podiumGrid');
   grid.innerHTML = '<div class="podiumbox">…</div>';
   try{
     const rows = await loadCommunityRows();
-    grid.innerHTML =
-      podiumHTML(t('podium_cumul'), rows, r=>r.eddiesTotal||0) +
-      podiumHTML(t('podium_classic'), rows, r=>(r.eddies&&r.eddies.classic)||0) +
-      podiumHTML(t('podium_legend'), rows, r=>(r.eddies&&r.eddies.legend)||0) +
-      podiumHTML(t('podium_blitz'), rows, r=>(r.eddies&&r.eddies.blitz)||0) +
-      podiumHTML(t('podium_endless'), rows, r=>(r.eddies&&r.eddies.endless)||0) +
-      podiumHTML(t('podium_ability'), rows, r=>(r.eddies&&r.eddies.ability)||0) +
-      podiumHTML(t('podium_art'), rows, r=>(r.eddies&&r.eddies.art)||0) +
-      podiumHTML(t('podium_chrome'), rows, r=>(r.eddies&&r.eddies.chrome)||0) +
-      podiumHTML(t('podium_cardslink'), rows, r=>(r.eddies&&r.eddies.cardslink)||0) +
-      podiumHTML(t('podium_sequence'), rows, r=>(r.eddies&&r.eddies.sequence)||0);
+    grid.innerHTML = communityCategories().map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
   }catch(e){
     grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
+  }
+}
+async function shareAllRanks(btn){
+  try{
+    const rows = await loadCommunityRows();
+    const lines = [];
+    communityCategories().forEach(([title,keyFn])=>{
+      if(!currentPseudo) return;
+      const sorted = rows.slice().sort((a,b)=>keyFn(b)-keyFn(a));
+      const myIndex = sorted.findIndex(r=>r.pseudo === currentPseudo);
+      if(myIndex > -1){
+        lines.push(title+': #'+(myIndex+1)+' — '+keyFn(sorted[myIndex])+' eddies');
+      }
+    });
+    const text = 'Choomdle — '+t('community_title')+'\n'+(lines.length ? lines.join('\n') : '—')+'\nchoomdle.com';
+    shareToClipboard(text, btn);
+  }catch(e){
+    shareToClipboard('Choomdle — '+t('community_title')+'\nchoomdle.com', btn);
   }
 }
 
