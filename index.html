@@ -424,7 +424,10 @@
 // Les cartes viennent des fichiers de sets inclus plus haut (voir sets/wnc.js, sets/promo.js).
 // Pour ajouter un futur set : inclue son <script src="sets/xxx.js"> dans le <head>,
 // puis ajoute sa variable ici, ex: const CARDS = [...WNC_CARDS, ...PROMO_CARDS, ...XXX_CARDS];
-const CARDS = [...WNC_CARDS, ...PROMO_CARDS];
+// ⚠️ PROMO_CARDS volontairement exclues du pool actif pour le moment (mises de côté pour plus
+// tard, sur demande de Benjamin le 15/08/2026). Les données restent dans sets/promo.js, prêtes
+// à être réintégrées d'un coup en remettant simplement ", ...PROMO_CARDS" ci-dessous.
+const CARDS = [...WNC_CARDS];
 
 // ======================= I18N =======================
 // Traductions maison, correctes pour un usage fan/hobby. Une relecture native
