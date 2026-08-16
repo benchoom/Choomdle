@@ -2399,6 +2399,21 @@ function seededShuffle(arr, rng){
   return a;
 }
 
+// Un mot-clé ({Go Solo}, {Attack}, Adrenaline...) ne compte comme "la carte a cette capacité" que
+// s'il démarre le texte ou une nouvelle clause (juste après ". " ou ") "). Une simple mention en
+// plein milieu de phrase (ex: "Rivals must pay +2 €$ to use {Go Solo}") ne compte pas — la carte
+// ne fait alors que RÉFÉRENCER la capacité, sans l'avoir elle-même.
+function hasOwnAbility(text, needle){
+  if(!text) return false;
+  let idx = text.indexOf(needle);
+  while(idx !== -1){
+    if(idx === 0) return true;
+    const prefix2 = text.slice(idx-2, idx);
+    if(prefix2 === '. ' || prefix2 === ') ') return true;
+    idx = text.indexOf(needle, idx+1);
+  }
+  return false;
+}
 function cardsLinkCategoryDefs(){
   const defs = [];
   const byType = {Legend:t('cl_cat_legends'), Unit:t('cl_cat_units'), Gear:t('cl_cat_gear'), Program:t('cl_cat_programs')};
@@ -2421,11 +2436,11 @@ function cardsLinkCategoryDefs(){
   });
   const kw = [
     ['{Go Solo}', t('cl_cat_gosolo')], ['{Blocker}', t('cl_cat_blocker')], ['{Attack}', t('cl_cat_attack')],
-    ['{Play}', t('cl_cat_play')], ['{Quick}', t('cl_cat_quick')], ['Adrenaline', t('cl_cat_adrenaline')],
+    ['{Play}', t('cl_cat_play')], ['{Quick}', t('cl_cat_quick')], ['{Adrenaline}', t('cl_cat_adrenaline')],
     ['{Call}', t('cl_cat_call')], ['{Defeated}', t('cl_cat_defeated')], ['{Spend}', t('cl_cat_spend')],
   ];
   kw.forEach(([needle,label])=>{
-    defs.push({ label, filter: c=>c.text && c.text.includes(needle) });
+    defs.push({ label, filter: c=>c.text && hasOwnAbility(c.text, needle) });
   });
   defs.push({ label: t('cl_cat_dice'), filter: c=>c.text && /\bd(4|6|20)\b|Gig/i.test(c.text) });
   defs.push({ label: t('cl_cat_noability'), filter: c=>!c.text || c.text.trim()==='' });
