@@ -2793,6 +2793,29 @@ initFeedback();
 })();
 document.getElementById('publishStatsBtn').addEventListener('click', publishStats);
 applyFeatureFlags();
+
+// ======================= PROTECTION CONTRE LES ESSAIS D'UN AUTRE JOUR =======================
+// Deux cas peuvent laisser un onglet affiché avec les essais/la carte de la veille au lieu du
+// jour courant :
+// 1) Le navigateur restaure la page depuis son "bfcache" (retour arrière/onglet resté ouvert
+//    puis "rafraîchi") : tout le JS reste figé tel qu'il était, sans jamais revérifier la date.
+//    On force alors un vrai rechargement réseau.
+// 2) L'onglet reste simplement ouvert sans être rechargé pendant que minuit UTC passe : on
+//    revérifie la date à chaque fois que l'onglet redevient visible/actif, et on relance les
+//    jeux quotidiens si le jour a changé, sans attendre un rechargement manuel.
+window.addEventListener('pageshow', function(event){
+  if(event.persisted){ location.reload(); }
+});
+let lastKnownDailyDate = todayUTCString();
+function recheckDailyDateRollover(){
+  const now = todayUTCString();
+  if(now !== lastKnownDailyDate){
+    lastKnownDailyDate = now;
+    initClassic(); initLegend(); initAbility(); initArt(); initCardsLink(); initSequence();
+  }
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') recheckDailyDateRollover(); });
+window.addEventListener('focus', recheckDailyDateRollover);
 </script>
 </body>
 </html>
