@@ -438,8 +438,9 @@
   .podiumrow-cumul{ align-items:center; }
   .podiumrow-cumul > span:first-child{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .podiumrow-rarity{
-    display:flex; align-items:center; gap:5px; color:var(--cyan); font-size:11px; white-space:nowrap;
-    font-family:'Chakra Petch',sans-serif; font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:5px; color:var(--cyan); font-size:11px; white-space:nowrap;
+    font-family:'Chakra Petch',sans-serif; font-weight:600; text-align:center;
+    width:150px; flex-shrink:0; margin-right:18px;
   }
   .podiumrow-rarity-icon{ width:14px; height:14px; display:inline-flex; }
   .podiumrow-rarity-icon svg{ width:14px; height:14px; }
