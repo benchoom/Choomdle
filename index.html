@@ -1151,17 +1151,26 @@ async function loadCommunityRows(){
   if(supabaseReady){
     try{
       const { data, error } = await supabaseClient.from('stats')
-        .select('streak, best_streak, eddies_classic, eddies_legend, eddies_blitz, eddies_endless, eddies_chrome, eddies_ability, eddies_art, meta, profiles(pseudo)')
+        .select('*, profiles(pseudo)')
         .limit(500);
       if(error) throw error;
       return (data||[]).map(r=>{
-        const cardslink = (r.meta && r.meta.eddies_cardslink) || 0; // eddies Cards Link/Sequence stockés dans meta (pas de colonne dédiée)
-        const sequence = (r.meta && r.meta.eddies_sequence) || 0;
+        const meta = r.meta || {};
+        const cardslink = meta.eddies_cardslink || 0; // eddies Cards Link/Sequence stockés dans meta (pas de colonne dédiée)
+        const sequence = meta.eddies_sequence || 0;
+        // On réutilise statsRowToLocal (même logique que pour nos propres stats) pour pouvoir
+        // calculer le nombre de succès débloqués et le palier de rareté de chaque joueur.
+        let unlocked = 0;
+        try{
+          const localShape = statsRowToLocal(r);
+          ACHIEVEMENTS.forEach(a=>{ try{ if(a.check(localShape)) unlocked++; }catch(e){} });
+        }catch(e){}
         return {
           pseudo: (r.profiles && r.profiles.pseudo) || "Choomer",
           streak: r.streak, bestStreak: r.best_streak,
           eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art, cardslink, sequence },
-          eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink+sequence
+          eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink+sequence,
+          achievementsUnlocked: unlocked
         };
       });
     }catch(e){ return []; }
@@ -1178,11 +1187,11 @@ function podiumHTML(title, rows, keyFn){
   const sorted = rows.slice().sort((a,b)=>keyFn(b)-keyFn(a));
   const medals = ["🥇","🥈","🥉"];
   const top = sorted.slice(0,50);
-  let html = '<div class="podiumbox"><h4>'+title+'</h4>';
-  if(!sorted.length){ html += '<div class="podiumrow"><span>—</span></div>'; }
+  let rowsHtml = '';
+  if(!sorted.length){ rowsHtml += '<div class="podiumrow"><span>—</span></div>'; }
   top.forEach((r,i)=>{
     const isMe = currentPseudo && r.pseudo === currentPseudo;
-    html += '<div class="podiumrow'+(isMe?' podiumrow-me':'')+'"><span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
+    rowsHtml += '<div class="podiumrow'+(isMe?' podiumrow-me':'')+'"><span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
   });
   // Si le joueur connecté n'est pas dans le top 50, on l'affiche séparément avec son vrai rang.
   let myRank = null, myValue = null;
@@ -1191,10 +1200,47 @@ function podiumHTML(title, rows, keyFn){
     if(myIndex > -1){ myRank = myIndex+1; myValue = keyFn(sorted[myIndex]); }
     if(myIndex >= 50){
       const r = sorted[myIndex];
-      html += '<div class="podium-separator"></div>';
-      html += '<div class="podiumrow podiumrow-me"><span>#'+(myIndex+1)+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
+      rowsHtml += '<div class="podium-separator"></div>';
+      rowsHtml += '<div class="podiumrow podiumrow-me"><span>#'+(myIndex+1)+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
     }
   }
+  let html = '<div class="podiumbox"><h4>'+title+'</h4><div class="podiumbox-rows">'+rowsHtml+'</div>';
+  if(myRank !== null){
+    const safeTitle = title.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    html += '<button class="share-btn" style="margin:8px 0 0;font-size:10px;padding:6px 12px;" onclick="shareCommunityRank(\''+safeTitle+'\','+myRank+','+myValue+',this)">'+t('share_button')+'</button>';
+  }
+  html += '</div>';
+  return html;
+}
+function cumulativePodiumHTML(title, rows){
+  const sorted = rows.slice().sort((a,b)=>b.eddiesTotal-a.eddiesTotal);
+  const medals = ["🥇","🥈","🥉"];
+  const top = sorted.slice(0,50);
+  let rowsHtml = '';
+  if(!sorted.length){ rowsHtml += '<div class="podiumrow"><span>—</span></div>'; }
+  top.forEach((r,i)=>{
+    const isMe = currentPseudo && r.pseudo === currentPseudo;
+    const rarity = rarityForCount(r.achievementsUnlocked||0);
+    rowsHtml += '<div class="podiumrow podiumrow-cumul'+(isMe?' podiumrow-me':'')+'">'+
+      '<span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span>'+
+      '<span class="podiumrow-rarity"><span class="podiumrow-rarity-icon">'+RARITY_ICONS[rarity.id]+'</span>'+t(rarity.key)+' · '+(r.achievementsUnlocked||0)+'/'+ACHIEVEMENTS.length+'</span>'+
+      '<span class="val">'+r.eddiesTotal+'</span></div>';
+  });
+  let myRank = null, myValue = null;
+  if(currentPseudo){
+    const myIndex = sorted.findIndex(r=>r.pseudo === currentPseudo);
+    if(myIndex > -1){ myRank = myIndex+1; myValue = sorted[myIndex].eddiesTotal; }
+    if(myIndex >= 50){
+      const r = sorted[myIndex];
+      const rarity = rarityForCount(r.achievementsUnlocked||0);
+      rowsHtml += '<div class="podium-separator"></div>';
+      rowsHtml += '<div class="podiumrow podiumrow-cumul podiumrow-me">'+
+        '<span>#'+(myIndex+1)+' '+r.pseudo+'</span>'+
+        '<span class="podiumrow-rarity"><span class="podiumrow-rarity-icon">'+RARITY_ICONS[rarity.id]+'</span>'+t(rarity.key)+' · '+(r.achievementsUnlocked||0)+'/'+ACHIEVEMENTS.length+'</span>'+
+        '<span class="val">'+r.eddiesTotal+'</span></div>';
+    }
+  }
+  let html = '<div class="podiumbox podiumbox-cumul"><h4>'+title+'</h4><div class="podiumbox-rows">'+rowsHtml+'</div>';
   if(myRank !== null){
     const safeTitle = title.replace(/'/g,"\\'").replace(/"/g,'&quot;');
     html += '<button class="share-btn" style="margin:8px 0 0;font-size:10px;padding:6px 12px;" onclick="shareCommunityRank(\''+safeTitle+'\','+myRank+','+myValue+',this)">'+t('share_button')+'</button>';
@@ -1222,7 +1268,10 @@ async function renderCommunity(){
   grid.innerHTML = '<div class="podiumbox">…</div>';
   try{
     const rows = await loadCommunityRows();
-    grid.innerHTML = communityCategories().map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
+    const cats = communityCategories();
+    const cumulHtml = cumulativePodiumHTML(cats[0][0], rows);
+    const gamesHtml = cats.slice(1).map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
+    grid.innerHTML = cumulHtml + '<div class="podiumgrid-games">'+gamesHtml+'</div>';
   }catch(e){
     grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
   }

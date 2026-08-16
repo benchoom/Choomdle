@@ -423,13 +423,26 @@
   @keyframes glitchf{ 0%{ filter:hue-rotate(90deg) contrast(1.6); } 100%{ filter:none; } }
 
   /* Community podiums */
-  .podiumgrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:10px; }
-  .podiumbox{ background:var(--bg2); border:1px solid var(--line); padding:12px; }
-  .podiumbox h4{ margin:0 0 8px; font-family:'Chakra Petch',sans-serif; font-size:12px; letter-spacing:.06em; color:var(--cyan); text-transform:uppercase; }
-  .podiumbox{ max-height:420px; overflow-y:auto; }
-  .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); }
+  .podiumgrid{ margin-top:10px; }
+  .podiumgrid-games{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:14px; }
+  @media (max-width:760px){ .podiumgrid-games{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:520px){ .podiumgrid-games{ grid-template-columns:1fr; } }
+  .podiumbox{ background:var(--bg2); border:1px solid var(--line); padding:12px; display:flex; flex-direction:column; }
+  .podiumbox h4{ margin:0 0 8px; font-family:'Chakra Petch',sans-serif; font-size:12px; letter-spacing:.06em; color:var(--cyan); text-transform:uppercase; flex-shrink:0; }
+  .podiumbox-rows{ max-height:360px; overflow-y:auto; flex-shrink:1; }
+  .podiumbox-cumul{ width:100%; }
+  .podiumbox-cumul .podiumbox-rows{ max-height:480px; }
+  .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); gap:8px; }
   .podiumrow:last-child{ border-bottom:none; }
-  .podiumrow .val{ color:var(--yellow); font-weight:700; }
+  .podiumrow .val{ color:var(--yellow); font-weight:700; white-space:nowrap; }
+  .podiumrow-cumul{ align-items:center; }
+  .podiumrow-cumul > span:first-child{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .podiumrow-rarity{
+    display:flex; align-items:center; gap:5px; color:var(--cyan); font-size:11px; white-space:nowrap;
+    font-family:'Chakra Petch',sans-serif; font-weight:600;
+  }
+  .podiumrow-rarity-icon{ width:14px; height:14px; display:inline-flex; }
+  .podiumrow-rarity-icon svg{ width:14px; height:14px; }
   .podiumrow-me{ background:rgba(244,228,9,.14); }
   .podiumrow-me span:first-child{ color:var(--yellow); font-weight:700; }
   .podium-separator{ border-top:2px solid var(--cyan); margin:8px 0; opacity:.7; }
