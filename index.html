@@ -420,6 +420,11 @@
 <script src="/sets/promo.js?v=20260818"></script>
 <script src="/i18n.js?v=20260818"></script>
 <script>
+// Nettoyage immédiat d'un éventuel "#" résiduel dans l'URL (ex: résidu du flux de connexion
+// Google), avant même le reste du script — garantit une adresse propre dans tous les cas.
+if(window.location.hash){
+  try{ window.history.replaceState({}, document.title, window.location.pathname + window.location.search); }catch(e){}
+}
 // ======================= CARTES =======================
 // Les cartes viennent des fichiers de sets inclus plus haut (voir sets/wnc.js, sets/promo.js).
 // Pour ajouter un futur set : inclue son <script src="sets/xxx.js"> dans le <head>,
@@ -2823,10 +2828,22 @@ function applyFeatureFlags(){
 
 // ======================= INIT =======================
 initLangSelect();
-// Langue déduite de l'URL (/fr, /es, ...) si présente et reconnue, sinon anglais par défaut.
+// Langue déduite de l'URL (/fr, /es, ...) si présente et reconnue. Sinon, on utilise la langue
+// mémorisée d'une visite précédente (localStorage) si elle existe, sinon l'anglais par défaut —
+// et dans les deux cas, l'URL visible est mise à jour pour refléter la vraie langue utilisée
+// (juste l'adresse affichée, via replaceState : aucune vraie redirection HTTP, donc aucun risque
+// de boucle comme on a pu en avoir avec les redirections serveur).
 (function(){
   const seg = window.location.pathname.replace(/^\/+|\/+$/g, '');
-  const lang = LANG_LABELS[seg] ? seg : "en";
+  let lang;
+  if(LANG_LABELS[seg]){
+    lang = seg;
+  } else {
+    let remembered = null;
+    try{ remembered = localStorage.getItem('choomdle:lang'); }catch(e){}
+    lang = (remembered && LANG_LABELS[remembered]) ? remembered : "en";
+    try{ window.history.replaceState({}, document.title, '/'+lang); }catch(e){}
+  }
   applyLanguage(lang);
   const btn = document.getElementById('langSelectBtn');
   if(btn) btn.textContent = lang.toUpperCase() + ' ▾';
