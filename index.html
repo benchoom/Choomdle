@@ -2045,6 +2045,7 @@ function initArt(){
   artGuesses = []; artSolved = false; artAttempt = 1;
   artBody.innerHTML = ""; artBanner.className = "banner"; artBanner.innerHTML = "";
   artInput.disabled = false;
+  document.querySelector('.art-frame').style.display = '';
   showArtImage(artSecret);
   applyArtBlur(1);
   // Restaure les essais déjà faits aujourd'hui (compte si connecté, sinon cache navigateur) —
@@ -2068,6 +2069,7 @@ function initArt(){
       applyArtBlur(6);
       document.getElementById('artCanvas').style.display = 'none';
     document.getElementById('artPlaceholder').style.display = 'none';
+    document.querySelector('.art-frame').style.display = 'none';
       if(s.artWon){
         artBanner.className = "banner win";
         artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
@@ -2090,6 +2092,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
     applyArtBlur(6);
     document.getElementById('artCanvas').style.display = 'none';
     document.getElementById('artPlaceholder').style.display = 'none';
+    document.querySelector('.art-frame').style.display = 'none';
     const reward = ART_REWARD_TABLE[artAttempt-1];
     artBanner.className = "banner win";
     artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
@@ -2116,6 +2119,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
       applyArtBlur(6);
       document.getElementById('artCanvas').style.display = 'none';
     document.getElementById('artPlaceholder').style.display = 'none';
+    document.querySelector('.art-frame').style.display = 'none';
       artBanner.className = "banner fail";
       artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
       loadStats().then(s=>{
