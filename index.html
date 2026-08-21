@@ -1713,7 +1713,7 @@ function initClassic(){
     if(!data || !data.guesses) return;
     data.guesses.forEach(name=>{
       const card = CARDS.find(c=>c.n===name);
-      if(card && !classicSolved){
+      if(card){
         const {row} = renderRow(card, classicSecret);
         classicBody.insertAdjacentHTML('beforeend', row);
         classicGuesses.push(name);
@@ -1939,7 +1939,7 @@ function initAbility(){
     if(!data || !data.guesses) return;
     data.guesses.forEach(name=>{
       const card = CARDS.find(c=>c.n===name);
-      if(card && !abilitySolved){
+      if(card){
         const {row} = renderRow(card, abilitySecret);
         abilityBody.insertAdjacentHTML('beforeend', row);
         abilityGuesses.push(name);
