@@ -1697,19 +1697,18 @@ async function loadInProgress(gameKey, dateStr){
       if(obj.date === dateStr) fromLocal = obj.data;
     }
   }catch(e){}
-  if(supabaseReady && currentSession){
-    const s = await loadStats();
-    let fromRemote = null;
-    if(s.inProgress && s.inProgress[gameKey] && s.inProgress[gameKey].date === dateStr){
-      fromRemote = s.inProgress[gameKey].data;
-    }
-    // On garde la source la plus complète (le plus d'essais), peu importe si c'est le compte
-    // ou le cache du navigateur qui l'a — évite tout souci si l'une des deux sources arrive
-    // en retard ou n'a pas encore été synchronisée (ex: connexion en pleine partie).
-    const countOf = d => (d && d.guesses) ? d.guesses.length : 0;
-    return countOf(fromRemote) >= countOf(fromLocal) ? fromRemote : fromLocal;
+  // La sauvegarde de l'essai gagnant/perdant est fusionnée directement dans les stats (pour
+  // éviter une course entre deux écritures concurrentes) — on vérifie donc aussi là, que l'on
+  // soit connecté (Supabase) ou invité (loadStats lit alors le bon endroit du navigateur).
+  const s = await loadStats();
+  let fromStats = null;
+  if(s.inProgress && s.inProgress[gameKey] && s.inProgress[gameKey].date === dateStr){
+    fromStats = s.inProgress[gameKey].data;
   }
-  return fromLocal;
+  // On garde la source la plus complète (le plus d'essais), peu importe laquelle des deux
+  // l'a — évite tout souci si l'une des deux arrive en retard ou n'est pas encore à jour.
+  const countOf = d => (d && d.guesses) ? d.guesses.length : 0;
+  return countOf(fromStats) >= countOf(fromLocal) ? fromStats : fromLocal;
 }
 function initClassic(){
   const today = todayUTCString();
