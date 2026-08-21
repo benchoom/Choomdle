@@ -420,9 +420,11 @@
 <script src="/sets/promo.js?v=20260818"></script>
 <script src="/i18n.js?v=20260818"></script>
 <script>
-// Nettoyage immédiat d'un éventuel "#" résiduel dans l'URL (ex: résidu du flux de connexion
-// Google), avant même le reste du script — garantit une adresse propre dans tous les cas.
-if(window.location.hash){
+// Nettoyage d'un "#" résiduel VIDE dans l'URL uniquement (ex: laissé par erreur quelque part).
+// Important : on ne touche JAMAIS un hash qui contient du contenu (ex: #access_token=... utilisé
+// par Supabase juste après une connexion Google) — sinon on supprime le jeton de connexion avant
+// même que Supabase ait pu l'utiliser pour établir la session.
+if(window.location.hash === '#'){
   try{ window.history.replaceState({}, document.title, window.location.pathname + window.location.search); }catch(e){}
 }
 // ======================= CARTES =======================
