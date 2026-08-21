@@ -1689,29 +1689,27 @@ function saveInProgress(gameKey, dateStr, data){
   }
 }
 async function loadInProgress(gameKey, dateStr){
-  if(supabaseReady && currentSession){
-    const s = await loadStats();
-    if(s.inProgress && s.inProgress[gameKey] && s.inProgress[gameKey].date === dateStr){
-      return s.inProgress[gameKey].data;
-    }
-    // Repli : ces essais ont peut-être été faits en tant qu'invité juste avant la connexion
-    // (ex: connexion Google en pleine partie) et ne sont donc encore que dans le navigateur,
-    // pas encore sur le compte.
-    try{
-      const raw = localStorage.getItem('choomdle:progress:'+gameKey);
-      if(raw){
-        const obj = JSON.parse(raw);
-        if(obj.date === dateStr) return obj.data;
-      }
-    }catch(e){}
-    return null;
-  }
+  let fromLocal = null;
   try{
     const raw = localStorage.getItem('choomdle:progress:'+gameKey);
-    if(!raw) return null;
-    const obj = JSON.parse(raw);
-    return obj.date === dateStr ? obj.data : null;
-  }catch(e){ return null; }
+    if(raw){
+      const obj = JSON.parse(raw);
+      if(obj.date === dateStr) fromLocal = obj.data;
+    }
+  }catch(e){}
+  if(supabaseReady && currentSession){
+    const s = await loadStats();
+    let fromRemote = null;
+    if(s.inProgress && s.inProgress[gameKey] && s.inProgress[gameKey].date === dateStr){
+      fromRemote = s.inProgress[gameKey].data;
+    }
+    // On garde la source la plus complète (le plus d'essais), peu importe si c'est le compte
+    // ou le cache du navigateur qui l'a — évite tout souci si l'une des deux sources arrive
+    // en retard ou n'a pas encore été synchronisée (ex: connexion en pleine partie).
+    const countOf = d => (d && d.guesses) ? d.guesses.length : 0;
+    return countOf(fromRemote) >= countOf(fromLocal) ? fromRemote : fromLocal;
+  }
+  return fromLocal;
 }
 function initClassic(){
   const today = todayUTCString();
@@ -2030,6 +2028,11 @@ function showArtImage(card){
     const dw = img.width*scale, dh = img.height*scale;
     ctx.clearRect(0,0,cw,ch);
     ctx.drawImage(img, (cw-dw)/2, (ch-dh)/2, dw, dh);
+    // Bande noire sur la zone du nom de la carte (juste sous l'illustration, dans le gabarit
+    // standard WNC) — dessinée par-dessus, donc masquée à TOUS les niveaux de flou, jamais
+    // devinable même en transparence.
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, ch*0.58, cw, ch*0.18);
   };
   img.onerror = ()=>{ canvas.style.display='none'; placeholder.style.display='flex'; };
   img.src = cardImgUrl(card);
@@ -2042,6 +2045,21 @@ function initArt(){
   artInput.disabled = false;
   showArtImage(artSecret);
   applyArtBlur(1);
+  // Restaure les essais déjà faits aujourd'hui (compte si connecté, sinon cache navigateur) —
+  // indépendamment du résultat gagné/perdu, vérifié séparément juste après.
+  loadInProgress('art', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = CARDS.find(c=>c.n===name);
+      if(card){
+        const {row} = renderRow(card, artSecret);
+        artBody.insertAdjacentHTML('beforeend', row);
+        artGuesses.push(name);
+      }
+    });
+    if(data.attempt) artAttempt = data.attempt;
+    if(!artSolved) applyArtBlur(Math.min(artAttempt,6));
+  });
   loadStats().then(s=>{
     if(s.lastArtPlayed === today && (s.artWon || s.artLost)){
       artSolved = true; artInput.disabled = true;
@@ -2053,20 +2071,6 @@ function initArt(){
         artBanner.className = "banner fail";
         artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareArt');
       }
-    } else {
-      loadInProgress('art', today).then(data=>{
-        if(!data || !data.guesses || artSolved) return;
-        data.guesses.forEach(name=>{
-          const card = CARDS.find(c=>c.n===name);
-          if(card && !artSolved){
-            const {row} = renderRow(card, artSecret);
-            artBody.insertAdjacentHTML('beforeend', row);
-            artGuesses.push(name);
-          }
-        });
-        artAttempt = data.attempt || artAttempt;
-        applyArtBlur(artAttempt);
-      });
     }
   });
 }
@@ -2076,6 +2080,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
   artBody.insertAdjacentHTML('beforeend', row);
   artGuesses.push(card.n);
   const today = todayUTCString();
+  saveInProgress('art', today, {guesses: artGuesses, attempt: artAttempt});
   if(win){
     artSolved = true; artInput.disabled = true;
     applyArtBlur(6);
