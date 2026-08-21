@@ -2016,7 +2016,7 @@ function applyArtBlur(attempt){
   const canvas = document.getElementById('artCanvas');
   canvas.style.filter = 'blur('+step.blur+'px) grayscale('+step.gray+')';
 }
-function showArtImage(card){
+function showArtImage(card, revealed){
   const canvas = document.getElementById('artCanvas');
   const placeholder = document.getElementById('artPlaceholder');
   const ctx = canvas.getContext('2d');
@@ -2028,11 +2028,13 @@ function showArtImage(card){
     const dw = img.width*scale, dh = img.height*scale;
     ctx.clearRect(0,0,cw,ch);
     ctx.drawImage(img, (cw-dw)/2, (ch-dh)/2, dw, dh);
-    // Bande noire sur la zone du nom de la carte (juste sous l'illustration, dans le gabarit
-    // standard WNC) — dessinée par-dessus, donc masquée à TOUS les niveaux de flou, jamais
-    // devinable même en transparence.
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, ch*0.58, cw, ch*0.18);
+    if(!revealed){
+      // Bande noire sur la zone du nom de la carte (juste sous l'illustration, dans le gabarit
+      // standard WNC) — dessinée par-dessus, donc masquée à TOUS les niveaux de flou pendant les
+      // essais. Retirée uniquement au récapitulatif final (gagné ou perdu).
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, ch*0.58, cw, ch*0.18);
+    }
   };
   img.onerror = ()=>{ canvas.style.display='none'; placeholder.style.display='flex'; };
   img.src = cardImgUrl(card);
@@ -2064,12 +2066,13 @@ function initArt(){
     if(s.lastArtPlayed === today && (s.artWon || s.artLost)){
       artSolved = true; artInput.disabled = true;
       applyArtBlur(6);
+      showArtImage(artSecret, true);
       if(s.artWon){
         artBanner.className = "banner win";
-        artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>'+shareButtonHTML('shareArt');
+        artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
       } else {
         artBanner.className = "banner fail";
-        artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareArt');
+        artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
       }
     }
   });
@@ -2084,9 +2087,10 @@ setupAutocomplete(artInput, artSugg, (card)=>{
   if(win){
     artSolved = true; artInput.disabled = true;
     applyArtBlur(6);
+    showArtImage(artSecret, true);
     const reward = ART_REWARD_TABLE[artAttempt-1];
     artBanner.className = "banner win";
-    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+shareButtonHTML('shareArt');
+    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
     loadStats().then(s=>{
       if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
         s.lastArtPlayed = today; s.artWon = true; s.artLost = false;
@@ -2108,8 +2112,9 @@ setupAutocomplete(artInput, artSugg, (card)=>{
     if(artAttempt > 5){
       artSolved = true; artInput.disabled = true;
       applyArtBlur(6);
+      showArtImage(artSecret, true);
       artBanner.className = "banner fail";
-      artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareArt');
+      artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
       loadStats().then(s=>{
         if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
           s.lastArtPlayed = today; s.artWon = false; s.artLost = true;
