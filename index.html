@@ -2066,7 +2066,8 @@ function initArt(){
     if(s.lastArtPlayed === today && (s.artWon || s.artLost)){
       artSolved = true; artInput.disabled = true;
       applyArtBlur(6);
-      showArtImage(artSecret, true);
+      document.getElementById('artCanvas').style.display = 'none';
+    document.getElementById('artPlaceholder').style.display = 'none';
       if(s.artWon){
         artBanner.className = "banner win";
         artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
@@ -2087,7 +2088,8 @@ setupAutocomplete(artInput, artSugg, (card)=>{
   if(win){
     artSolved = true; artInput.disabled = true;
     applyArtBlur(6);
-    showArtImage(artSecret, true);
+    document.getElementById('artCanvas').style.display = 'none';
+    document.getElementById('artPlaceholder').style.display = 'none';
     const reward = ART_REWARD_TABLE[artAttempt-1];
     artBanner.className = "banner win";
     artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
@@ -2112,7 +2114,8 @@ setupAutocomplete(artInput, artSugg, (card)=>{
     if(artAttempt > 5){
       artSolved = true; artInput.disabled = true;
       applyArtBlur(6);
-      showArtImage(artSecret, true);
+      document.getElementById('artCanvas').style.display = 'none';
+    document.getElementById('artPlaceholder').style.display = 'none';
       artBanner.className = "banner fail";
       artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
       loadStats().then(s=>{
