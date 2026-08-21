@@ -1751,7 +1751,6 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
   const {row, win} = renderRow(card, classicSecret);
   classicBody.insertAdjacentHTML('beforeend', row);
   classicGuesses.push(card.n);
-  saveInProgress('classic', todayUTCString(), {guesses: classicGuesses});
   if(win){
     classicSolved = true; classicInput.disabled = true;
     const reward = computeReward(classicGuesses.length);
@@ -1759,6 +1758,11 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
     classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', classicGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(classicSecret)+shareButtonHTML('shareClassic');
     loadStats().then(s=>{
       const today = todayUTCString();
+      // Fusionnée dans la MÊME écriture que la mise à jour des stats, pour éviter que deux
+      // sauvegardes concurrentes (celle-ci + celle des essais en cours) ne s'écrasent l'une
+      // l'autre et perdent l'essai gagnant.
+      s.inProgress = s.inProgress || {};
+      s.inProgress.classic = {date: today, data: {guesses: classicGuesses}};
       if(s.lastWin !== today){
         s.streak = (s.lastWin === yesterdayUTCString()) ? s.streak+1 : 1;
         s.bestStreak = Math.max(s.bestStreak, s.streak);
@@ -1772,8 +1776,12 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
         s.eddies.classic += reward;
         s.lastClassicReward = reward;
         saveStats(s).then(()=>{ refreshStreakUI(); refreshEddiesUI(); });
+      } else {
+        saveStats(s);
       }
     });
+  } else {
+    saveInProgress('classic', todayUTCString(), {guesses: classicGuesses});
   }
 }, ()=>classicGuesses);
 
@@ -1969,7 +1977,6 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
   const {row, win} = renderRow(card, abilitySecret);
   abilityBody.insertAdjacentHTML('beforeend', row);
   abilityGuesses.push(card.n);
-  saveInProgress('ability', todayUTCString(), {guesses: abilityGuesses});
   if(win){
     abilitySolved = true; abilityInput.disabled = true;
     const reward = computeReward(abilityGuesses.length);
@@ -1977,6 +1984,8 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
     abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub">'+t('win_tries').replace('{n}', abilityGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(abilitySecret)+shareButtonHTML('shareAbility');
     const today = todayUTCString();
     loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress.ability = {date: today, data: {guesses: abilityGuesses}};
       if(s.lastAbilityPlayed !== today || !s.abilityWon){
         s.lastAbilityPlayed = today; s.abilityWon = true;
         s.abilitySolved = (s.abilitySolved||0)+1;
@@ -1988,8 +1997,12 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
           document.getElementById('abilitySolved').textContent = s.abilitySolved;
           refreshEddiesUI();
         });
+      } else {
+        saveStats(s);
       }
     });
+  } else {
+    saveInProgress('ability', todayUTCString(), {guesses: abilityGuesses});
   }
 }, ()=>abilityGuesses);
 
@@ -2086,7 +2099,6 @@ setupAutocomplete(artInput, artSugg, (card)=>{
   artBody.insertAdjacentHTML('beforeend', row);
   artGuesses.push(card.n);
   const today = todayUTCString();
-  saveInProgress('art', today, {guesses: artGuesses, attempt: artAttempt});
   if(win){
     artSolved = true; artInput.disabled = true;
     applyArtBlur(6);
@@ -2097,6 +2109,8 @@ setupAutocomplete(artInput, artSugg, (card)=>{
     artBanner.className = "banner win";
     artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
     loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress.art = {date: today, data: {guesses: artGuesses, attempt: artAttempt}};
       if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
         s.lastArtPlayed = today; s.artWon = true; s.artLost = false;
         s.artPlayed = (s.artPlayed||0)+1;
@@ -2110,6 +2124,8 @@ setupAutocomplete(artInput, artSugg, (card)=>{
           document.getElementById('artSolved').textContent = s.artSolved;
           refreshEddiesUI();
         });
+      } else {
+        saveStats(s);
       }
     });
   } else {
@@ -2123,9 +2139,13 @@ setupAutocomplete(artInput, artSugg, (card)=>{
       artBanner.className = "banner fail";
       artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
       loadStats().then(s=>{
+        s.inProgress = s.inProgress || {};
+        s.inProgress.art = {date: today, data: {guesses: artGuesses, attempt: artAttempt}};
         if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
           s.lastArtPlayed = today; s.artWon = false; s.artLost = true;
           s.artPlayed = (s.artPlayed||0)+1; s.artLostCount = (s.artLostCount||0)+1;
+          saveStats(s);
+        } else {
           saveStats(s);
         }
       });
