@@ -1694,6 +1694,16 @@ async function loadInProgress(gameKey, dateStr){
     if(s.inProgress && s.inProgress[gameKey] && s.inProgress[gameKey].date === dateStr){
       return s.inProgress[gameKey].data;
     }
+    // Repli : ces essais ont peut-être été faits en tant qu'invité juste avant la connexion
+    // (ex: connexion Google en pleine partie) et ne sont donc encore que dans le navigateur,
+    // pas encore sur le compte.
+    try{
+      const raw = localStorage.getItem('choomdle:progress:'+gameKey);
+      if(raw){
+        const obj = JSON.parse(raw);
+        if(obj.date === dateStr) return obj.data;
+      }
+    }catch(e){}
     return null;
   }
   try{
