@@ -350,9 +350,8 @@
   <div class="panel" id="panel-community" style="display:none">
     <div class="statusline">
       <span data-i18n="community_title">Récap de la communauté Choomdle</span>
-      <button class="bigbtn" id="publishStatsBtn" data-i18n="community_publish">Publier mes stats</button>
     </div>
-    <div class="hint" data-i18n="community_hint" style="margin-bottom:6px;">Classement basé sur les eddies et séries publiés volontairement par les joueurs (pseudo visible de tous).</div>
+    <div class="hint" data-i18n="community_hint" style="margin-bottom:6px;">Classement basé sur les eddies et séries de tout compte créé (pseudo visible de tous).</div>
     <div class="hint" data-i18n="eddies_purpose" style="margin-bottom:6px;">Les eddies ne servent qu'au classement communautaire et à tes stats — aucune autre utilité.</div>
     <button class="share-btn" onclick="shareAllRanks(this)" data-i18n="share_all_ranks" style="margin:0 auto 14px;">Partager tous mes rangs</button>
     <div class="podiumgrid" id="podiumGrid"></div>
@@ -971,6 +970,12 @@ async function onLoggedIn(){
     }
     refreshEddiesUI(); refreshStreakUI();
     checkAdminFeedbackView();
+    // Publication automatique au classement communautaire dès qu'un compte est connecté — plus
+    // besoin de cliquer sur un bouton. Couvre aussi les comptes déjà existants qui n'avaient
+    // jamais publié auparavant.
+    loadStats().then(s=>{
+      if(!s.hasPublishedCommunity){ s.hasPublishedCommunity = true; saveStats(s); }
+    });
   }catch(e){}
 }
 function showPseudoPicker(suggested){
@@ -1136,24 +1141,6 @@ function setLoggedOutUI(){
 async function getPseudo(){ return currentPseudo || "Anonyme"; }
 
 // ======================= COMMUNITY (podiums par jeu + cumulé) =======================
-async function publishStats(){
-  const s = await loadStats();
-  s.hasPublishedCommunity = true;
-  await saveStats(s);
-  if(supabaseReady && currentSession){
-    try{ await supabaseClient.from('stats').upsert(localToStatsRow(s, currentSession.user.id)); }catch(e){}
-    renderCommunity();
-    return;
-  }
-  const pseudo = await getPseudo();
-  try{
-    await window.storage.set('community:'+pseudo, JSON.stringify({
-      pseudo, streak: s.streak, bestStreak: s.bestStreak, endlessSolved: s.endlessSolved||0,
-      eddies: s.eddies||{}, eddiesTotal: eddiesTotal(s)
-    }), true);
-    renderCommunity();
-  }catch(e){}
-}
 async function loadCommunityRows(){
   if(supabaseReady){
     try{
@@ -2952,7 +2939,6 @@ initFeedback();
   updateEngagementStats();
   refreshEddiesUI();
 })();
-document.getElementById('publishStatsBtn').addEventListener('click', publishStats);
 applyFeatureFlags();
 
 // ======================= PROTECTION CONTRE LES ESSAIS D'UN AUTRE JOUR =======================
