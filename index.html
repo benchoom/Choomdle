@@ -15,6 +15,9 @@
 <!-- ===== Favicon ===== -->
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="theme-color" content="#08080d">
 
 <!-- ===== hreflang : indique à Google les versions par langue ===== -->
 <link rel="alternate" hreflang="x-default" href="https://choomdle.com/en">
@@ -2963,6 +2966,11 @@ function recheckDailyDateRollover(){
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') recheckDailyDateRollover(); });
 window.addEventListener('focus', recheckDailyDateRollover);
+// Enregistrement du service worker (PWA) — n'échoue jamais silencieusement le reste du site
+// si indisponible (ex: navigateur trop ancien).
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('/sw.js').catch(()=>{}); });
+}
 </script>
 </body>
 </html>
