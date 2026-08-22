@@ -115,6 +115,7 @@
           <div id="loggedInMenu" style="display:none;">
             <button id="menuEditPseudo"><span data-i18n="menu_edit_pseudo">✎ Change handle</span></button>
             <button id="menuChangePassword"><span data-i18n="menu_change_password">🔒 Change password</span></button>
+            <button id="menuNotifications"><span data-i18n="menu_enable_notif">🔔 Daily reminder</span></button>
             <button id="menuLogout"><span data-i18n="menu_logout">✕ Log out</span></button>
             <div id="menuSubpanel" style="display:none;"></div>
           </div>
@@ -2971,6 +2972,45 @@ window.addEventListener('focus', recheckDailyDateRollover);
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('/sw.js').catch(()=>{}); });
 }
+
+// ======================= NOTIFICATIONS PUSH (rappel quotidien) =======================
+// Clé PUBLIQUE uniquement — la clé privée reste côté serveur (Supabase Edge Function), jamais
+// exposée ici. Sans risque à afficher dans le code source.
+const VAPID_PUBLIC_KEY = "BNt5Zwq2bZTfkPMW2LQzyyjNRMqy9PhO_ibOjY_eY194PJahcsmEZRvIIzP7PbD1ZNqbJsGaImUB73dC0Wwv88c";
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function enableNotifications(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    alert(t('notif_unsupported')); return;
+  }
+  try{
+    const permission = await Notification.requestPermission();
+    if(permission !== 'granted'){ alert(t('notif_denied')); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    if(supabaseReady && currentSession){
+      await supabaseClient.from('push_subscriptions').upsert({
+        user_id: currentSession.user.id,
+        endpoint: sub.endpoint,
+        p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')))),
+        auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')))),
+        lang: currentLang
+      }, { onConflict: 'endpoint' });
+    }
+    alert(t('notif_enabled'));
+  }catch(e){ alert(t('notif_error')); }
+}
+document.getElementById('menuNotifications').addEventListener('click', enableNotifications);
 </script>
 </body>
 </html>
