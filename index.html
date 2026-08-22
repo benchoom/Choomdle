@@ -2500,10 +2500,15 @@ function cardsLinkCategoryDefs(){
   return defs;
 }
 
-function buildCardsLinkPuzzle(seedStr){
+function buildCardsLinkPuzzle(seedStr, avoidLabels){
+  avoidLabels = avoidLabels || [];
   const rng = seededRng(seedStr);
-  const defs = cardsLinkCategoryDefs().map(d=>({ label:d.label, matches: CARDS.filter(d.filter) })).filter(d=>d.matches.length>=4);
-  const shuffledDefs = seededShuffle(defs, rng);
+  const allDefs = cardsLinkCategoryDefs().map(d=>({ label:d.label, matches: CARDS.filter(d.filter) }));
+  let eligibleDefs = allDefs.filter(d=>d.matches.length>=4 && !avoidLabels.includes(d.label));
+  // Si trop de catégories récentes sont exclues pour qu'il en reste assez, on relâche la
+  // contrainte de variété plutôt que d'échouer à générer un puzzle.
+  if(eligibleDefs.length < 4) eligibleDefs = allDefs.filter(d=>d.matches.length>=4);
+  const shuffledDefs = seededShuffle(eligibleDefs, rng);
   const used = new Set();
   const groups = [];
   for(const def of shuffledDefs){
@@ -2514,15 +2519,42 @@ function buildCardsLinkPuzzle(seedStr){
     picked.forEach(c=>used.add(c.n));
     groups.push({ label: def.label, cards: picked });
   }
-  return groups.length===4 ? groups : null;
+  if(groups.length!==4) return null;
+  // Vérifie qu'aucune carte choisie ne correspond AUSSI à une autre des 4 catégories retenues
+  // aujourd'hui — sinon le joueur pourrait légitimement la classer ailleurs (ambiguïté).
+  const chosenLabels = groups.map(g=>g.label);
+  for(const g of groups){
+    for(const card of g.cards){
+      for(const otherLabel of chosenLabels){
+        if(otherLabel === g.label) continue;
+        const otherDef = allDefs.find(d=>d.label===otherLabel);
+        if(otherDef && otherDef.matches.some(m=>m.n===card.n)) return null;
+      }
+    }
+  }
+  return groups;
+}
+
+function daysAgoUTCString(n){
+  const d = new Date(); d.setUTCDate(d.getUTCDate()-n);
+  return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1)+"-"+d.getUTCDate();
 }
 
 let cardsLinkGroups = [], cardsLinkCells = [], cardsLinkSelected = [], cardsLinkMistakes = 0, cardsLinkSolvedCount = 0, cardsLinkActive = false, cardsLinkSolveOrder = [], cardsLinkOriginalCells = [];
 function initCardsLink(){
   const today = todayUTCString();
   document.getElementById('cardsLinkDate').textContent = today + " UTC";
+  // Regarde les catégories utilisées les 4 jours précédents, pour éviter qu'une même catégorie
+  // (ex: une faction) ne revienne trop souvent d'un jour à l'autre.
+  const recentLabels = [];
+  for(let d=1; d<=4; d++){
+    const pastDate = daysAgoUTCString(d);
+    let pt=0, pastGroups=null;
+    while(!pastGroups && pt<250){ pastGroups = buildCardsLinkPuzzle(pastDate+"-cardslink-"+pt, []); pt++; }
+    if(pastGroups) recentLabels.push(...pastGroups.map(g=>g.label));
+  }
   let seedTry = 0, groups = null;
-  while(!groups && seedTry < 5){ groups = buildCardsLinkPuzzle(today+"-cardslink-"+seedTry); seedTry++; }
+  while(!groups && seedTry < 250){ groups = buildCardsLinkPuzzle(today+"-cardslink-"+seedTry, recentLabels); seedTry++; }
   cardsLinkGroups = groups || [];
   cardsLinkMistakes = 0; cardsLinkSolvedCount = 0; cardsLinkSelected = [];
   cardsLinkActive = true;
@@ -2796,7 +2828,7 @@ function renderArchiveSequence(area, date){
 }
 function renderArchiveCardsLink(area, date){
   let groups=null, seedTry=0;
-  while(!groups && seedTry<5){ groups = buildCardsLinkPuzzle(date+"-cardslink-"+seedTry); seedTry++; }
+  while(!groups && seedTry<250){ groups = buildCardsLinkPuzzle(date+"-cardslink-"+seedTry); seedTry++; }
   if(!groups){ area.innerHTML = '<div class="hint">—</div>'; return; }
   const rng = seededRng(date+"-cardslink-order");
   let cells = seededShuffle(groups.flatMap((g,gi)=>g.cards.map(c=>({card:c, groupIndex:gi}))), rng);
