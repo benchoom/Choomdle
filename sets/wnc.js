@@ -22,7 +22,7 @@ const WNC_CARDS = [
 {n:"Corpo Security",t:"Unit",f:["Corpo"],c:2,p:2,r:1,text:"This Unit can't attack. {Blocker} (You may spend this Unit to redirect a rival Unit's attack to it instead.)"},
 {n:"Corporate Surveillance",t:"Program",f:["Corpo"],c:2,p:null,r:1,text:"Spend a rival Unit with cost 4 or less."},
 {n:"Cyberpsychosis",t:"Program",f:["Quickhack"],c:3,p:null,r:2,text:"{Quick} Give an equipped Unit +3 power this turn for each if its equipped Gears. If that Unit steals or fights, defeat it at the end of this turn."},
-{n:"Delamain Cab",t:"Unit",f:["Vehicle"],c:4,p:7,r:3,text:""},
+{n:"Delamain Cab",t:"Unit",f:["Vehicle"],c:4,p:4,r:3,text:""},
 {n:"Dexter DeShawn — One Last Chance",t:"Unit",f:["Fixer"],c:3,p:4,r:2,text:"{Play} {Attack} Adjust a Gig by up to 1. {Defeated} If your Street Cred differs from a Rival's by 10+, draw 2."},
 {n:"Dum Dum — Maelstrom Triggerman",t:"Legend",f:["Ganger","Maelstrom"],c:null,p:null,r:2,text:"{Call} You may defeat a friendly Gear. If you do, draw 2. Otherwise, draw 1. {Quick} 1 €$, {Spend} Give a friendly Unit +1 power this turn for each of its equipped Gear."},
 {n:"Dying Night — V's Pistol",t:"Gear",f:["Merc","Weapon"],c:2,p:2,r:2,text:"(Equip to a friendly Unit or face-up Legend.) {Attack} Decrease a Gig by up to 2. At the end of your turn, if this Unit is named \"V\", ready 2 Eddies."},
