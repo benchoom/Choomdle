@@ -233,6 +233,15 @@
   .cell.match{ background:rgba(57,217,122,.18); border-color:var(--green); color:var(--green); }
   .cell.partial{ background:rgba(255,140,58,.15); border-color:var(--orange); color:var(--orange); }
   .cell.miss{ background:rgba(255,46,99,.08); border-color:var(--magenta); color:#ff9db2; }
+  /* Colonne "Couleur" (Classic/Endless/Ability/Art) */
+  .color-dot{
+    display:inline-block; width:10px; height:10px; border-radius:50%;
+    margin-right:5px; vertical-align:middle; border:1px solid rgba(255,255,255,.35);
+  }
+  .color-dot-red{ background:#ff2e4d; }
+  .color-dot-yellow{ background:#f4e409; }
+  .color-dot-green{ background:#39d97a; }
+  .color-dot-blue{ background:#26a5e5; }
   .arrow{ font-size:11px; margin-left:3px; }
 
   .banner{

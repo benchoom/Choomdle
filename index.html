@@ -177,7 +177,7 @@
     </div>
     <div class="gridwrap">
       <table class="guesses">
-        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_color">Couleur</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
         <tbody id="classicBody"></tbody>
       </table>
     </div>
@@ -211,7 +211,7 @@
     </div>
     <div class="gridwrap">
       <table class="guesses">
-        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_color">Couleur</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
         <tbody id="blitzBody"></tbody>
       </table>
     </div>
@@ -230,7 +230,7 @@
     </div>
     <div class="gridwrap">
       <table class="guesses">
-        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_color">Couleur</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
         <tbody id="endlessBody"></tbody>
       </table>
     </div>
@@ -250,7 +250,7 @@
     </div>
     <div class="gridwrap">
       <table class="guesses">
-        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_color">Couleur</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
         <tbody id="abilityBody"></tbody>
       </table>
     </div>
@@ -273,7 +273,7 @@
     </div>
     <div class="gridwrap">
       <table class="guesses">
-        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_color">Couleur</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
         <tbody id="artBody"></tbody>
       </table>
     </div>
@@ -324,7 +324,7 @@
     </div>
     <div class="gridwrap">
       <table class="guesses">
-        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_color">Couleur</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
         <tbody id="breachBody"></tbody>
       </table>
     </div>
@@ -419,9 +419,9 @@
 <!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
-<script src="/sets/wnc.js?v=20260822"></script>
-<script src="/sets/promo.js?v=20260822"></script>
-<script src="/i18n.js?v=20260822"></script>
+<script src="/sets/wnc.js?v=20260901"></script>
+<script src="/sets/promo.js?v=20260901"></script>
+<script src="/i18n.js?v=20260901"></script>
 <script>
 // Nettoyage d'un "#" résiduel VIDE dans l'URL uniquement (ex: laissé par erreur quelque part).
 // Important : on ne touche JAMAIS un hash qui contient du contenu (ex: #access_token=... utilisé
@@ -665,6 +665,7 @@ function compareCard(guess, secret){
   res.type = guess.t === secret.t ? "match" : "miss";
   const shared = guess.f.filter(x=>secret.f.includes(x));
   res.faction = shared.length === guess.f.length && shared.length === secret.f.length ? "match" : shared.length > 0 ? "partial" : "miss";
+  res.col = guess.col === secret.col ? "match" : "miss";
   ["c","p","r"].forEach(k=>{
     const gv = guess[k], sv = secret[k];
     if(gv === null && sv === null){ res[k] = {state:"match", arrow:""}; }
@@ -675,16 +676,18 @@ function compareCard(guess, secret){
   return res;
 }
 function makeCell(cls, content, arrow){ return '<td><div class="cell '+cls+'">'+content+(arrow?'<span class="arrow">'+arrow+'</span>':'')+'</div></td>'; }
+function colorLabel(col){ return col ? t('color_'+col.toLowerCase()) : '—'; }
 function renderRow(guess, secret){
   const r = compareCard(guess, secret);
   let row = '<tr><td><div class="cell name">'+guess.n+'</div></td>';
   row += makeCell(r.type, guess.t);
   row += makeCell(r.faction, guess.f.join(" · "));
+  row += makeCell(r.col, '<span class="color-dot color-dot-'+(guess.col||'').toLowerCase()+'"></span>'+colorLabel(guess.col));
   row += makeCell(r.c.state, fmtVal(guess.c), r.c.arrow);
   row += makeCell(r.p.state, fmtVal(guess.p), r.p.arrow);
   row += makeCell(r.r.state, fmtVal(guess.r), r.r.arrow);
   row += '</tr>';
-  const win = r.type==="match" && r.faction==="match" && r.c.state==="match" && r.p.state==="match" && r.r.state==="match";
+  const win = r.type==="match" && r.faction==="match" && r.col==="match" && r.c.state==="match" && r.p.state==="match" && r.r.state==="match";
   return {row, win};
 }
 function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
@@ -2478,6 +2481,9 @@ function cardsLinkCategoryDefs(){
   Object.keys(factions).forEach(f=>{
     if(factions[f] >= 4) defs.push({ label: t('cl_cat_faction').replace('{f}', f), filter: c=>c.f.includes(f) });
   });
+  ['Red','Yellow','Green','Blue'].forEach(col=>{
+    defs.push({ label: t('cl_cat_color').replace('{col}', t('color_'+col.toLowerCase())), filter: c=>c.col===col });
+  });
   const kw = [
     ['{Go Solo}', t('cl_cat_gosolo')], ['{Blocker}', t('cl_cat_blocker')], ['{Attack}', t('cl_cat_attack')],
     ['{Play}', t('cl_cat_play')], ['{Quick}', t('cl_cat_quick')], ['{Adrenaline}', t('cl_cat_adrenaline')],
@@ -2724,7 +2730,7 @@ function renderArchiveGuessGame(area, mode, date){
   area.innerHTML =
     (mode==='ability' ? '<div class="ability-quote">« '+secret.text+' »</div>' : '') +
     '<div class="searchrow"><input class="guessInput" id="archiveInput" type="text" placeholder="'+t('classic_input_ph')+'" autocomplete="off"><div class="suggestions" id="archiveSugg"></div></div>'+
-    '<div class="gridwrap"><table class="guesses"><thead><tr><th style="text-align:left">'+t('col_card')+'</th><th>'+t('col_type')+'</th><th>'+t('col_faction')+'</th><th>'+t('col_cost')+'</th><th>'+t('col_pwr')+'</th><th>'+t('col_ram')+'</th></tr></thead><tbody id="archiveBody"></tbody></table></div>'+
+    '<div class="gridwrap"><table class="guesses"><thead><tr><th style="text-align:left">'+t('col_card')+'</th><th>'+t('col_type')+'</th><th>'+t('col_faction')+'</th><th>'+t('col_color')+'</th><th>'+t('col_cost')+'</th><th>'+t('col_pwr')+'</th><th>'+t('col_ram')+'</th></tr></thead><tbody id="archiveBody"></tbody></table></div>'+
     '<div class="banner" id="archiveBanner"></div>';
   const body = document.getElementById('archiveBody');
   const input = document.getElementById('archiveInput');
