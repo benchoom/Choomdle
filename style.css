@@ -339,12 +339,12 @@
   }
   .seq-compare-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:8px; }
   .seq-compare-single{ display:flex; flex-direction:column; gap:8px; }
-  .seq-compare-single .seq-compare-cell{ max-width:280px; margin:0 auto; }
+  .seq-compare-single .seq-compare-cell{ width:100%; max-width:640px; margin:0 auto; }
   .seq-compare-cell{ display:flex; align-items:center; gap:8px; background:var(--bg2); border:1px solid var(--line); padding:6px; }
   .seq-compare-cell .sequence-thumb{
     width:180px; aspect-ratio:733/1024; background-size:contain; background-position:center; background-color:var(--bg2);
   }
-  .seq-compare-name{ font-family:'Chakra Petch',sans-serif; font-size:12px; font-weight:600; }
+  .seq-compare-name{ font-family:'Chakra Petch',sans-serif; font-size:12px; font-weight:600; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sequence-arrows{ display:flex; flex-direction:column; gap:2px; }
   .sequence-arrows button{
     background:var(--panel2); border:1px solid var(--line); color:var(--cyan); cursor:pointer;
@@ -440,6 +440,18 @@
   .podiumbox h4{ margin:0 0 8px; font-family:'Chakra Petch',sans-serif; font-size:12px; letter-spacing:.06em; color:var(--cyan); text-transform:uppercase; flex-shrink:0; }
   .podiumbox-rows{ max-height:360px; overflow-y:auto; flex-shrink:1; }
   .podiumbox-cumul{ width:100%; }
+  /* Top 3 du mois précédent (archive figée) */
+  .month-eddies-top3-title{ text-align:center; font-family:'Chakra Petch',sans-serif; font-size:13px; color:var(--cyan); margin:22px 0 8px; text-transform:uppercase; letter-spacing:.05em; }
+  .top3-banner{ display:flex; justify-content:center; gap:18px; flex-wrap:wrap; margin-bottom:10px; }
+  .top3-item{ display:flex; align-items:center; gap:6px; background:var(--bg2); border:1px solid var(--line); padding:8px 14px; font-family:'Chakra Petch',sans-serif; }
+  .top3-medal{ font-size:16px; }
+  .top3-name{ font-weight:700; }
+  .top3-val{ color:var(--yellow); font-weight:700; }
+  /* Cadre "Month Eddies" regroupant les 10 tableaux du mois en cours */
+  .month-eddies-frame{ border:2px solid var(--yellow); padding:16px; margin-top:6px; background:rgba(244,228,9,.03); }
+  .month-eddies-title{ text-align:center; font-family:'Chakra Petch',sans-serif; color:var(--yellow); text-transform:uppercase; letter-spacing:.06em; margin:0 0 10px; }
+  /* Cumul annuel, en bas de page */
+  .year-cumul-wrap{ margin-top:22px; }
   .podiumbox-cumul .podiumbox-rows{ max-height:480px; }
   .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); gap:8px; }
   .podiumrow:last-child{ border-bottom:none; }

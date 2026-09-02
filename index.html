@@ -143,6 +143,7 @@
 
     <div class="featurebar">
       <button class="fbtn" data-panel="community" data-i18n="fbtn_community">Communauté</button>
+      <button class="fbtn" data-panel="communityArchive" data-i18n="fbtn_community_archive">Community Archives</button>
       <button class="fbtn" data-panel="stats" data-i18n="fbtn_stats">Mes Stats</button>
       <button class="fbtn" data-panel="achievements" data-i18n="fbtn_achievements">Succès</button>
       <button class="fbtn" data-panel="archive" data-i18n="fbtn_archive">Archive</button>
@@ -360,6 +361,17 @@
     <button class="share-btn" onclick="shareAllRanks(this)" data-i18n="share_all_ranks" style="margin:0 auto 14px;">Partager tous mes rangs</button>
     <div class="podiumgrid" id="podiumGrid"></div>
     <button class="share-btn" onclick="shareAllRanks(this)" data-i18n="share_all_ranks">Partager tous mes rangs</button>
+  </div>
+
+  <!-- COMMUNITY ARCHIVES -->
+  <div class="panel" id="panel-communityArchive" style="display:none">
+    <div class="statusline"><span data-i18n="community_archive_title">Community Archives — classements des mois précédents</span></div>
+    <div class="hint" data-i18n="community_archive_hint">Sélectionne un mois pour voir le classement archivé de cette période (figé, ne change plus).</div>
+    <div class="archive-controls">
+      <input type="month" id="communityArchiveMonthInput">
+      <button class="bigbtn" id="communityArchiveLoadBtn" data-i18n="archive_load">Charger</button>
+    </div>
+    <div id="communityArchiveArea"></div>
   </div>
 
   <!-- STATS -->
@@ -775,6 +787,10 @@ function statsRowToLocal(row){
     guessDistribution: row.guess_distribution||{},
     lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
     eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0, cardslink: meta.eddies_cardslink||0, sequence: meta.eddies_sequence||0 },
+    monthEddies: meta.monthEddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    yearEddies: meta.yearEddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    monthEddiesPeriod: meta.monthEddiesPeriod || null, yearEddiesPeriod: meta.yearEddiesPeriod || null,
+    _lastKnownEddies: meta._lastKnownEddies || {},
     hasPublishedCommunity: meta.hasPublishedCommunity||false,
     lastSequencePlayed: meta.lastSequencePlayed||null, sequenceWon: meta.sequenceWon||false, sequenceLost: meta.sequenceLost||false, lastSequenceReward: meta.lastSequenceReward||0,
     sequencePlayed: meta.sequencePlayed||0, sequenceWins: meta.sequenceWins||0,
@@ -809,6 +825,9 @@ function localToStatsRow(s, uid){
       lastCardsLinkReward: s.lastCardsLinkReward||0, lastCardsLinkMistakes: s.lastCardsLinkMistakes||0,
       cardsLinkPlayed: s.cardsLinkPlayed||0, cardsLinkWins: s.cardsLinkWins||0,
       eddies_cardslink: (s.eddies&&s.eddies.cardslink)||0,
+      monthEddies: s.monthEddies || {}, yearEddies: s.yearEddies || {},
+      monthEddiesPeriod: s.monthEddiesPeriod || null, yearEddiesPeriod: s.yearEddiesPeriod || null,
+      _lastKnownEddies: s._lastKnownEddies || {},
       hasPublishedCommunity: s.hasPublishedCommunity||false,
       lastSequencePlayed: s.lastSequencePlayed||null, sequenceWon: s.sequenceWon||false, sequenceLost: s.sequenceLost||false, lastSequenceReward: s.lastSequenceReward||0,
       sequencePlayed: s.sequencePlayed||0, sequenceWins: s.sequenceWins||0, eddies_sequence: (s.eddies&&s.eddies.sequence)||0,
@@ -842,7 +861,11 @@ async function loadStats(){
 }
 function defaultStats(){
   return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
-    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0}, lastLegendPlayed:null, legendResult:null,
+    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    monthEddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    yearEddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    monthEddiesPeriod:null, yearEddiesPeriod:null, _lastKnownEddies:{},
+    lastLegendPlayed:null, legendResult:null,
     lastAbilityPlayed:null, abilityWon:false, lastArtPlayed:null, artWon:false, artLost:false,
     lastClassicReward:0, lastAbilityReward:0, lastArtReward:0,
     legendPlayed:0, legendWins:0,
@@ -859,6 +882,31 @@ function defaultStats(){
     earlyBirdWin:false, nightOwlWin:false, inProgress:{}};
 }
 async function saveStats(stats){
+  // Suivi mensuel/annuel des eddies, calculé UNIQUEMENT ici (un seul point de code, jamais
+  // touché dans chaque jeu individuellement) — donc aucun risque pour le fonctionnement actuel
+  // des jeux. On compare "avant/après" sur le total à vie de chaque jeu pour en déduire le gain
+  // réel de cette sauvegarde, sans jamais modifier ce total à vie lui-même.
+  try{
+    const cur = stats.eddies || {};
+    const prev = stats._lastKnownEddies;
+    // Migration en douceur pour les comptes déjà existants : la première fois qu'on rencontre
+    // ce compte (pas encore de référence connue), on initialise SANS compter de gain — sinon
+    // tout le total déjà gagné avant aujourd'hui serait faussement ajouté au mois en cours.
+    if(prev && Object.keys(prev).length > 0){
+      stats.monthEddies = stats.monthEddies || {};
+      stats.yearEddies = stats.yearEddies || {};
+      Object.keys(cur).forEach(game=>{
+        const delta = (cur[game]||0) - (prev[game]||0);
+        if(delta > 0){
+          stats.monthEddies[game] = (stats.monthEddies[game]||0) + delta;
+          stats.yearEddies[game] = (stats.yearEddies[game]||0) + delta;
+        }
+      });
+    }
+    const snapshot = {};
+    Object.keys(cur).forEach(game=>{ snapshot[game] = cur[game]||0; });
+    stats._lastKnownEddies = snapshot;
+  }catch(e){}
   lsSetJSON('choomdle:stats', stats);
   if(supabaseReady && currentSession){
     try{ await supabaseClient.from('stats').upsert(localToStatsRow(stats, currentSession.user.id)); }catch(e){}
@@ -912,6 +960,44 @@ function addDiscoveredCard(s, name){
   if(!s.cardsDiscovered.includes(name)) s.cardsDiscovered.push(name);
 }
 // Série de jours d'affilée où le joueur s'est connecté/a joué (tous jeux confondus), + petits succès horaires.
+// ======================= ROLLOVER MENSUEL / ANNUEL DES EDDIES (Community) =======================
+// Se déclenche une fois par session, pour un compte connecté uniquement (le classement mensuel/
+// annuel n'a de sens que pour un compte, comme les succès). Quand le mois/l'année change depuis
+// la dernière visite, on ARCHIVE l'ancien total avant de le remettre à zéro — jamais l'inverse,
+// pour ne jamais perdre de données même en cas d'erreur réseau pendant l'archivage.
+function currentMonthPeriod(){ const d=new Date(); return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1); }
+function currentYearPeriod(){ return String(new Date().getUTCFullYear()); }
+async function archiveEddiesPeriod(kind, period, eddiesObj){
+  if(!(supabaseReady && currentSession) || !period) return;
+  const total = Object.values(eddiesObj||{}).reduce((a,b)=>a+(b||0),0);
+  try{
+    await supabaseClient.from('community_period_archive').upsert({
+      kind, period, user_id: currentSession.user.id, pseudo: currentPseudo || null,
+      eddies: eddiesObj || {}, eddies_total: total
+    }, { onConflict: 'kind,period,user_id' });
+  }catch(e){}
+}
+async function rolloverMonthYearIfNeeded(){
+  if(!(supabaseReady && currentSession)) return;
+  const s = await loadStats();
+  const nowMonth = currentMonthPeriod(), nowYear = currentYearPeriod();
+  let changed = false;
+  if(!s.monthEddiesPeriod){ s.monthEddiesPeriod = nowMonth; changed = true; }
+  else if(s.monthEddiesPeriod !== nowMonth){
+    await archiveEddiesPeriod('month', s.monthEddiesPeriod, s.monthEddies);
+    s.monthEddies = {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0};
+    s.monthEddiesPeriod = nowMonth;
+    changed = true;
+  }
+  if(!s.yearEddiesPeriod){ s.yearEddiesPeriod = nowYear; changed = true; }
+  else if(s.yearEddiesPeriod !== nowYear){
+    await archiveEddiesPeriod('year', s.yearEddiesPeriod, s.yearEddies);
+    s.yearEddies = {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0};
+    s.yearEddiesPeriod = nowYear;
+    changed = true;
+  }
+  if(changed) await saveStats(s);
+}
 function updateEngagementStats(){
   loadStats().then(s=>{
     const today = todayUTCString();
@@ -1160,18 +1246,24 @@ async function loadCommunityRows(){
         const cardslink = meta.eddies_cardslink || 0; // eddies Cards Link/Sequence stockés dans meta (pas de colonne dédiée)
         const sequence = meta.eddies_sequence || 0;
         // On réutilise statsRowToLocal (même logique que pour nos propres stats) pour pouvoir
-        // calculer le nombre de succès débloqués et le palier de rareté de chaque joueur.
-        let unlocked = 0;
+        // calculer le nombre de succès débloqués, le palier de rareté, et les compteurs
+        // mensuel/annuel de chaque joueur.
+        let unlocked = 0, localShape = null;
         try{
-          const localShape = statsRowToLocal(r);
+          localShape = statsRowToLocal(r);
           ACHIEVEMENTS.forEach(a=>{ try{ if(a.check(localShape)) unlocked++; }catch(e){} });
         }catch(e){}
+        const monthEddies = (localShape && localShape.monthEddies) || {};
+        const yearEddies = (localShape && localShape.yearEddies) || {};
         return {
           pseudo: (r.profiles && r.profiles.pseudo) || "Choomer",
           streak: r.streak, bestStreak: r.best_streak,
           eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art, cardslink, sequence },
           eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink+sequence,
-          achievementsUnlocked: unlocked
+          achievementsUnlocked: unlocked,
+          monthEddies, yearEddies,
+          monthEddiesTotal: Object.values(monthEddies).reduce((a,b)=>a+(b||0),0),
+          yearEddiesTotal: Object.values(yearEddies).reduce((a,b)=>a+(b||0),0)
         };
       });
     }catch(e){ return []; }
@@ -1213,8 +1305,9 @@ function podiumHTML(title, rows, keyFn){
   html += '</div>';
   return html;
 }
-function cumulativePodiumHTML(title, rows){
-  const sorted = rows.slice().sort((a,b)=>b.eddiesTotal-a.eddiesTotal);
+function cumulativePodiumHTML(title, rows, totalKey){
+  totalKey = totalKey || 'eddiesTotal';
+  const sorted = rows.slice().sort((a,b)=>(b[totalKey]||0)-(a[totalKey]||0));
   const medals = ["🥇","🥈","🥉"];
   const top = sorted.slice(0,50);
   let rowsHtml = '';
@@ -1225,12 +1318,12 @@ function cumulativePodiumHTML(title, rows){
     rowsHtml += '<div class="podiumrow podiumrow-cumul'+(isMe?' podiumrow-me':'')+'">'+
       '<span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span>'+
       '<span class="podiumrow-rarity"><span class="podiumrow-rarity-icon">'+RARITY_ICONS[rarity.id]+'</span>'+t(rarity.key)+' · '+(r.achievementsUnlocked||0)+'/'+ACHIEVEMENTS.length+'</span>'+
-      '<span class="val">'+r.eddiesTotal+'</span></div>';
+      '<span class="val">'+(r[totalKey]||0)+'</span></div>';
   });
   let myRank = null, myValue = null;
   if(currentPseudo){
     const myIndex = sorted.findIndex(r=>r.pseudo === currentPseudo);
-    if(myIndex > -1){ myRank = myIndex+1; myValue = sorted[myIndex].eddiesTotal; }
+    if(myIndex > -1){ myRank = myIndex+1; myValue = sorted[myIndex][totalKey]||0; }
     if(myIndex >= 50){
       const r = sorted[myIndex];
       const rarity = rarityForCount(r.achievementsUnlocked||0);
@@ -1238,7 +1331,7 @@ function cumulativePodiumHTML(title, rows){
       rowsHtml += '<div class="podiumrow podiumrow-cumul podiumrow-me">'+
         '<span>#'+(myIndex+1)+' '+r.pseudo+'</span>'+
         '<span class="podiumrow-rarity"><span class="podiumrow-rarity-icon">'+RARITY_ICONS[rarity.id]+'</span>'+t(rarity.key)+' · '+(r.achievementsUnlocked||0)+'/'+ACHIEVEMENTS.length+'</span>'+
-        '<span class="val">'+r.eddiesTotal+'</span></div>';
+        '<span class="val">'+(r[totalKey]||0)+'</span></div>';
     }
   }
   let html = '<div class="podiumbox podiumbox-cumul"><h4>'+title+'</h4><div class="podiumbox-rows">'+rowsHtml+'</div>';
@@ -1249,19 +1342,42 @@ function cumulativePodiumHTML(title, rows){
   html += '</div>';
   return html;
 }
-function communityCategories(){
+function communityCategories(period){
+  const key = period === 'month' ? 'monthEddies' : period === 'year' ? 'yearEddies' : 'eddies';
+  const totalKey = period === 'month' ? 'monthEddiesTotal' : period === 'year' ? 'yearEddiesTotal' : 'eddiesTotal';
   return [
-    [t('podium_cumul'), r=>r.eddiesTotal||0],
-    [t('podium_classic'), r=>(r.eddies&&r.eddies.classic)||0],
-    [t('podium_legend'), r=>(r.eddies&&r.eddies.legend)||0],
-    [t('podium_blitz'), r=>(r.eddies&&r.eddies.blitz)||0],
-    [t('podium_endless'), r=>(r.eddies&&r.eddies.endless)||0],
-    [t('podium_ability'), r=>(r.eddies&&r.eddies.ability)||0],
-    [t('podium_art'), r=>(r.eddies&&r.eddies.art)||0],
-    [t('podium_chrome'), r=>(r.eddies&&r.eddies.chrome)||0],
-    [t('podium_cardslink'), r=>(r.eddies&&r.eddies.cardslink)||0],
-    [t('podium_sequence'), r=>(r.eddies&&r.eddies.sequence)||0],
+    [t('podium_cumul'), r=>r[totalKey]||0],
+    [t('podium_classic'), r=>(r[key]&&r[key].classic)||0],
+    [t('podium_legend'), r=>(r[key]&&r[key].legend)||0],
+    [t('podium_blitz'), r=>(r[key]&&r[key].blitz)||0],
+    [t('podium_endless'), r=>(r[key]&&r[key].endless)||0],
+    [t('podium_ability'), r=>(r[key]&&r[key].ability)||0],
+    [t('podium_art'), r=>(r[key]&&r[key].art)||0],
+    [t('podium_chrome'), r=>(r[key]&&r[key].chrome)||0],
+    [t('podium_cardslink'), r=>(r[key]&&r[key].cardslink)||0],
+    [t('podium_sequence'), r=>(r[key]&&r[key].sequence)||0],
   ];
+}
+function previousMonthPeriod(){
+  const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()-1);
+  return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1);
+}
+async function loadTopOfPeriod(kind, period, limit){
+  if(!supabaseReady) return [];
+  try{
+    const { data, error } = await supabaseClient.from('community_period_archive')
+      .select('pseudo, eddies_total').eq('kind', kind).eq('period', period)
+      .order('eddies_total', { ascending: false }).limit(limit||3);
+    if(error) throw error;
+    return data || [];
+  }catch(e){ return []; }
+}
+function top3BannerHTML(rows){
+  const medals = ["🥇","🥈","🥉"];
+  if(!rows.length) return '<div class="hint" style="text-align:center;">'+t('community_no_archive_yet')+'</div>';
+  return '<div class="top3-banner">'+rows.map((r,i)=>
+    '<div class="top3-item"><span class="top3-medal">'+medals[i]+'</span><span class="top3-name">'+r.pseudo+'</span><span class="top3-val">'+(r.eddies_total||0)+'</span></div>'
+  ).join('')+'</div>';
 }
 async function renderCommunity(){
   loadStats().then(s=>{ if(!s.communityVisited){ s.communityVisited = true; saveStats(s); } });
@@ -1272,11 +1388,63 @@ async function renderCommunity(){
     const cats = communityCategories();
     const cumulHtml = cumulativePodiumHTML(cats[0][0], rows);
     const gamesHtml = cats.slice(1).map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
-    grid.innerHTML = cumulHtml + '<div class="podiumgrid-games">'+gamesHtml+'</div>';
+
+    // Mois en cours ("Month Eddies") — vivant, se remet à zéro tout seul au changement de mois.
+    const monthCats = communityCategories('month');
+    const monthCumulHtml = cumulativePodiumHTML(monthCats[0][0], rows, 'monthEddiesTotal');
+    const monthGamesHtml = monthCats.slice(1).map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
+
+    // Top 3 du mois précédent, tiré de l'archive figée (pas du direct).
+    const top3Rows = await loadTopOfPeriod('month', previousMonthPeriod(), 3);
+
+    // Cumul de l'année en cours.
+    const yearCumulHtml = cumulativePodiumHTML(t('podium_cumul_year'), rows, 'yearEddiesTotal');
+
+    grid.innerHTML =
+      cumulHtml + '<div class="podiumgrid-games">'+gamesHtml+'</div>' +
+      '<h4 class="month-eddies-top3-title" data-i18n="community_top3_last_month">'+t('community_top3_last_month')+'</h4>' +
+      top3BannerHTML(top3Rows) +
+      '<div class="month-eddies-frame"><h3 class="month-eddies-title">'+t('community_month_eddies')+'</h3>' +
+        monthCumulHtml + '<div class="podiumgrid-games">'+monthGamesHtml+'</div>' +
+      '</div>' +
+      '<div class="year-cumul-wrap">'+yearCumulHtml+'</div>';
   }catch(e){
     grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
   }
 }
+async function loadCommunityArchiveMonth(period){
+  const area = document.getElementById('communityArchiveArea');
+  area.innerHTML = '<div class="podiumbox">…</div>';
+  try{
+    const { data, error } = await supabaseClient.from('community_period_archive')
+      .select('*').eq('kind','month').eq('period', period);
+    if(error) throw error;
+    const rows = (data||[]).map(r=>({
+      pseudo: r.pseudo || 'Choomer',
+      monthEddies: r.eddies || {},
+      monthEddiesTotal: r.eddies_total || 0
+    }));
+    if(!rows.length){
+      area.innerHTML = '<div class="podiumbox">'+t('community_no_archive_yet')+'</div>';
+      return;
+    }
+    const cats = communityCategories('month');
+    // Vue figée : on utilise podiumHTML (sans le bandeau de rareté, non pertinent pour une
+    // archive passée) même pour la ligne cumulative.
+    const cumulHtml = podiumHTML(cats[0][0], rows, cats[0][1]);
+    const gamesHtml = cats.slice(1).map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
+    area.innerHTML = cumulHtml + '<div class="podiumgrid-games">'+gamesHtml+'</div>';
+  }catch(e){
+    area.innerHTML = '<div class="podiumbox">—</div>';
+  }
+}
+document.getElementById('communityArchiveLoadBtn').addEventListener('click', ()=>{
+  const val = document.getElementById('communityArchiveMonthInput').value; // "2026-09"
+  if(!val) return;
+  const [y,m] = val.split('-');
+  const period = parseInt(y,10)+"-"+parseInt(m,10);
+  loadCommunityArchiveMonth(period);
+});
 async function shareAllRanks(btn){
   try{
     const rows = await loadCommunityRows();
@@ -2875,7 +3043,7 @@ function renderArchiveCardsLink(area, date){
   });
 }
 
-const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','stats','achievements','archive','feedback'];
+const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','communityArchive','stats','achievements','archive','feedback'];
 function showPanel(name){
   ALL_PANELS.forEach(p=>{
     const el = document.getElementById('panel-'+p);
@@ -2884,6 +3052,14 @@ function showPanel(name){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.panel===name));
   document.querySelectorAll('.fbtn[data-panel]').forEach(b=>b.classList.toggle('active', b.dataset.panel===name));
   if(name==='community') renderCommunity();
+  if(name==='communityArchive'){
+    const input = document.getElementById('communityArchiveMonthInput');
+    if(input && !input.value){
+      const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()-1);
+      input.value = d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,'0');
+      loadCommunityArchiveMonth(d.getUTCFullYear()+"-"+(d.getUTCMonth()+1));
+    }
+  }
   if(name==='stats') renderStatsPanel();
   if(name==='achievements') renderAchievements();
   if(name==='feedback') checkAdminFeedbackView();
@@ -2947,6 +3123,7 @@ initFeedback();
   initSequence();
   initArchive();
   updateEngagementStats();
+  rolloverMonthYearIfNeeded();
   refreshEddiesUI();
 })();
 applyFeatureFlags();
