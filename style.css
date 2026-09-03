@@ -36,6 +36,35 @@
   }
   .subtitle{ color:var(--muted); font-size:13px; margin-top:10px; letter-spacing:.03em; }
 
+  /* ---- Popups glitch (pitch invité / bienvenue nouveau compte / retour de connexion) ---- */
+  .glitchpopup-overlay{
+    position:fixed; inset:0; background:rgba(8,8,13,.85); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; z-index:500; padding:20px;
+  }
+  .glitchpopup-box{
+    background:var(--panel); border:2px solid var(--yellow); max-width:420px; width:100%;
+    padding:28px 24px; text-align:center; position:relative;
+  }
+  .glitchpopup-title{
+    font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:22px; color:var(--yellow);
+    text-shadow:2px 0 0 var(--magenta), -2px 0 0 var(--cyan); text-transform:uppercase; letter-spacing:1px;
+    margin:0 0 16px; animation:glitch 3s infinite;
+  }
+  .glitchpopup-body{ font-size:14px; line-height:1.6; color:var(--text); margin-bottom:20px; }
+  .glitchpopup-body p{ margin:0 0 8px; }
+  .glitchpopup-free{ color:var(--green); font-weight:700; }
+  .glitchpopup-actions{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .glitchpopup-shake{ animation:glitchpopup-shake .4s; }
+  @keyframes glitchpopup-shake{
+    0%,100%{ transform:translate(0,0); }
+    15%{ transform:translate(-4px,2px); }
+    30%{ transform:translate(4px,-2px); }
+    45%{ transform:translate(-3px,-2px); }
+    60%{ transform:translate(3px,2px); }
+    75%{ transform:translate(-2px,1px); }
+    90%{ transform:translate(2px,-1px); }
+  }
+
   /* ---- barre de fonctionnalités : 50% plus petite que les onglets de jeu (13px -> ~10px), couleur cyan comme l'eyebrow ---- */
   .featurebar{
     display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap;
@@ -450,8 +479,9 @@
   /* Cadre "Month Eddies" regroupant les 10 tableaux du mois en cours */
   .month-eddies-frame{ border:2px solid var(--yellow); padding:16px; margin-top:6px; background:rgba(244,228,9,.03); }
   .month-eddies-title{ text-align:center; font-family:'Chakra Petch',sans-serif; color:var(--yellow); text-transform:uppercase; letter-spacing:.06em; margin:0 0 10px; }
-  /* Cumul annuel, en bas de page */
-  .year-cumul-wrap{ margin-top:22px; }
+  /* Cadre "Year Eddies" (vert) autour du cumul annuel, en bas de page */
+  .year-eddies-frame{ border:2px solid var(--green); padding:16px; margin-top:16px; background:rgba(57,217,122,.03); }
+  .year-eddies-title{ text-align:center; font-family:'Chakra Petch',sans-serif; color:var(--green); text-transform:uppercase; letter-spacing:.06em; margin:0 0 10px; }
   .podiumbox-cumul .podiumbox-rows{ max-height:480px; }
   .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); gap:8px; }
   .podiumrow:last-child{ border-bottom:none; }

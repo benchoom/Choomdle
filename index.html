@@ -1055,8 +1055,13 @@ async function onLoggedIn(){
     if(profile && profile.pseudo){
       currentPseudo = profile.pseudo;
       setLoggedInUI(currentPseudo);
+      if(sessionStorage.getItem('choomdle:explicitLogin')){
+        sessionStorage.removeItem('choomdle:explicitLogin');
+        setTimeout(()=>showGlitchPopup('welcomeBack'), 500);
+      }
     } else {
       // Première connexion : pas encore de pseudo enregistré, on le demande.
+      sessionStorage.removeItem('choomdle:explicitLogin'); // évite qu'il traîne jusqu'à la prochaine visite
       const suggested = (currentSession.user.user_metadata && currentSession.user.user_metadata.full_name) || '';
       currentPseudo = null;
       showPseudoPicker(suggested);
@@ -1104,11 +1109,13 @@ async function initAccount(){
     msg.textContent = '';
     if(!email || !password) return;
     try{
+      sessionStorage.setItem('choomdle:explicitLogin', '1');
       const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if(error) throw error;
-    }catch(e){ msg.textContent = e.message || t('acc_error_generic'); }
+    }catch(e){ sessionStorage.removeItem('choomdle:explicitLogin'); msg.textContent = e.message || t('acc_error_generic'); }
   });
   document.getElementById('googleBtn').addEventListener('click', async ()=>{
+    sessionStorage.setItem('choomdle:explicitLogin', '1');
     await supabaseClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: cleanUrl() } });
   });
   document.getElementById('savePseudoBtn').addEventListener('click', async ()=>{
@@ -1126,6 +1133,7 @@ async function initAccount(){
       }
       currentPseudo = newPseudo;
       setLoggedInUI(newPseudo);
+      setTimeout(()=>showGlitchPopup('welcomeNew'), 500);
     }catch(e){ msg.textContent = t('acc_error_generic'); }
   });
 
@@ -1226,6 +1234,10 @@ function setLoggedOutUI(){
   document.getElementById('authForm').style.display = 'block';
   document.getElementById('pseudoPickForm').style.display = 'none';
   document.getElementById('loggedInMenu').style.display = 'none';
+  if(!guestPitchPopupShown){
+    guestPitchPopupShown = true;
+    setTimeout(()=>showGlitchPopup('guestPitch'), 500);
+  }
   document.getElementById('pseudoInput').value = '';
   document.getElementById('emailInput').value = '';
   document.getElementById('passwordInput').value = '';
@@ -1379,6 +1391,19 @@ function top3BannerHTML(rows){
     '<div class="top3-item"><span class="top3-medal">'+medals[i]+'</span><span class="top3-name">'+r.pseudo+'</span><span class="top3-val">'+(r.eddies_total||0)+'</span></div>'
   ).join('')+'</div>';
 }
+function top3ShareButtonHTML(rows){
+  if(!rows.length) return '';
+  return '<div style="text-align:center;margin-bottom:14px;"><button class="share-btn" onclick="shareTop3Month(this)">'+t('share_button')+'</button></div>';
+}
+async function shareTop3Month(btn){
+  const rows = await loadTopOfPeriod('month', previousMonthPeriod(), 3);
+  if(!rows.length) return;
+  const medals = ["🥇","🥈","🥉"];
+  let text = t('community_top3_last_month')+' — Choomdle\n';
+  rows.forEach((r,i)=>{ text += (medals[i]||(i+1)+'.')+' '+r.pseudo+' — '+(r.eddies_total||0)+' eddies\n'; });
+  text += 'choomdle.com';
+  shareToClipboard(text, btn);
+}
 async function renderCommunity(){
   loadStats().then(s=>{ if(!s.communityVisited){ s.communityVisited = true; saveStats(s); } });
   const grid = document.getElementById('podiumGrid');
@@ -1387,7 +1412,6 @@ async function renderCommunity(){
     const rows = await loadCommunityRows();
     const cats = communityCategories();
     const cumulHtml = cumulativePodiumHTML(cats[0][0], rows);
-    const gamesHtml = cats.slice(1).map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
 
     // Mois en cours ("Month Eddies") — vivant, se remet à zéro tout seul au changement de mois.
     const monthCats = communityCategories('month');
@@ -1401,13 +1425,16 @@ async function renderCommunity(){
     const yearCumulHtml = cumulativePodiumHTML(t('podium_cumul_year'), rows, 'yearEddiesTotal');
 
     grid.innerHTML =
-      cumulHtml + '<div class="podiumgrid-games">'+gamesHtml+'</div>' +
       '<h4 class="month-eddies-top3-title" data-i18n="community_top3_last_month">'+t('community_top3_last_month')+'</h4>' +
       top3BannerHTML(top3Rows) +
+      top3ShareButtonHTML(top3Rows) +
       '<div class="month-eddies-frame"><h3 class="month-eddies-title">'+t('community_month_eddies')+'</h3>' +
         monthCumulHtml + '<div class="podiumgrid-games">'+monthGamesHtml+'</div>' +
       '</div>' +
-      '<div class="year-cumul-wrap">'+yearCumulHtml+'</div>';
+      '<div class="year-eddies-frame"><h3 class="year-eddies-title">'+t('community_year_eddies')+'</h3>' +
+        yearCumulHtml +
+      '</div>' +
+      cumulHtml;
   }catch(e){
     grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
   }
@@ -3043,6 +3070,55 @@ function renderArchiveCardsLink(area, date){
   });
 }
 
+// ======================= POPUPS GLITCH (pitch invité / bienvenue) =======================
+function showGlitchPopup(kind){
+  const overlay = document.getElementById('glitchPopupOverlay');
+  const title = document.getElementById('glitchPopupTitle');
+  const body = document.getElementById('glitchPopupBody');
+  const actions = document.getElementById('glitchPopupActions');
+  actions.innerHTML = '';
+  if(kind === 'guestPitch'){
+    title.textContent = t('popup_guest_title');
+    body.innerHTML =
+      '<p>'+t('popup_guest_line1')+'</p>'+
+      '<p>'+t('popup_guest_line2')+'</p>'+
+      '<p class="glitchpopup-free">'+t('popup_guest_line3')+'</p>';
+    const createBtn = document.createElement('button');
+    createBtn.className = 'bigbtn'; createBtn.textContent = t('popup_guest_cta');
+    createBtn.onclick = ()=>{
+      closeGlitchPopup();
+      document.getElementById('legendProfileMenu').style.display = 'block';
+      const email = document.getElementById('emailInput'); if(email) email.focus();
+    };
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'share-btn'; closeBtn.textContent = t('popup_close');
+    closeBtn.onclick = closeGlitchPopup;
+    actions.appendChild(createBtn); actions.appendChild(closeBtn);
+  } else if(kind === 'welcomeNew'){
+    title.textContent = t('popup_welcome_new_title');
+    body.innerHTML = '<p>'+t('popup_welcome_new_line')+'</p>';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'bigbtn'; okBtn.textContent = t('popup_close');
+    okBtn.onclick = closeGlitchPopup;
+    actions.appendChild(okBtn);
+  } else if(kind === 'welcomeBack'){
+    title.textContent = t('popup_welcome_back_title');
+    body.innerHTML = '<p>'+t('popup_welcome_back_line')+'</p>';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'bigbtn'; okBtn.textContent = t('popup_close');
+    okBtn.onclick = closeGlitchPopup;
+    actions.appendChild(okBtn);
+  }
+  overlay.style.display = 'flex';
+  const box = document.getElementById('glitchPopupBox');
+  box.classList.remove('glitchpopup-shake');
+  void box.offsetWidth; // force le redémarrage de l'animation même si le popup était déjà affiché
+  box.classList.add('glitchpopup-shake');
+}
+function closeGlitchPopup(){
+  document.getElementById('glitchPopupOverlay').style.display = 'none';
+}
+let guestPitchPopupShown = false;
 const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','communityArchive','stats','achievements','archive','feedback'];
 function showPanel(name){
   ALL_PANELS.forEach(p=>{
@@ -3195,5 +3271,13 @@ async function enableNotifications(){
 }
 document.getElementById('menuNotifications').addEventListener('click', enableNotifications);
 </script>
+
+<div class="glitchpopup-overlay" id="glitchPopupOverlay" style="display:none;">
+  <div class="glitchpopup-box" id="glitchPopupBox">
+    <h2 class="glitchpopup-title" id="glitchPopupTitle"></h2>
+    <div class="glitchpopup-body" id="glitchPopupBody"></div>
+    <div class="glitchpopup-actions" id="glitchPopupActions"></div>
+  </div>
+</div>
 </body>
 </html>
