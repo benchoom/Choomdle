@@ -482,6 +482,9 @@
   /* Cadre "Year Eddies" (vert) autour du cumul annuel, en bas de page */
   .year-eddies-frame{ border:2px solid var(--green); padding:16px; margin-top:16px; background:rgba(57,217,122,.03); }
   .year-eddies-title{ text-align:center; font-family:'Chakra Petch',sans-serif; color:var(--green); text-transform:uppercase; letter-spacing:.06em; margin:0 0 10px; }
+  /* Cadre "The Afterlife - Hall of Fame" (bleu) autour du cumul à vie */
+  .afterlife-frame{ border:2px solid #26a5e5; padding:16px; margin-top:16px; background:rgba(38,165,229,.03); }
+  .afterlife-title{ text-align:center; font-family:'Chakra Petch',sans-serif; color:#26a5e5; text-transform:uppercase; letter-spacing:.06em; margin:0 0 10px; }
   .podiumbox-cumul .podiumbox-rows{ max-height:480px; }
   .podiumrow{ display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); gap:8px; }
   .podiumrow:last-child{ border-bottom:none; }
