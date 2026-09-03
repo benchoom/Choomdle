@@ -796,7 +796,7 @@ function statsRowToLocal(row){
     sequencePlayed: meta.sequencePlayed||0, sequenceWins: meta.sequenceWins||0,
     artFirstTryWins: meta.artFirstTryWins||0, cardsLinkFlawlessCount: meta.cardsLinkFlawlessCount||0,
     sequenceFirstTryWins: meta.sequenceFirstTryWins||0, hasUsedArchive: meta.hasUsedArchive||false,
-    hasShared: meta.hasShared||false, hasChangedPseudo: meta.hasChangedPseudo||false,
+    hasShared: meta.hasShared||false, hasChangedPseudo: meta.hasChangedPseudo||false, hasSeenWelcomeNew: meta.hasSeenWelcomeNew||false,
     activityStreak: meta.activityStreak||0, bestActivityStreak: meta.bestActivityStreak||0, lastActiveDate: meta.lastActiveDate||null,
     cardsDiscovered: meta.cardsDiscovered||[], languagesUsed: meta.languagesUsed||[],
     communityVisited: meta.communityVisited||false, feedbackCount: meta.feedbackCount||0,
@@ -834,7 +834,7 @@ function localToStatsRow(s, uid){
       lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null,
       artFirstTryWins: s.artFirstTryWins||0, cardsLinkFlawlessCount: s.cardsLinkFlawlessCount||0,
       sequenceFirstTryWins: s.sequenceFirstTryWins||0, hasUsedArchive: s.hasUsedArchive||false,
-      hasShared: s.hasShared||false, hasChangedPseudo: s.hasChangedPseudo||false,
+      hasShared: s.hasShared||false, hasChangedPseudo: s.hasChangedPseudo||false, hasSeenWelcomeNew: s.hasSeenWelcomeNew||false,
       activityStreak: s.activityStreak||0, bestActivityStreak: s.bestActivityStreak||0, lastActiveDate: s.lastActiveDate||null,
       cardsDiscovered: s.cardsDiscovered||[], languagesUsed: s.languagesUsed||[],
       communityVisited: s.communityVisited||false, feedbackCount: s.feedbackCount||0,
@@ -876,7 +876,7 @@ function defaultStats(){
     lastCardsLinkPlayed:null, cardsLinkWon:null, lastCardsLinkReward:0, lastCardsLinkMistakes:0,
     cardsLinkPlayed:0, cardsLinkWins:0,
     lastSequencePlayed:null, sequenceWon:false, sequenceLost:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0,
-    artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false,
+    artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false, hasSeenWelcomeNew:false,
     activityStreak:0, bestActivityStreak:0, lastActiveDate:null,
     cardsDiscovered:[], languagesUsed:[], communityVisited:false, feedbackCount:0,
     earlyBirdWin:false, nightOwlWin:false, inProgress:{}};
@@ -1133,7 +1133,15 @@ async function initAccount(){
       }
       currentPseudo = newPseudo;
       setLoggedInUI(newPseudo);
-      setTimeout(()=>showGlitchPopup('welcomeNew'), 500);
+      // Verrou persistant côté compte : ce popup ne doit JAMAIS pouvoir se redéclencher pour un
+      // compte qui l'a déjà vu une fois, quelle que soit la façon dont ce code serait ré-exécuté.
+      loadStats().then(s=>{
+        if(!s.hasSeenWelcomeNew){
+          s.hasSeenWelcomeNew = true;
+          saveStats(s);
+          setTimeout(()=>showGlitchPopup('welcomeNew'), 500);
+        }
+      });
     }catch(e){ msg.textContent = t('acc_error_generic'); }
   });
 
