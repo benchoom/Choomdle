@@ -1049,6 +1049,10 @@ async function initSupabaseAuth(){
   });
 }
 async function onLoggedIn(){
+  // Une session vient d'être confirmée (même restaurée silencieusement au chargement) : on
+  // annule tout popup "invité" qui aurait pu être programmé pendant le bref instant où la page
+  // semblait déconnectée — il ne doit jamais s'afficher dans ce cas.
+  if(guestPitchTimer){ clearTimeout(guestPitchTimer); guestPitchTimer = null; }
   const uid = currentSession.user.id;
   try{
     const { data: profile } = await supabaseClient.from('profiles').select('pseudo, pseudo_changed_at').eq('id', uid).maybeSingle();
@@ -1242,9 +1246,15 @@ function setLoggedOutUI(){
   document.getElementById('authForm').style.display = 'block';
   document.getElementById('pseudoPickForm').style.display = 'none';
   document.getElementById('loggedInMenu').style.display = 'none';
-  if(!guestPitchPopupShown){
-    guestPitchPopupShown = true;
-    setTimeout(()=>showGlitchPopup('guestPitch'), 500);
+  if(!guestPitchPopupShown && !guestPitchTimer){
+    // Délai volontairement plus long : au chargement de la page, une session déjà active met
+    // parfois une fraction de seconde à se restaurer silencieusement — le temps qu'elle le
+    // fasse, on annule complètement ce popup au lieu de l'afficher à tort (voir onLoggedIn).
+    guestPitchTimer = setTimeout(()=>{
+      guestPitchTimer = null;
+      guestPitchPopupShown = true;
+      showGlitchPopup('guestPitch');
+    }, 1200);
   }
   document.getElementById('pseudoInput').value = '';
   document.getElementById('emailInput').value = '';
@@ -3127,6 +3137,7 @@ function closeGlitchPopup(){
   document.getElementById('glitchPopupOverlay').style.display = 'none';
 }
 let guestPitchPopupShown = false;
+let guestPitchTimer = null;
 const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','communityArchive','stats','achievements','archive','feedback'];
 function showPanel(name){
   ALL_PANELS.forEach(p=>{
