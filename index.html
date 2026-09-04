@@ -1750,7 +1750,7 @@ async function renderCollection(){
   document.getElementById('collectionFoundCount').textContent = edition.cards.filter(c=>found.has(c.n)).length;
   grid.innerHTML = edition.cards.map(c=>{
     const has = found.has(c.n);
-    return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+(has?c.n.replace(/"/g,'&quot;'):'???')+'" loading="lazy">';
+    return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+c.n.replace(/"/g,'&quot;')+'" loading="lazy">';
   }).join('');
 }
 async function renderAchievements(){
