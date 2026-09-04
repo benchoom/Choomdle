@@ -156,4 +156,9 @@ const WNC_CARDS = [
 {n:"Tetratronic Rippler",t:"Gear",f:["Cyberware"],c:1,p:1,r:2,col:"Blue",text:"(Equip to a friendly Unit or face-up Legend.) When this Unit or Legend is spent, search the top card of your deck. You may trash it. (Otherwise, keep it on the top of your deck.)"},
 {n:"Detonate",t:"Program",f:["Quickhack"],c:1,p:null,r:2,col:"Red",text:"{Quick} Defeat a rival Gear with power 2 or less."},
 {n:"Rogue Amendiares — Queen of the Afterlife",t:"Unit",f:["Fixer","Merc"],c:5,p:4,r:2,col:"Blue",text:"The first time another friendly Unit steals a Gig with value less than its power each turn, ready 2 Eddies. {Quick} 2 €$, {Spend}: A rival Unit loses power equal to this Unit's power this turn."},
+
+// ---- 3 cartes ajoutées le 04/09/2026 ----
+{n:"Tyger's Whisper",t:"Unit",f:["Fixer","Tyger Claws"],c:2,p:0,r:1,col:"Green",text:"{Play} You may Call a Legend for free. (You can only Call a Legend once per turn.) (Units with power 0 don't steal Gigs.)"},
+{n:"We Gotta Live Together",t:"Program",f:["Aldecaldo","Nomad"],c:5,p:null,r:2,col:"Green",text:"If a Rival controls at least 2 more Gigs than you, play this Program for 3 €$. Play up to 2 Units with cost 3 or less from your trash for free."},
+{n:"Towerfall",t:"Program",f:["Braindance"],c:6,p:null,r:4,col:"Blue",text:"Choose one effect. If you have less \u2605 (Street Cred) than a Rival, choose both instead. - Give all rival Units -5 power this turn. - Bottom-deck all rival Units with power 0."},
 ];
