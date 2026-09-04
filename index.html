@@ -1754,25 +1754,10 @@ async function renderCollection(){
   document.getElementById('collectionTotalCount').textContent = cards.length;
   document.getElementById('collectionFoundCount').textContent = cards.filter(c=>found.has(c.n)).length;
   if(!cards.length){ grid.innerHTML = '<div class="hint">—</div>'; return; }
-  // Regroupe les cartes consécutives (une fois triées par numéro) qui partagent la même
-  // couleur, dans un cadre à part de cette couleur — comme demandé, les couleurs se suivant
-  // naturellement dans l'ordre de numérotation officiel.
-  let html = '';
-  let i = 0;
-  while(i < cards.length){
-    const col = cards[i].col || 'none';
-    let j = i;
-    while(j < cards.length && (cards[j].col||'none') === col) j++;
-    const group = cards.slice(i, j);
-    html += '<div class="collection-colorframe collection-colorframe-'+col.toLowerCase()+'">' +
-      group.map(c=>{
-        const has = found.has(c.n);
-        return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+c.n.replace(/"/g,'&quot;')+'" loading="lazy">';
-      }).join('') +
-      '</div>';
-    i = j;
-  }
-  grid.innerHTML = html;
+  grid.innerHTML = cards.map(c=>{
+    const has = found.has(c.n);
+    return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+c.n.replace(/"/g,'&quot;')+'" loading="lazy">';
+  }).join('');
 }
 async function renderAchievements(){
   const grid = document.getElementById('achievementsGrid');
