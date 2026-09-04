@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.choomdle.twa",
+        "sha256_cert_fingerprints": ["20:B7:D3:9E:9F:32:E4:93:1C:35:C6:3B:8D:FB:BE:06:2E:94:E6:06:FE:04:58:89:0F:45:2C:37:7F:12:8D:07"]
+      }
+    }]
