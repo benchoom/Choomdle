@@ -145,6 +145,7 @@
       <button class="fbtn" data-panel="community" data-i18n="fbtn_community">Communauté</button>
       <button class="fbtn" data-panel="communityArchive" data-i18n="fbtn_community_archive">Community Archives</button>
       <button class="fbtn" data-panel="stats" data-i18n="fbtn_stats">Mes Stats</button>
+      <button class="fbtn" data-panel="collection" data-i18n="fbtn_collection">Collection</button>
       <button class="fbtn" data-panel="achievements" data-i18n="fbtn_achievements">Succès</button>
       <button class="fbtn" data-panel="archive" data-i18n="fbtn_archive">Archive</button>
       <button class="fbtn" data-panel="feedback" data-i18n="fbtn_feedback">Feedback</button>
@@ -379,6 +380,17 @@
     <div class="statusline"><span data-i18n="stats_title">Mes statistiques</span></div>
     <div id="statsPerGame"></div>
     <button class="share-btn" onclick="shareStats(this)" data-i18n="share_button">Partager</button>
+  </div>
+
+  <!-- CARD COLLECTION -->
+  <div class="panel" id="panel-collection" style="display:none">
+    <div class="statusline">
+      <span data-i18n="collection_title">Collection de cartes</span>
+      <span class="stat"><b id="collectionFoundCount">0</b> / <b id="collectionTotalCount">0</b></span>
+    </div>
+    <div class="hint" data-i18n="collection_hint" style="margin-bottom:10px;">Devine une carte dans Classic, Legend, Ability ou Art pour la débloquer ici en couleur.</div>
+    <nav id="collectionEditionTabs" class="tabs" style="margin-bottom:14px;"></nav>
+    <div id="collectionGrid" class="collection-grid"></div>
   </div>
 
   <!-- ACHIEVEMENTS -->
@@ -798,7 +810,7 @@ function statsRowToLocal(row){
     sequenceFirstTryWins: meta.sequenceFirstTryWins||0, hasUsedArchive: meta.hasUsedArchive||false,
     hasShared: meta.hasShared||false, hasChangedPseudo: meta.hasChangedPseudo||false, hasSeenWelcomeNew: meta.hasSeenWelcomeNew||false,
     activityStreak: meta.activityStreak||0, bestActivityStreak: meta.bestActivityStreak||0, lastActiveDate: meta.lastActiveDate||null,
-    cardsDiscovered: meta.cardsDiscovered||[], languagesUsed: meta.languagesUsed||[],
+    cardsDiscovered: meta.cardsDiscovered||[], collectionCards: meta.collectionCards||[], languagesUsed: meta.languagesUsed||[],
     communityVisited: meta.communityVisited||false, feedbackCount: meta.feedbackCount||0,
     earlyBirdWin: meta.earlyBirdWin||false, nightOwlWin: meta.nightOwlWin||false,
     inProgress: meta.inProgress||{},
@@ -836,7 +848,7 @@ function localToStatsRow(s, uid){
       sequenceFirstTryWins: s.sequenceFirstTryWins||0, hasUsedArchive: s.hasUsedArchive||false,
       hasShared: s.hasShared||false, hasChangedPseudo: s.hasChangedPseudo||false, hasSeenWelcomeNew: s.hasSeenWelcomeNew||false,
       activityStreak: s.activityStreak||0, bestActivityStreak: s.bestActivityStreak||0, lastActiveDate: s.lastActiveDate||null,
-      cardsDiscovered: s.cardsDiscovered||[], languagesUsed: s.languagesUsed||[],
+      cardsDiscovered: s.cardsDiscovered||[], collectionCards: s.collectionCards||[], languagesUsed: s.languagesUsed||[],
       communityVisited: s.communityVisited||false, feedbackCount: s.feedbackCount||0,
       earlyBirdWin: s.earlyBirdWin||false, nightOwlWin: s.nightOwlWin||false,
       inProgress: s.inProgress||{} }
@@ -878,7 +890,7 @@ function defaultStats(){
     lastSequencePlayed:null, sequenceWon:false, sequenceLost:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0,
     artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false, hasSeenWelcomeNew:false,
     activityStreak:0, bestActivityStreak:0, lastActiveDate:null,
-    cardsDiscovered:[], languagesUsed:[], communityVisited:false, feedbackCount:0,
+    cardsDiscovered:[], collectionCards:[], languagesUsed:[], communityVisited:false, feedbackCount:0,
     earlyBirdWin:false, nightOwlWin:false, inProgress:{}};
 }
 async function saveStats(stats){
@@ -958,6 +970,12 @@ function refreshEddiesUI(){ loadStats().then(s=>{ document.getElementById('eddie
 function addDiscoveredCard(s, name){
   s.cardsDiscovered = s.cardsDiscovered || [];
   if(!s.cardsDiscovered.includes(name)) s.cardsDiscovered.push(name);
+}
+function addCollectionCard(s, name){
+  // Séparé de cardsDiscovered (qui sert aux succès et inclut Endless) : la page Collection ne
+  // compte QUE Classic/Legend/Ability/Art, comme demandé, sans changer le calcul des succès.
+  s.collectionCards = s.collectionCards || [];
+  if(!s.collectionCards.includes(name)) s.collectionCards.push(name);
 }
 // Série de jours d'affilée où le joueur s'est connecté/a joué (tous jeux confondus), + petits succès horaires.
 // ======================= ROLLOVER MENSUEL / ANNUEL DES EDDIES (Community) =======================
@@ -1705,6 +1723,36 @@ const ACHIEVEMENTS = [
 function totalGamesPlayed(s){
   return (s.gamesPlayed||0)+(s.legendPlayed||0)+(s.blitzSessions||0)+(s.endlessSolved||0)+(s.abilitySolved||0)+(s.artPlayed||0)+(s.chromeSessions||0)+(s.cardsLinkPlayed||0)+(s.sequencePlayed||0);
 }
+// ======================= COLLECTION DE CARTES (Classic/Legend/Ability/Art) =======================
+const COLLECTION_EDITIONS = [
+  { id: 'wnc', label: 'WNC', cards: WNC_CARDS },
+];
+let currentCollectionEdition = 'wnc';
+function renderCollectionTabs(){
+  const wrap = document.getElementById('collectionEditionTabs');
+  wrap.innerHTML = COLLECTION_EDITIONS.map(ed=>
+    '<button class="tab'+(ed.id===currentCollectionEdition?' active':'')+'" data-edition="'+ed.id+'">'+ed.label+'</button>'
+  ).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      currentCollectionEdition = btn.dataset.edition;
+      renderCollection();
+    });
+  });
+}
+async function renderCollection(){
+  renderCollectionTabs();
+  const edition = COLLECTION_EDITIONS.find(e=>e.id===currentCollectionEdition) || COLLECTION_EDITIONS[0];
+  const grid = document.getElementById('collectionGrid');
+  const s = await loadStats();
+  const found = new Set(s.collectionCards || []);
+  document.getElementById('collectionTotalCount').textContent = edition.cards.length;
+  document.getElementById('collectionFoundCount').textContent = edition.cards.filter(c=>found.has(c.n)).length;
+  grid.innerHTML = edition.cards.map(c=>{
+    const has = found.has(c.n);
+    return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+(has?c.n.replace(/"/g,'&quot;'):'???')+'" loading="lazy">';
+  }).join('');
+}
 async function renderAchievements(){
   const grid = document.getElementById('achievementsGrid');
   const shareBtns = document.querySelectorAll('.panel#panel-achievements .share-btn');
@@ -1978,6 +2026,7 @@ setupAutocomplete(classicInput, classicSugg, (card)=>{
         s.guessDistribution = s.guessDistribution || {};
         s.guessDistribution[classicGuesses.length] = (s.guessDistribution[classicGuesses.length]||0)+1;
         addDiscoveredCard(s, classicSecret.n);
+        addCollectionCard(s, classicSecret.n);
         s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
         s.eddies.classic += reward;
         s.lastClassicReward = reward;
@@ -2036,6 +2085,7 @@ function submitLegend(){
     if(correct){
       s.legendResult = 'win';
       s.legendWins = (s.legendWins||0)+1;
+      addCollectionCard(s, legendSecret.n);
       s.eddies.legend = (s.eddies.legend||0) + 50;
       banner.className = "banner win";
       banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret)+shareButtonHTML('shareLegend');
@@ -2196,6 +2246,7 @@ setupAutocomplete(abilityInput, abilitySugg, (card)=>{
         s.lastAbilityPlayed = today; s.abilityWon = true;
         s.abilitySolved = (s.abilitySolved||0)+1;
         addDiscoveredCard(s, abilitySecret.n);
+        addCollectionCard(s, abilitySecret.n);
         s.eddies = s.eddies || {};
         s.eddies.ability = (s.eddies.ability||0) + reward;
         s.lastAbilityReward = reward;
@@ -2322,6 +2373,7 @@ setupAutocomplete(artInput, artSugg, (card)=>{
         s.artPlayed = (s.artPlayed||0)+1;
         s.artSolved = (s.artSolved||0)+1;
         addDiscoveredCard(s, artSecret.n);
+        addCollectionCard(s, artSecret.n);
         if(artAttempt===1) s.artFirstTryWins = (s.artFirstTryWins||0)+1;
         s.eddies = s.eddies || {};
         s.eddies.art = (s.eddies.art||0) + reward;
@@ -3138,7 +3190,7 @@ function closeGlitchPopup(){
 }
 let guestPitchPopupShown = false;
 let guestPitchTimer = null;
-const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','communityArchive','stats','achievements','archive','feedback'];
+const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','communityArchive','stats','collection','achievements','archive','feedback'];
 function showPanel(name){
   ALL_PANELS.forEach(p=>{
     const el = document.getElementById('panel-'+p);
@@ -3156,6 +3208,7 @@ function showPanel(name){
     }
   }
   if(name==='stats') renderStatsPanel();
+  if(name==='collection') renderCollection();
   if(name==='achievements') renderAchievements();
   if(name==='feedback') checkAdminFeedbackView();
 }
