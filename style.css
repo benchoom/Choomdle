@@ -194,8 +194,14 @@
   .tab.active{ background:var(--yellow); color:#0a0a10; border-color:var(--yellow); }
   /* Collection de cartes */
   .collection-grid{ display:flex; flex-wrap:wrap; gap:4px; }
-  .collection-card{ width:125px; height:auto; display:block; border:1px solid var(--line); }
+  .collection-card{ width:156px; height:auto; display:block; border:1px solid var(--line); }
   .collection-card-locked{ filter:grayscale(1) brightness(.55); }
+  .collection-colorframe{ display:flex; flex-wrap:wrap; gap:4px; border:3px solid; padding:8px; margin-bottom:8px; }
+  .collection-colorframe-red{ border-color:#ff2e4d; background:rgba(255,46,77,.04); }
+  .collection-colorframe-yellow{ border-color:#f4e409; background:rgba(244,228,9,.04); }
+  .collection-colorframe-green{ border-color:#39d97a; background:rgba(57,217,122,.04); }
+  .collection-colorframe-blue{ border-color:#26a5e5; background:rgba(38,165,229,.04); }
+  .collection-colorframe-none{ border-color:var(--line); }
   .topbar-row{ display:flex; align-items:center; gap:6px; }
   .rarity-badge{
     display:inline-flex; flex-direction:column; align-items:center; gap:4px; padding:10px 14px;

@@ -1725,7 +1725,10 @@ function totalGamesPlayed(s){
 }
 // ======================= COLLECTION DE CARTES (Classic/Legend/Ability/Art) =======================
 const COLLECTION_EDITIONS = [
-  { id: 'wnc', label: 'WNC', cards: WNC_CARDS },
+  { id: 'wnc', label: 'WNC', cards: WNC_CARDS.filter(c=>!c.edition) },
+  { id: 'sd01-hei', label: 'SD01-HEI', cards: WNC_CARDS.filter(c=>c.edition==='SD01-HEI') },
+  { id: 'sd02-ebp', label: 'SD02-EBP', cards: WNC_CARDS.filter(c=>c.edition==='SD02-EBP') },
+  { id: 'prm01', label: 'PRM01', cards: WNC_CARDS.filter(c=>c.edition==='PRM01') },
 ];
 let currentCollectionEdition = 'wnc';
 function renderCollectionTabs(){
@@ -1746,12 +1749,30 @@ async function renderCollection(){
   const grid = document.getElementById('collectionGrid');
   const s = await loadStats();
   const found = new Set(s.collectionCards || []);
-  document.getElementById('collectionTotalCount').textContent = edition.cards.length;
-  document.getElementById('collectionFoundCount').textContent = edition.cards.filter(c=>found.has(c.n)).length;
-  grid.innerHTML = edition.cards.map(c=>{
-    const has = found.has(c.n);
-    return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+c.n.replace(/"/g,'&quot;')+'" loading="lazy">';
-  }).join('');
+  // Triées par numéro de collection croissant (les cartes sans numéro connu vont à la fin).
+  const cards = edition.cards.slice().sort((a,b)=>(a.num??9999)-(b.num??9999));
+  document.getElementById('collectionTotalCount').textContent = cards.length;
+  document.getElementById('collectionFoundCount').textContent = cards.filter(c=>found.has(c.n)).length;
+  if(!cards.length){ grid.innerHTML = '<div class="hint">—</div>'; return; }
+  // Regroupe les cartes consécutives (une fois triées par numéro) qui partagent la même
+  // couleur, dans un cadre à part de cette couleur — comme demandé, les couleurs se suivant
+  // naturellement dans l'ordre de numérotation officiel.
+  let html = '';
+  let i = 0;
+  while(i < cards.length){
+    const col = cards[i].col || 'none';
+    let j = i;
+    while(j < cards.length && (cards[j].col||'none') === col) j++;
+    const group = cards.slice(i, j);
+    html += '<div class="collection-colorframe collection-colorframe-'+col.toLowerCase()+'">' +
+      group.map(c=>{
+        const has = found.has(c.n);
+        return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+c.n.replace(/"/g,'&quot;')+'" loading="lazy">';
+      }).join('') +
+      '</div>';
+    i = j;
+  }
+  grid.innerHTML = html;
 }
 async function renderAchievements(){
   const grid = document.getElementById('achievementsGrid');
