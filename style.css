@@ -36,6 +36,34 @@
   }
   .subtitle{ color:var(--muted); font-size:13px; margin-top:10px; letter-spacing:.03em; }
 
+  /* ---- Modal "How to Play" (contextuel, style calme, pas d'effet glitch) ---- */
+  .howtoplay-overlay{
+    position:fixed; inset:0; background:rgba(8,8,13,.85); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; z-index:500; padding:20px;
+  }
+  .howtoplay-box{
+    background:var(--panel); border:1px solid var(--line); max-width:480px; width:100%;
+    max-height:85vh; overflow-y:auto; padding:28px 24px; position:relative;
+  }
+  .howtoplay-close{
+    position:absolute; top:14px; right:14px; background:none; border:none; color:var(--muted);
+    font-size:18px; cursor:pointer; line-height:1;
+  }
+  .howtoplay-close:hover{ color:var(--yellow); }
+  .howtoplay-title{
+    font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:20px; color:var(--yellow);
+    margin:0 0 14px; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .howtoplay-body{ font-size:14px; line-height:1.6; color:var(--text); }
+  .howtoplay-body p{ margin:0 0 12px; }
+  .howtoplay-body ul{ margin:0 0 12px; padding-left:20px; }
+  .howtoplay-body li{ margin-bottom:6px; }
+  .howtoplay-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:12.5px; background:var(--bg2); border:1px solid var(--line); padding:8px 10px; }
+  .howtoplay-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:middle; }
+  .howtoplay-swatch.howtoplay-match{ background:var(--green); }
+  .howtoplay-swatch.howtoplay-partial{ background:var(--orange); }
+  .howtoplay-swatch.howtoplay-miss{ background:var(--magenta); }
+
   /* ---- Popups glitch (pitch invité / bienvenue nouveau compte / retour de connexion) ---- */
   .glitchpopup-overlay{
     position:fixed; inset:0; background:rgba(8,8,13,.85); backdrop-filter:blur(3px);
@@ -95,8 +123,13 @@
   .lang-select-wrap{ position:relative; display:inline-block; }
   .lang-select-btn{
     appearance:none; background:var(--yellow); color:#0a0a10; border:1px solid var(--yellow); font-weight:700;
-    font-size:10px; padding:5px 10px; font-family:'Chakra Petch',sans-serif; letter-spacing:.05em; cursor:pointer; transition:.15s;
+    font-size:15px; padding:8px 15px; font-family:'Chakra Petch',sans-serif; letter-spacing:.05em; cursor:pointer; transition:.15s;
   }
+  .howtoplay-btn{
+    appearance:none; background:var(--yellow); color:#0a0a10; border:1px solid var(--yellow); font-weight:700;
+    font-size:15px; padding:8px 15px; font-family:'Chakra Petch',sans-serif; letter-spacing:.05em; cursor:pointer; transition:.15s;
+  }
+  .howtoplay-btn:hover{ border-color:var(--cyan); }
   .lang-select-wrap:hover .lang-select-btn{ border-color:var(--cyan); }
   .lang-select-list{
     position:absolute; top:100%; right:0; margin-top:4px; background:var(--yellow); border:1px solid var(--yellow);
@@ -202,7 +235,7 @@
   .collection-colorframe-green{ border-color:#39d97a; background:rgba(57,217,122,.04); }
   .collection-colorframe-blue{ border-color:#26a5e5; background:rgba(38,165,229,.04); }
   .collection-colorframe-none{ border-color:var(--line); }
-  .topbar-row{ display:flex; align-items:center; gap:6px; }
+  .topbar-row{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
   .rarity-badge{
     display:inline-flex; flex-direction:column; align-items:center; gap:4px; padding:10px 14px;
     background:var(--panel); border:2px solid var(--yellow);

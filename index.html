@@ -75,6 +75,15 @@
   <div class="topbar">
     <div class="topbar-right">
       <div class="topbar-row">
+        <button class="howtoplay-btn" id="howToPlayBtn" data-i18n="howtoplay_btn">How to Play</button>
+        <div class="lang-select-wrap" id="langSelectWrap">
+          <button class="lang-select-btn" id="langSelectBtn">EN ▾</button>
+          <div class="lang-select-list" id="langSelectList" style="display:none;"></div>
+        </div>
+        <span class="tab-eddies" id="eddiesChip" data-i18n-title="eddies_purpose" title="Les eddies ne servent qu'au classement communautaire et à tes stats — aucune autre utilité.">
+          <svg class="eddies-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" font-family="Chakra Petch, sans-serif" font-weight="700" fill="currentColor">€$</text></svg>
+          <span id="eddiesTotal">0</span>
+        </span>
         <div class="rarity-badge" id="rarityBadge" style="display:none;">
           <span id="rarityIcon"></span>
           <span id="rarityLabel"></span>
@@ -122,16 +131,6 @@
 
         </div>
       </div>
-      </div>
-      <div class="topbar-row">
-        <span class="tab-eddies" id="eddiesChip" data-i18n-title="eddies_purpose" title="Les eddies ne servent qu'au classement communautaire et à tes stats — aucune autre utilité.">
-          <svg class="eddies-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16" text-anchor="middle" font-size="10" font-family="Chakra Petch, sans-serif" font-weight="700" fill="currentColor">€$</text></svg>
-          <span id="eddiesTotal">0</span>
-        </span>
-        <div class="lang-select-wrap" id="langSelectWrap">
-          <button class="lang-select-btn" id="langSelectBtn">EN ▾</button>
-          <div class="lang-select-list" id="langSelectList" style="display:none;"></div>
-        </div>
       </div>
     </div>
   </div>
@@ -1974,7 +1973,7 @@ async function loadInProgress(gameKey, dateStr){
 function initClassic(){
   const today = todayUTCString();
   document.getElementById('dailyDate').textContent = today + " UTC";
-  classicSecret = CARDS[seededIndex(today, CARDS.length)];
+  classicSecret = dailyCardFor('classic', today);
   classicGuesses = []; classicSolved = false;
   classicBody.innerHTML = ""; classicBanner.className = "banner"; classicBanner.innerHTML = "";
   classicInput.disabled = false;
@@ -2055,7 +2054,7 @@ let legendSecret, legendDone = false;
 function initLegend(){
   const today = todayUTCString();
   document.getElementById('legendDate').textContent = today + " UTC";
-  legendSecret = LEGEND_CARDS[seededIndex(today+"-legend", LEGEND_CARDS.length)];
+  legendSecret = dailyCardFor('legend', today);
   const parts = splitLegend(legendSecret);
   document.getElementById('legendQuote').textContent = '« ' + parts.sub + ' »';
   legendDone = false;
@@ -2210,7 +2209,7 @@ const abilitySugg = document.getElementById('suggestionsAbility');
 const abilityBanner = document.getElementById('abilityBanner');
 function initAbility(){
   const today = todayUTCString();
-  abilitySecret = ABILITY_CARDS[seededIndex(today+"-ability", ABILITY_CARDS.length)];
+  abilitySecret = dailyCardFor('ability', today);
   document.getElementById('abilityQuote').textContent = '« ' + abilitySecret.text + ' »';
   abilityGuesses = []; abilitySolved = false;
   abilityBody.innerHTML = ""; abilityBanner.className = "banner"; abilityBanner.innerHTML = "";
@@ -2317,7 +2316,7 @@ function showArtImage(card, revealed){
 }
 function initArt(){
   const today = todayUTCString();
-  artSecret = ART_CARDS[seededIndex(today+"-art", ART_CARDS.length)];
+  artSecret = dailyCardFor('art', today);
   artGuesses = []; artSolved = false; artAttempt = 1;
   artBody.innerHTML = ""; artBanner.className = "banner"; artBanner.innerHTML = "";
   artInput.disabled = false;
@@ -2717,6 +2716,74 @@ function seededShuffle(arr, rng){
   return a;
 }
 
+// ======================= ROULEMENT SANS RÉPÉTITION + ANTI-COLLISION (Classic/Legend/Ability/Art) =======================
+// À partir de CUTOVER_DATE (incluse) :
+//  - Chaque jeu voit tout son paquet de cartes une fois avant qu'aucune ne revienne (un "cycle"
+//    = un mélange complet du paquet, remélangé seulement une fois épuisé).
+//  - Les 4 jeux ne peuvent jamais proposer la même carte le même jour (priorité fixe :
+//    Classic > Legend > Ability > Art ; en cas de coïncidence, la carte du jour est échangée
+//    avec une autre carte du MÊME paquet mélangé, à un autre jour — aucune carte n'est donc
+//    jamais perdue ni comptée deux fois, juste réordonnée).
+// Avant CUTOVER_DATE : ancien système (seededIndex simple), conservé tel quel pour que l'Archive
+// continue d'afficher fidèlement ce qui a réellement été proposé ces jours-là.
+const CUTOVER_DATE = "2026-9-5";
+const CYCLE_EPOCH_MS = Date.UTC(2026,0,1);
+function daysSinceEpoch(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  return Math.round((Date.UTC(y,m-1,d) - CYCLE_EPOCH_MS) / 86400000);
+}
+const _cycleCache = {};
+function naturalCycleOrder(gameKey, pool, cycleNum){
+  return seededShuffle(pool, seededRng(gameKey+'-cycle-'+cycleNum));
+}
+function resolvedPick(gameKey, pool, higherPriorityFns, dayIndex){
+  const n = pool.length;
+  const cycleNum = Math.floor(dayIndex/n);
+  const posInCycle = ((dayIndex%n)+n)%n;
+  const cacheKey = gameKey+'-'+cycleNum;
+  if(!_cycleCache[cacheKey]){
+    const natural = naturalCycleOrder(gameKey, pool, cycleNum);
+    const cycleStartDay = cycleNum*n;
+    const higherCardsPerPos = [];
+    for(let p=0;p<n;p++){
+      const d = cycleStartDay+p;
+      higherCardsPerPos.push(higherPriorityFns.map(fn=>fn(d).n));
+    }
+    const resolved = natural.slice();
+    for(let p=0;p<n;p++){
+      if(higherCardsPerPos[p].includes(resolved[p].n)){
+        for(let step=1; step<n; step++){
+          const q = (p+step)%n;
+          if(higherCardsPerPos[p].includes(resolved[q].n)) continue;
+          if(higherCardsPerPos[q].includes(resolved[p].n)) continue;
+          const tmp = resolved[p]; resolved[p]=resolved[q]; resolved[q]=tmp;
+          break;
+        }
+      }
+    }
+    _cycleCache[cacheKey] = resolved;
+  }
+  return _cycleCache[cacheKey][posInCycle];
+}
+function classicPickNew(dayIndex){ return resolvedPick('classic', CARDS, [], dayIndex); }
+function legendPickNew(dayIndex){ return resolvedPick('legend', LEGEND_CARDS, [classicPickNew], dayIndex); }
+function abilityPickNew(dayIndex){ return resolvedPick('ability', ABILITY_CARDS, [classicPickNew, legendPickNew], dayIndex); }
+function artPickNew(dayIndex){ return resolvedPick('art', ART_CARDS, [classicPickNew, legendPickNew, abilityPickNew], dayIndex); }
+function dailyCardFor(gameKey, dateStr){
+  const d = daysSinceEpoch(dateStr);
+  const cutoverIdx = daysSinceEpoch(CUTOVER_DATE);
+  if(d < cutoverIdx){
+    if(gameKey==='classic') return CARDS[seededIndex(dateStr, CARDS.length)];
+    if(gameKey==='legend') return LEGEND_CARDS[seededIndex(dateStr+'-legend', LEGEND_CARDS.length)];
+    if(gameKey==='ability') return ABILITY_CARDS[seededIndex(dateStr+'-ability', ABILITY_CARDS.length)];
+    if(gameKey==='art') return ART_CARDS[seededIndex(dateStr+'-art', ART_CARDS.length)];
+  }
+  if(gameKey==='classic') return classicPickNew(d);
+  if(gameKey==='legend') return legendPickNew(d);
+  if(gameKey==='ability') return abilityPickNew(d);
+  if(gameKey==='art') return artPickNew(d);
+}
+
 // Un mot-clé ({Go Solo}, {Attack}, Adrenaline...) ne compte comme "la carte a cette capacité" que
 // s'il démarre le texte ou une nouvelle clause (juste après ". " ou ") "). Une simple mention en
 // plein milieu de phrase (ex: "Rivals must pay +2 €$ to use {Go Solo}") ne compte pas — la carte
@@ -2995,8 +3062,7 @@ function loadArchivePuzzle(){
 }
 function renderArchiveGuessGame(area, mode, date){
   const pool = mode==='ability' ? ABILITY_CARDS : CARDS;
-  const seedSuffix = mode==='ability' ? '-ability' : '';
-  const secret = pool[seededIndex(date+seedSuffix, pool.length)];
+  const secret = dailyCardFor(mode==='ability' ? 'ability' : 'classic', date);
   let guesses = [];
   area.innerHTML =
     (mode==='ability' ? '<div class="ability-quote">« '+secret.text+' »</div>' : '') +
@@ -3019,7 +3085,7 @@ function renderArchiveGuessGame(area, mode, date){
   }, ()=>guesses);
 }
 function renderArchiveLegend(area, date){
-  const secret = LEGEND_CARDS[seededIndex(date+"-legend", LEGEND_CARDS.length)];
+  const secret = dailyCardFor('legend', date);
   const parts = splitLegend(secret);
   area.innerHTML =
     '<div class="legend-quote">« '+parts.sub+' »</div>'+
@@ -3146,6 +3212,49 @@ function renderArchiveCardsLink(area, date){
   });
 }
 
+// ======================= HOW TO PLAY (contextuel au jeu affiché) =======================
+const HOWTOPLAY_GRID_LEGEND_FR = '<p class="howtoplay-legend"><span class="howtoplay-swatch howtoplay-match"></span> <b>Vert</b> : bonne valeur — <span class="howtoplay-swatch howtoplay-partial"></span> <b>Orange</b> : proche / faction partiellement bonne — <span class="howtoplay-swatch howtoplay-miss"></span> <b>Rouge</b> : faux (une flèche ↑/↓ indique si c\'est plus grand ou plus petit)</p>';
+const HOWTOPLAY_GRID_LEGEND_EN = '<p class="howtoplay-legend"><span class="howtoplay-swatch howtoplay-match"></span> <b>Green</b>: correct — <span class="howtoplay-swatch howtoplay-partial"></span> <b>Orange</b>: close / partial faction match — <span class="howtoplay-swatch howtoplay-miss"></span> <b>Red</b>: wrong (an ↑/↓ arrow shows higher or lower)</p>';
+
+const HOWTOPLAY_CONTENT = {
+  fr: {
+    classic: { title:"Classic", body:"<p>Devine la carte du jour en comparant <b>Type, Faction, Couleur, Coût, Puissance et RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_FR+"<ul><li>Une nouvelle carte chaque jour à 00:00 UTC, la même pour tout le monde</li><li>Nombre d'essais illimité</li><li>Ta progression est sauvegardée automatiquement</li></ul>" },
+    legend: { title:"Legend", body:"<p>Une citation d'une Legend s'affiche — devine son <b>nom complet</b>.</p><ul><li>Un seul essai par jour</li><li>Une nouvelle Legend chaque jour à 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Le texte de règles d'une carte s'affiche (sans son nom) — devine de quelle carte il s'agit, en comparant <b>Type, Faction, Couleur, Coût, Puissance et RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_FR },
+    art: { title:"Art", body:"<p>L'illustration d'une carte se dévoile progressivement (moins floutée à chaque essai) — devine la carte avant qu'elle soit entièrement révélée.</p><ul><li>5 essais maximum</li><li>Plus tu trouves tôt, plus tu gagnes d'eddies</li></ul>" },
+    endless: { title:"Endless", body:"<p>Le même jeu que Classic (comparaison d'attributs), mais en illimité — enchaîne autant de cartes aléatoires que tu veux, à ton rythme.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 secondes pour deviner un maximum de cartes d'affilée. Chaque bonne réponse relance immédiatement une nouvelle carte.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Une comparaison entre deux cartes s'affiche (ex: coût, puissance...) — réponds <b>Vrai ou Faux</b> le plus vite possible, en 40 secondes chrono.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cartes, 4 groupes de 4 cartes ayant un point commun (type, faction, couleur, mot-clé...) à découvrir.</p><ul><li>4 erreurs maximum</li><li>Sélectionne 4 cartes puis valide pour tester un groupe</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 cartes s'affichent dans le désordre — remets-les dans le <b>bon ordre croissant</b> selon l'attribut demandé (coût, puissance ou RAM).</p>" },
+  },
+  en: {
+    classic: { title:"Classic", body:"<p>Guess today's card by comparing <b>Type, Faction, Color, Cost, Power, and RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_EN+"<ul><li>A new card every day at 00:00 UTC, same for everyone</li><li>Unlimited guesses</li><li>Your progress is saved automatically</li></ul>" },
+    legend: { title:"Legend", body:"<p>A quote from a Legend is shown — guess their <b>full name</b>.</p><ul><li>Only one guess per day</li><li>A new Legend every day at 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>A card's rules text is shown (without its name) — guess which card it is, comparing <b>Type, Faction, Color, Cost, Power, and RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_EN },
+    art: { title:"Art", body:"<p>A card's artwork is revealed a little more with each guess — guess the card before it's fully revealed.</p><ul><li>5 guesses max</li><li>The earlier you guess, the more eddies you earn</li></ul>" },
+    endless: { title:"Endless", body:"<p>Same game as Classic (attribute comparison), but unlimited — guess as many random cards as you like, at your own pace.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 seconds to guess as many cards in a row as possible. Every correct guess instantly starts a new card.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>A comparison between two cards is shown (e.g. cost, power...) — answer <b>True or False</b> as fast as you can, with a 40-second timer.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cards, 4 groups of 4 cards sharing something in common (type, faction, color, keyword...) to uncover.</p><ul><li>4 mistakes max</li><li>Select 4 cards then submit to test a group</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 cards are shown out of order — put them back in the <b>correct ascending order</b> for the requested attribute (cost, power, or RAM).</p>" },
+  }
+};
+const HOWTOPLAY_FALLBACK_FR = "<p>Choomdle propose 9 façons différentes de deviner les cartes du Cyberpunk TCG : Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link et Sequence.</p><p>Ouvre ce guide depuis l'un de ces jeux pour voir ses règles précises.</p>";
+const HOWTOPLAY_FALLBACK_EN = "<p>Choomdle offers 9 different ways to guess Cyberpunk TCG cards: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link, and Sequence.</p><p>Open this guide from one of those games to see its exact rules.</p>";
+function showHowToPlay(){
+  const lang = currentLang === 'fr' ? 'fr' : 'en';
+  const dict = HOWTOPLAY_CONTENT[lang];
+  const entry = dict[currentActivePanel];
+  document.getElementById('howToPlayTitle').textContent = entry ? entry.title : 'Choomdle';
+  document.getElementById('howToPlayBody').innerHTML = entry ? entry.body : (lang==='fr' ? HOWTOPLAY_FALLBACK_FR : HOWTOPLAY_FALLBACK_EN);
+  document.getElementById('howToPlayOverlay').style.display = 'flex';
+}
+function closeHowToPlay(){ document.getElementById('howToPlayOverlay').style.display = 'none'; }
+document.getElementById('howToPlayBtn').addEventListener('click', showHowToPlay);
+document.getElementById('howToPlayClose').addEventListener('click', closeHowToPlay);
+document.getElementById('howToPlayOverlay').addEventListener('click', (e)=>{ if(e.target.id==='howToPlayOverlay') closeHowToPlay(); });
+
 // ======================= POPUPS GLITCH (pitch invité / bienvenue) =======================
 function showGlitchPopup(kind){
   const overlay = document.getElementById('glitchPopupOverlay');
@@ -3197,7 +3306,9 @@ function closeGlitchPopup(){
 let guestPitchPopupShown = false;
 let guestPitchTimer = null;
 const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','communityArchive','stats','collection','achievements','archive','feedback'];
+let currentActivePanel = 'classic';
 function showPanel(name){
+  currentActivePanel = name;
   ALL_PANELS.forEach(p=>{
     const el = document.getElementById('panel-'+p);
     if(el) el.style.display = (p===name) ? 'block' : 'none';
@@ -3350,6 +3461,13 @@ async function enableNotifications(){
 document.getElementById('menuNotifications').addEventListener('click', enableNotifications);
 </script>
 
+<div class="howtoplay-overlay" id="howToPlayOverlay" style="display:none;">
+  <div class="howtoplay-box">
+    <button class="howtoplay-close" id="howToPlayClose">✕</button>
+    <h2 class="howtoplay-title" id="howToPlayTitle"></h2>
+    <div class="howtoplay-body" id="howToPlayBody"></div>
+  </div>
+</div>
 <div class="glitchpopup-overlay" id="glitchPopupOverlay" style="display:none;">
   <div class="glitchpopup-box" id="glitchPopupBox">
     <h2 class="glitchpopup-title" id="glitchPopupTitle"></h2>
