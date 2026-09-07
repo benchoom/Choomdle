@@ -123,11 +123,11 @@
   .lang-select-wrap{ position:relative; display:inline-block; }
   .lang-select-btn{
     appearance:none; background:var(--yellow); color:#0a0a10; border:1px solid var(--yellow); font-weight:700;
-    font-size:15px; padding:8px 15px; font-family:'Chakra Petch',sans-serif; letter-spacing:.05em; cursor:pointer; transition:.15s;
+    font-size:10px; padding:5px 10px; font-family:'Chakra Petch',sans-serif; letter-spacing:.05em; cursor:pointer; transition:.15s;
   }
   .howtoplay-btn{
     appearance:none; background:var(--yellow); color:#0a0a10; border:1px solid var(--yellow); font-weight:700;
-    font-size:15px; padding:8px 15px; font-family:'Chakra Petch',sans-serif; letter-spacing:.05em; cursor:pointer; transition:.15s;
+    font-size:10px; padding:5px 10px; font-family:'Chakra Petch',sans-serif; letter-spacing:.05em; cursor:pointer; transition:.15s;
   }
   .howtoplay-btn:hover{ border-color:var(--cyan); }
   .lang-select-wrap:hover .lang-select-btn{ border-color:var(--cyan); }
