@@ -3215,6 +3215,14 @@ function renderArchiveCardsLink(area, date){
 // ======================= HOW TO PLAY (contextuel au jeu affiché) =======================
 const HOWTOPLAY_GRID_LEGEND_FR = '<p class="howtoplay-legend"><span class="howtoplay-swatch howtoplay-match"></span> <b>Vert</b> : bonne valeur — <span class="howtoplay-swatch howtoplay-partial"></span> <b>Orange</b> : proche / faction partiellement bonne — <span class="howtoplay-swatch howtoplay-miss"></span> <b>Rouge</b> : faux (une flèche ↑/↓ indique si c\'est plus grand ou plus petit)</p>';
 const HOWTOPLAY_GRID_LEGEND_EN = '<p class="howtoplay-legend"><span class="howtoplay-swatch howtoplay-match"></span> <b>Green</b>: correct — <span class="howtoplay-swatch howtoplay-partial"></span> <b>Orange</b>: close / partial faction match — <span class="howtoplay-swatch howtoplay-miss"></span> <b>Red</b>: wrong (an ↑/↓ arrow shows higher or lower)</p>';
+const HOWTOPLAY_GRID_LEGEND_ES = '<p class="howtoplay-legend">Verde: correcto — Naranja: cercano / facción parcialmente correcta — Rojo: incorrecto (una flecha ↑/↓ indica si es más alto o más bajo)</p>';
+const HOWTOPLAY_GRID_LEGEND_DE = '<p class="howtoplay-legend">Grün: richtig — Orange: nah dran / Fraktion teilweise richtig — Rot: falsch (ein ↑/↓-Pfeil zeigt, ob höher oder niedriger)</p>';
+const HOWTOPLAY_GRID_LEGEND_PT = '<p class="howtoplay-legend">Verde: correto — Laranja: próximo / facção parcialmente correta — Vermelho: errado (uma seta ↑/↓ indica se é maior ou menor)</p>';
+const HOWTOPLAY_GRID_LEGEND_IT = '<p class="howtoplay-legend">Verde: corretto — Arancione: vicino / fazione parzialmente corretta — Rosso: sbagliato (una freccia ↑/↓ indica se è più alto o più basso)</p>';
+const HOWTOPLAY_GRID_LEGEND_PL = '<p class="howtoplay-legend">Zielony: poprawnie — Pomarańczowy: blisko / częściowo poprawna frakcja — Czerwony: źle (strzałka ↑/↓ pokazuje, czy wyżej czy niżej)</p>';
+const HOWTOPLAY_GRID_LEGEND_KO = '<p class="howtoplay-legend">초록: 정답 — 주황: 근접 / 진영 부분 일치 — 빨강: 오답 (↑/↓ 화살표는 더 높은지 낮은지를 나타냅니다)</p>';
+const HOWTOPLAY_GRID_LEGEND_ZH = '<p class="howtoplay-legend">绿色：正确 — 橙色：接近/阵营部分正确 — 红色：错误（↑/↓ 箭头表示更高或更低）</p>';
+const HOWTOPLAY_GRID_LEGEND_JA = '<p class="howtoplay-legend">緑：正解 — オレンジ：近い／派閥が部分的に正解 — 赤：不正解（↑/↓の矢印はより高いか低いかを示します）</p>';
 
 const HOWTOPLAY_CONTENT = {
   fr: {
@@ -3238,16 +3246,113 @@ const HOWTOPLAY_CONTENT = {
     chrome: { title:"Chrome Check", body:"<p>A comparison between two cards is shown (e.g. cost, power...) — answer <b>True or False</b> as fast as you can, with a 40-second timer.</p>" },
     cardslink: { title:"Cards Link", body:"<p>16 cards, 4 groups of 4 cards sharing something in common (type, faction, color, keyword...) to uncover.</p><ul><li>4 mistakes max</li><li>Select 4 cards then submit to test a group</li></ul>" },
     sequence: { title:"Sequence", body:"<p>5 cards are shown out of order — put them back in the <b>correct ascending order</b> for the requested attribute (cost, power, or RAM).</p>" },
-  }
+  },
+  es: {
+    classic: { title:"Classic", body:"<p>Adivina la carta de hoy comparando <b>Tipo, Facción, Color, Coste, Poder y RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_ES+"<ul><li>Una carta nueva cada día a las 00:00 UTC, la misma para todos</li><li>Intentos ilimitados</li><li>Tu progreso se guarda automáticamente</li></ul>" },
+    legend: { title:"Legend", body:"<p>Se muestra una cita de una Legend — adivina su <b>nombre completo</b>.</p><ul><li>Solo un intento por día</li><li>Una nueva Legend cada día a las 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Se muestra el texto de reglas de una carta (sin su nombre) — adivina de qué carta se trata, comparando <b>Tipo, Facción, Color, Coste, Poder y RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_ES+"" },
+    art: { title:"Art", body:"<p>La ilustración de una carta se revela un poco más con cada intento — adivina la carta antes de que se revele por completo.</p><ul><li>5 intentos máximo</li><li>Cuanto antes aciertes, más eddies ganas</li></ul>" },
+    endless: { title:"Endless", body:"<p>El mismo juego que Classic (comparación de atributos), pero ilimitado — adivina tantas cartas aleatorias como quieras, a tu ritmo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 segundos para adivinar tantas cartas seguidas como puedas. Cada acierto inicia inmediatamente una nueva carta.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Se muestra una comparación entre dos cartas (p. ej. coste, poder...) — responde <b>Verdadero o Falso</b> lo más rápido posible, con un cronómetro de 40 segundos.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cartas, 4 grupos de 4 cartas que comparten algo en común (tipo, facción, color, palabra clave...) por descubrir.</p><ul><li>4 errores máximo</li><li>Selecciona 4 cartas y confirma para probar un grupo</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>Se muestran 5 cartas desordenadas — vuelve a ponerlas en el <b>orden ascendente correcto</b> según el atributo solicitado (coste, poder o RAM).</p>" },
+  },
+  de: {
+    classic: { title:"Classic", body:"<p>Errate die heutige Karte, indem du <b>Typ, Fraktion, Farbe, Kosten, Stärke und RAM</b> vergleichst.</p>"+HOWTOPLAY_GRID_LEGEND_DE+"<ul><li>Jeden Tag um 00:00 UTC eine neue Karte, für alle gleich</li><li>Unbegrenzte Versuche</li><li>Dein Fortschritt wird automatisch gespeichert</li></ul>" },
+    legend: { title:"Legend", body:"<p>Ein Zitat einer Legend wird gezeigt — errate ihren <b>vollständigen Namen</b>.</p><ul><li>Nur ein Versuch pro Tag</li><li>Jeden Tag um 00:00 UTC eine neue Legend</li></ul>" },
+    ability: { title:"Ability", body:"<p>Der Regeltext einer Karte wird gezeigt (ohne ihren Namen) — errate, um welche Karte es sich handelt, indem du <b>Typ, Fraktion, Farbe, Kosten, Stärke und RAM</b> vergleichst.</p>"+HOWTOPLAY_GRID_LEGEND_DE+"" },
+    art: { title:"Art", body:"<p>Das Artwork einer Karte wird mit jedem Versuch etwas mehr enthüllt — errate die Karte, bevor sie vollständig sichtbar ist.</p><ul><li>Maximal 5 Versuche</li><li>Je früher du errätst, desto mehr Eddies verdienst du</li></ul>" },
+    endless: { title:"Endless", body:"<p>Das gleiche Spiel wie Classic (Attributvergleich), aber unbegrenzt — errate so viele zufällige Karten, wie du möchtest, in deinem eigenen Tempo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 Sekunden, um so viele Karten hintereinander wie möglich zu erraten. Jede richtige Antwort startet sofort eine neue Karte.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Ein Vergleich zwischen zwei Karten wird gezeigt (z. B. Kosten, Stärke...) — antworte so schnell wie möglich mit <b>Wahr oder Falsch</b>, mit einem 40-Sekunden-Timer.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 Karten, 4 Gruppen von je 4 Karten mit einer Gemeinsamkeit (Typ, Fraktion, Farbe, Schlüsselwort...) zu entdecken.</p><ul><li>Maximal 4 Fehler</li><li>Wähle 4 Karten aus und bestätige, um eine Gruppe zu testen</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 Karten werden ungeordnet gezeigt — bringe sie in die <b>richtige aufsteigende Reihenfolge</b> für das gewünschte Attribut (Kosten, Stärke oder RAM).</p>" },
+  },
+  pt: {
+    classic: { title:"Classic", body:"<p>Adivinhe a carta de hoje comparando <b>Tipo, Facção, Cor, Custo, Poder e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PT+"<ul><li>Uma nova carta todo dia às 00:00 UTC, a mesma para todos</li><li>Tentativas ilimitadas</li><li>Seu progresso é salvo automaticamente</li></ul>" },
+    legend: { title:"Legend", body:"<p>Uma citação de uma Legend é exibida — adivinhe o <b>nome completo</b> dela.</p><ul><li>Apenas uma tentativa por dia</li><li>Uma nova Legend todo dia às 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>O texto de regras de uma carta é exibido (sem o nome dela) — adivinhe de qual carta se trata, comparando <b>Tipo, Facção, Cor, Custo, Poder e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PT+"" },
+    art: { title:"Art", body:"<p>A ilustração de uma carta é revelada um pouco mais a cada tentativa — adivinhe a carta antes que ela seja totalmente revelada.</p><ul><li>5 tentativas no máximo</li><li>Quanto mais cedo você acertar, mais eddies ganha</li></ul>" },
+    endless: { title:"Endless", body:"<p>O mesmo jogo que o Classic (comparação de atributos), mas ilimitado — adivinhe quantas cartas aleatórias quiser, no seu ritmo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 segundos para adivinhar o máximo de cartas seguidas possível. Cada acerto inicia imediatamente uma nova carta.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Uma comparação entre duas cartas é exibida (ex: custo, poder...) — responda <b>Verdadeiro ou Falso</b> o mais rápido possível, com cronômetro de 40 segundos.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cartas, 4 grupos de 4 cartas com algo em comum (tipo, facção, cor, palavra-chave...) para descobrir.</p><ul><li>4 erros no máximo</li><li>Selecione 4 cartas e confirme para testar um grupo</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 cartas são exibidas fora de ordem — coloque-as na <b>ordem crescente correta</b> de acordo com o atributo pedido (custo, poder ou RAM).</p>" },
+  },
+  it: {
+    classic: { title:"Classic", body:"<p>Indovina la carta di oggi confrontando <b>Tipo, Fazione, Colore, Costo, Potenza e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_IT+"<ul><li>Una nuova carta ogni giorno alle 00:00 UTC, uguale per tutti</li><li>Tentativi illimitati</li><li>I tuoi progressi vengono salvati automaticamente</li></ul>" },
+    legend: { title:"Legend", body:"<p>Viene mostrata una citazione di una Legend — indovina il suo <b>nome completo</b>.</p><ul><li>Un solo tentativo al giorno</li><li>Una nuova Legend ogni giorno alle 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Viene mostrato il testo delle regole di una carta (senza il nome) — indovina di quale carta si tratta, confrontando <b>Tipo, Fazione, Colore, Costo, Potenza e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_IT+"" },
+    art: { title:"Art", body:"<p>L'illustrazione di una carta viene rivelata un po' di più a ogni tentativo — indovina la carta prima che sia completamente svelata.</p><ul><li>Massimo 5 tentativi</li><li>Prima indovini, più eddies guadagni</li></ul>" },
+    endless: { title:"Endless", body:"<p>Lo stesso gioco di Classic (confronto attributi), ma illimitato — indovina tutte le carte casuali che vuoi, al tuo ritmo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 secondi per indovinare il maggior numero possibile di carte di fila. Ogni risposta corretta avvia immediatamente una nuova carta.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Viene mostrato un confronto tra due carte (es. costo, potenza...) — rispondi <b>Vero o Falso</b> il più velocemente possibile, con un timer di 40 secondi.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 carte, 4 gruppi di 4 carte che condividono qualcosa in comune (tipo, fazione, colore, parola chiave...) da scoprire.</p><ul><li>Massimo 4 errori</li><li>Seleziona 4 carte e conferma per testare un gruppo</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 carte vengono mostrate in disordine — rimettile nell'<b>ordine crescente corretto</b> in base all'attributo richiesto (costo, potenza o RAM).</p>" },
+  },
+  pl: {
+    classic: { title:"Classic", body:"<p>Odgadnij dzisiejszą kartę, porównując <b>Typ, Frakcję, Kolor, Koszt, Moc i RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PL+"<ul><li>Nowa karta każdego dnia o 00:00 UTC, taka sama dla wszystkich</li><li>Nieograniczona liczba prób</li><li>Twój postęp jest zapisywany automatycznie</li></ul>" },
+    legend: { title:"Legend", body:"<p>Wyświetlany jest cytat Legend — odgadnij jej <b>pełne imię</b>.</p><ul><li>Tylko jedna próba dziennie</li><li>Nowa Legend każdego dnia o 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Wyświetlany jest tekst zasad karty (bez jej nazwy) — odgadnij, o którą kartę chodzi, porównując <b>Typ, Frakcję, Kolor, Koszt, Moc i RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PL+"" },
+    art: { title:"Art", body:"<p>Ilustracja karty jest odkrywana coraz bardziej z każdą próbą — odgadnij kartę, zanim zostanie w pełni odsłonięta.</p><ul><li>Maksymalnie 5 prób</li><li>Im wcześniej odgadniesz, tym więcej eddies zdobędziesz</li></ul>" },
+    endless: { title:"Endless", body:"<p>Ta sama gra co Classic (porównywanie atrybutów), ale bez limitu — odgaduj dowolną liczbę losowych kart we własnym tempie.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 sekund na odgadnięcie jak największej liczby kart z rzędu. Każda poprawna odpowiedź od razu uruchamia nową kartę.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Wyświetlane jest porównanie dwóch kart (np. koszt, moc...) — odpowiedz <b>Prawda lub Fałsz</b> najszybciej jak potrafisz, z 40-sekundowym limitem czasu.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 kart, 4 grupy po 4 karty mające coś wspólnego (typ, frakcja, kolor, słowo kluczowe...) do odkrycia.</p><ul><li>Maksymalnie 4 błędy</li><li>Wybierz 4 karty, a następnie zatwierdź, aby przetestować grupę</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>Wyświetlanych jest 5 kart w losowej kolejności — ułóż je w <b>poprawnej rosnącej kolejności</b> według żądanego atrybutu (koszt, moc lub RAM).</p>" },
+  },
+  ko: {
+    classic: { title:"Classic", body:"<p>타입, 진영, 색상, 비용, 파워, RAM을 비교하여 오늘의 카드를 맞혀보세요.</p>"+HOWTOPLAY_GRID_LEGEND_KO+"<ul><li>매일 00:00 UTC에 새로운 카드, 모두 동일</li><li>무제한 시도</li><li>진행 상황이 자동으로 저장됩니다</li></ul>" },
+    legend: { title:"Legend", body:"<p>Legend의 명언이 표시됩니다 — <b>전체 이름</b>을 맞혀보세요.</p><ul><li>하루에 한 번만 시도 가능</li><li>매일 00:00 UTC에 새로운 Legend</li></ul>" },
+    ability: { title:"Ability", body:"<p>카드의 규칙 텍스트가 표시됩니다(이름 없이) — 타입, 진영, 색상, 비용, 파워, RAM을 비교하여 어떤 카드인지 맞혀보세요.</p>"+HOWTOPLAY_GRID_LEGEND_KO+"" },
+    art: { title:"Art", body:"<p>카드의 일러스트가 시도할 때마다 조금씩 더 드러납니다 — 완전히 공개되기 전에 카드를 맞혀보세요.</p><ul><li>최대 5회 시도</li><li>일찍 맞힐수록 더 많은 eddies를 획득합니다</li></ul>" },
+    endless: { title:"Endless", body:"<p>Classic과 동일한 게임(속성 비교)이지만 무제한입니다 — 원하는 만큼 무작위 카드를 자신의 속도로 맞혀보세요.</p>" },
+    blitz: { title:"Blitz", body:"<p>77초 안에 최대한 많은 카드를 연속으로 맞혀보세요. 정답을 맞힐 때마다 즉시 새 카드가 시작됩니다.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>두 카드 간의 비교(예: 비용, 파워...)가 표시됩니다 — 40초 타이머 안에 최대한 빠르게 <b>참 또는 거짓</b>으로 답하세요.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16장의 카드, 공통점(타입, 진영, 색상, 키워드...)이 있는 4장씩 4개 그룹을 찾아보세요.</p><ul><li>최대 4번의 실수</li><li>카드 4장을 선택한 후 제출하여 그룹을 테스트하세요</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>순서가 뒤섞인 5장의 카드가 표시됩니다 — 요청된 속성(비용, 파워, RAM)에 따라 <b>올바른 오름차순</b>으로 정렬하세요.</p>" },
+  },
+  zh: {
+    classic: { title:"Classic", body:"<p>通过比较<b>类型、阵营、颜色、费用、力量和RAM</b>来猜测今天的卡牌。</p>"+HOWTOPLAY_GRID_LEGEND_ZH+"<ul><li>每天00:00 UTC推出新卡牌，所有人相同</li><li>无限次尝试</li><li>你的进度会自动保存</li></ul>" },
+    legend: { title:"Legend", body:"<p>会显示一句传奇（Legend）的台词——猜出她/他的<b>全名</b>。</p><ul><li>每天只能尝试一次</li><li>每天00:00 UTC推出新的Legend</li></ul>" },
+    ability: { title:"Ability", body:"<p>会显示一张卡牌的规则文本（不含名称）——通过比较<b>类型、阵营、颜色、费用、力量和RAM</b>来猜出是哪张卡牌。</p>"+HOWTOPLAY_GRID_LEGEND_ZH+"" },
+    art: { title:"Art", body:"<p>卡牌插图会随着每次尝试逐渐显现——在完全显现之前猜出卡牌。</p><ul><li>最多5次尝试</li><li>猜得越早，获得的eddies越多</li></ul>" },
+    endless: { title:"Endless", body:"<p>与Classic相同的游戏（属性比较），但无限制——按自己的节奏猜测任意数量的随机卡牌。</p>" },
+    blitz: { title:"Blitz", body:"<p>77秒内尽可能连续猜中更多卡牌。每次答对会立即开始一张新卡牌。</p>" },
+    chrome: { title:"Chrome Check", body:"<p>会显示两张卡牌之间的比较（例如费用、力量等）——在40秒计时内尽快回答<b>对或错</b>。</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16张卡牌，需要找出4组各4张有共同点（类型、阵营、颜色、关键词等）的卡牌。</p><ul><li>最多4次错误</li><li>选择4张卡牌后提交以测试该组</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>会显示5张顺序打乱的卡牌——根据要求的属性（费用、力量或RAM）将它们重新排列为<b>正确的升序</b>。</p>" },
+  },
+  ja: {
+    classic: { title:"Classic", body:"<p>タイプ、派閥、色、コスト、パワー、RAMを比較して今日のカードを当てよう。</p>"+HOWTOPLAY_GRID_LEGEND_JA+"<ul><li>毎日00:00 UTCに新しいカード、みんな共通</li><li>試行回数無制限</li><li>進行状況は自動的に保存されます</li></ul>" },
+    legend: { title:"Legend", body:"<p>Legendの名言が表示されます — <b>フルネーム</b>を当てよう。</p><ul><li>1日1回のみ挑戦可能</li><li>毎日00:00 UTCに新しいLegend</li></ul>" },
+    ability: { title:"Ability", body:"<p>カードのルールテキストが表示されます（名前なし）— タイプ、派閥、色、コスト、パワー、RAMを比較してどのカードか当てよう。</p>"+HOWTOPLAY_GRID_LEGEND_JA+"" },
+    art: { title:"Art", body:"<p>カードのイラストが試行するたびに少しずつ明らかになります — 完全に表示される前にカードを当てよう。</p><ul><li>最大5回まで挑戦可能</li><li>早く当てるほど、多くのeddiesを獲得できます</li></ul>" },
+    endless: { title:"Endless", body:"<p>Classicと同じゲーム（属性比較）ですが、無制限です — 好きなだけランダムなカードを自分のペースで当てよう。</p>" },
+    blitz: { title:"Blitz", body:"<p>77秒以内にできるだけ多くのカードを連続で当てよう。正解するとすぐに新しいカードが始まります。</p>" },
+    chrome: { title:"Chrome Check", body:"<p>2枚のカードの比較（例：コスト、パワーなど）が表示されます — 40秒のタイマー内でできるだけ早く<b>正しいか間違っているか</b>を答えよう。</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16枚のカード、共通点（タイプ、派閥、色、キーワードなど）を持つ4枚ずつ4グループを見つけよう。</p><ul><li>最大4回まで間違い可能</li><li>4枚のカードを選んで送信し、グループをテストしよう</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>順序が入れ替わった5枚のカードが表示されます — 指定された属性（コスト、パワー、RAM）に従って<b>正しい昇順</b>に並べ替えよう。</p>" },
+  },
 };
 const HOWTOPLAY_FALLBACK_FR = "<p>Choomdle propose 9 façons différentes de deviner les cartes du Cyberpunk TCG : Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link et Sequence.</p><p>Ouvre ce guide depuis l'un de ces jeux pour voir ses règles précises.</p>";
 const HOWTOPLAY_FALLBACK_EN = "<p>Choomdle offers 9 different ways to guess Cyberpunk TCG cards: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link, and Sequence.</p><p>Open this guide from one of those games to see its exact rules.</p>";
+const HOWTOPLAY_FALLBACK_ES = "<p>Choomdle ofrece 9 formas diferentes de adivinar cartas del Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link y Sequence.</p><p>Abre esta guía desde uno de esos juegos para ver sus reglas exactas.</p>";
+const HOWTOPLAY_FALLBACK_DE = "<p>Choomdle bietet 9 verschiedene Möglichkeiten, Cyberpunk-TCG-Karten zu erraten: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link und Sequence.</p><p>Öffne diese Anleitung aus einem dieser Spiele, um die genauen Regeln zu sehen.</p>";
+const HOWTOPLAY_FALLBACK_PT = "<p>Choomdle oferece 9 formas diferentes de adivinhar cartas do Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link e Sequence.</p><p>Abra este guia a partir de um desses jogos para ver as regras exatas.</p>";
+const HOWTOPLAY_FALLBACK_IT = "<p>Choomdle offre 9 modi diversi per indovinare le carte del Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link e Sequence.</p><p>Apri questa guida da uno di quei giochi per vedere le sue regole esatte.</p>";
+const HOWTOPLAY_FALLBACK_PL = "<p>Choomdle oferuje 9 różnych sposobów odgadywania kart Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link i Sequence.</p><p>Otwórz ten przewodnik z jednej z tych gier, aby zobaczyć jej dokładne zasady.</p>";
+const HOWTOPLAY_FALLBACK_KO = "<p>Choomdle은 Cyberpunk TCG 카드를 맞히는 9가지 다른 방법을 제공합니다: Classic, Legend, Ability, Art, Endless, Blitz, Chrome Check, Cards Link, Sequence.</p><p>정확한 규칙을 보려면 해당 게임에서 이 가이드를 열어보세요.</p>";
+const HOWTOPLAY_FALLBACK_ZH = "<p>Choomdle提供9种不同的方式来猜测Cyberpunk TCG卡牌：Classic、Legend、Ability、Art、Endless、Blitz、Chrome Check、Cards Link和Sequence。</p><p>从其中一个游戏打开此指南以查看其确切规则。</p>";
+const HOWTOPLAY_FALLBACK_JA = "<p>Choomdleは、Cyberpunk TCGのカードを当てる9つの異なる方法を提供しています：Classic、Legend、Ability、Art、Endless、Blitz、Chrome Check、Cards Link、Sequence。</p><p>正確なルールを見るには、それらのゲームのいずれかからこのガイドを開いてください。</p>";
 function showHowToPlay(){
-  const lang = currentLang === 'fr' ? 'fr' : 'en';
+  const lang = HOWTOPLAY_CONTENT[currentLang] ? currentLang : 'en';
   const dict = HOWTOPLAY_CONTENT[lang];
   const entry = dict[currentActivePanel];
   document.getElementById('howToPlayTitle').textContent = entry ? entry.title : 'Choomdle';
-  document.getElementById('howToPlayBody').innerHTML = entry ? entry.body : (lang==='fr' ? HOWTOPLAY_FALLBACK_FR : HOWTOPLAY_FALLBACK_EN);
+  const fallbacks = { fr:HOWTOPLAY_FALLBACK_FR, en:HOWTOPLAY_FALLBACK_EN, es:HOWTOPLAY_FALLBACK_ES, de:HOWTOPLAY_FALLBACK_DE, pt:HOWTOPLAY_FALLBACK_PT, it:HOWTOPLAY_FALLBACK_IT, pl:HOWTOPLAY_FALLBACK_PL, ko:HOWTOPLAY_FALLBACK_KO, zh:HOWTOPLAY_FALLBACK_ZH, ja:HOWTOPLAY_FALLBACK_JA };
+  document.getElementById('howToPlayBody').innerHTML = entry ? entry.body : (fallbacks[lang] || HOWTOPLAY_FALLBACK_EN);
   document.getElementById('howToPlayOverlay').style.display = 'flex';
 }
 function closeHowToPlay(){ document.getElementById('howToPlayOverlay').style.display = 'none'; }
