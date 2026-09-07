@@ -3356,9 +3356,12 @@ function showHowToPlay(){
   document.getElementById('howToPlayOverlay').style.display = 'flex';
 }
 function closeHowToPlay(){ document.getElementById('howToPlayOverlay').style.display = 'none'; }
-document.getElementById('howToPlayBtn').addEventListener('click', showHowToPlay);
-document.getElementById('howToPlayClose').addEventListener('click', closeHowToPlay);
-document.getElementById('howToPlayOverlay').addEventListener('click', (e)=>{ if(e.target.id==='howToPlayOverlay') closeHowToPlay(); });
+const howToPlayBtnEl = document.getElementById('howToPlayBtn');
+const howToPlayCloseEl = document.getElementById('howToPlayClose');
+const howToPlayOverlayEl = document.getElementById('howToPlayOverlay');
+if(howToPlayBtnEl) howToPlayBtnEl.addEventListener('click', showHowToPlay);
+if(howToPlayCloseEl) howToPlayCloseEl.addEventListener('click', closeHowToPlay);
+if(howToPlayOverlayEl) howToPlayOverlayEl.addEventListener('click', (e)=>{ if(e.target.id==='howToPlayOverlay') closeHowToPlay(); });
 
 // ======================= POPUPS GLITCH (pitch invité / bienvenue) =======================
 function showGlitchPopup(kind){
