@@ -2308,7 +2308,7 @@ function showArtImage(card, revealed){
       // standard WNC) — dessinée par-dessus, donc masquée à TOUS les niveaux de flou pendant les
       // essais. Retirée uniquement au récapitulatif final (gagné ou perdu).
       ctx.fillStyle = '#000';
-      ctx.fillRect(0, ch*0.58, cw, ch*0.18);
+      ctx.fillRect(0, ch*0.58+4, cw, ch*0.18-8);
     }
   };
   img.onerror = ()=>{ canvas.style.display='none'; placeholder.style.display='flex'; };
