@@ -3357,11 +3357,15 @@ function showHowToPlay(){
 }
 function closeHowToPlay(){ document.getElementById('howToPlayOverlay').style.display = 'none'; }
 const howToPlayBtnEl = document.getElementById('howToPlayBtn');
-const howToPlayCloseEl = document.getElementById('howToPlayClose');
-const howToPlayOverlayEl = document.getElementById('howToPlayOverlay');
 if(howToPlayBtnEl) howToPlayBtnEl.addEventListener('click', showHowToPlay);
-if(howToPlayCloseEl) howToPlayCloseEl.addEventListener('click', closeHowToPlay);
-if(howToPlayOverlayEl) howToPlayOverlayEl.addEventListener('click', (e)=>{ if(e.target.id==='howToPlayOverlay') closeHowToPlay(); });
+// Délégation sur document plutôt que sur les éléments eux-mêmes : le bouton "✕" et le fond du
+// popup sont définis plus loin dans le HTML (après ce bloc de script), donc getElementById
+// échouerait silencieusement ici. En écoutant sur document (toujours disponible), le clic est
+// détecté correctement une fois la page entièrement chargée, quel que soit l'ordre du HTML.
+document.addEventListener('click', (e)=>{
+  if(!e.target) return;
+  if(e.target.id === 'howToPlayClose' || e.target.id === 'howToPlayOverlay') closeHowToPlay();
+});
 
 // ======================= POPUPS GLITCH (pitch invité / bienvenue) =======================
 function showGlitchPopup(kind){
