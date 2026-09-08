@@ -58,7 +58,8 @@
   .howtoplay-body p{ margin:0 0 12px; }
   .howtoplay-body ul{ margin:0 0 12px; padding-left:20px; }
   .howtoplay-body li{ margin-bottom:6px; }
-  .howtoplay-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:12.5px; background:var(--bg2); border:1px solid var(--line); padding:8px 10px; }
+  .howtoplay-legend{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; background:var(--bg2); border:1px solid var(--line); padding:8px 10px; }
+  .howtoplay-legend-line{ display:flex; align-items:center; gap:6px; }
   .howtoplay-swatch{ display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:middle; }
   .howtoplay-swatch.howtoplay-match{ background:var(--green); }
   .howtoplay-swatch.howtoplay-partial{ background:var(--orange); }
