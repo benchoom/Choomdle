@@ -435,7 +435,7 @@
   }
   .cardslink-solved-bar .label{
     font-family:'Chakra Petch',sans-serif; font-weight:700; font-size:12px; color:var(--cyan);
-    text-transform:uppercase; letter-spacing:.04em; margin-right:auto;
+    text-transform:uppercase; letter-spacing:.04em; margin-right:auto; min-width:220px; flex-shrink:0;
   }
   .cardslink-solved-bar .thumbs{ display:flex; gap:4px; }
   .cardslink-solved-bar .thumbs img{ width:192px; height:auto; object-fit:contain; border:1px solid var(--line); }
