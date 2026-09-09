@@ -2893,6 +2893,8 @@ function initCardsLink(){
   cardsLinkGroups = groups || [];
   cardsLinkMistakes = 0; cardsLinkSolvedCount = 0; cardsLinkSelected = [];
   cardsLinkActive = true;
+  document.querySelector('.cardslink-controls').style.display = '';
+  document.querySelector('.cardslink-mistakes-row').style.display = '';
   document.getElementById('cardsLinkSolvedGroups').innerHTML = '';
   document.getElementById('cardsLinkBanner').className = 'banner'; document.getElementById('cardsLinkBanner').innerHTML = '';
   const rng = seededRng(today+"-cardslink-order");
@@ -2904,6 +2906,8 @@ function initCardsLink(){
   loadStats().then(s=>{
     if(s.lastCardsLinkPlayed === today && (s.cardsLinkWon !== null && s.cardsLinkWon !== undefined)){
       cardsLinkActive = false;
+      document.querySelector('.cardslink-controls').style.display = 'none';
+      document.querySelector('.cardslink-mistakes-row').style.display = 'none';
       revealAllCardsLinkGroups();
       showCardsLinkEndBanner(s.cardsLinkWon, s.lastCardsLinkReward||0, s.lastCardsLinkMistakes||0);
     } else {
@@ -3018,6 +3022,8 @@ document.getElementById('cardsLinkSubmitBtn').addEventListener('click', ()=>{
 const CARDSLINK_REWARD_TABLE = [200,150,100,50]; // selon le nombre d'erreurs faites (0 à 3) en cas de victoire
 function cardsLinkFinish(won){
   cardsLinkActive = false;
+  document.querySelector('.cardslink-controls').style.display = 'none';
+  document.querySelector('.cardslink-mistakes-row').style.display = 'none';
   const today = todayUTCString();
   if(!won) revealAllCardsLinkGroups();
   const reward = won ? CARDSLINK_REWARD_TABLE[Math.min(cardsLinkMistakes,3)] : 0;
