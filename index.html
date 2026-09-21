@@ -2080,7 +2080,7 @@ function submitLegend(){
   const guess = input.value.trim();
   if(!guess) return;
   const parts = splitLegend(legendSecret);
-  const correct = guess.toLowerCase() === parts.main.trim().toLowerCase();
+  const correct = stripAccents(guess.toLowerCase()) === stripAccents(parts.main.trim().toLowerCase());
   legendDone = true; input.disabled = true; btn.disabled = true;
   const today = todayUTCString();
   loadStats().then(s=>{
@@ -2186,6 +2186,9 @@ setupAutocomplete(endlessInput, endlessSugg, (card)=>{
 }, ()=>endlessGuesses);
 
 // ======================= SLUGIFY (pour les futurs fichiers d'images) =======================
+function stripAccents(str){
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
 function slugify(name){
   return name.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // enlève les accents
@@ -3099,7 +3102,7 @@ function renderArchiveLegend(area, date){
     '<div class="banner" id="archiveBanner"></div>';
   document.getElementById('archiveLegendSubmit').addEventListener('click', ()=>{
     const guess = document.getElementById('archiveLegendInput').value.trim();
-    const correct = guess.toLowerCase() === parts.main.trim().toLowerCase();
+    const correct = stripAccents(guess.toLowerCase()) === stripAccents(parts.main.trim().toLowerCase());
     const banner = document.getElementById('archiveBanner');
     banner.className = correct ? 'banner win' : 'banner fail';
     banner.innerHTML = (correct ? t('legend_win_prefix') : t('legend_lose_prefix'))+' '+parts.main+revealCardHTML(secret);
