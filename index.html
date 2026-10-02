@@ -552,7 +552,7 @@ function randCard(){ return CARDS[Math.floor(Math.random()*CARDS.length)]; }
 
 // Barème de récompense (÷10) : 100 eddies au 1er essai, -10 par essai supplémentaire, plancher 10.
 function computeReward(tries){ return Math.max(10, 100 - (tries-1)*10); }
-const ENDLESS_REWARD_TABLE = [25,22,19,16,14,11,9,6,4,2]; // essai 1 à 10 ; au-delà, plancher à 2
+const ENDLESS_REWARD_TABLE = [10,9,8,7,6,5,4,3,2,1]; // essai 1 à 10 ; au-delà, plancher à 1
 function endlessReward(tries){ return ENDLESS_REWARD_TABLE[Math.min(tries,10)-1]; }
 function shareToClipboard(text, btnEl){
   loadStats().then(s=>{ if(!s.hasShared){ s.hasShared = true; saveStats(s); } });
