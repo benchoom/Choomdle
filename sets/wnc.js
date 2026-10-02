@@ -66,7 +66,7 @@ const WNC_CARDS = [
 {n:"Offduty Malfini",t:"Unit",f:["Ganger","Voodoo Boys"],c:4,p:5,r:2,num:51,col:"Yellow",text:"{Play} Spend this Unit and a rival Unit."},
 {n:"Over the Edge",t:"Program",f:["Merc"],c:3,p:null,r:2,num:34,col:"Red",text:"Defeat a Unit with power equal to or less than the value of a friendly d20."},
 {n:"Overwatch — Panam's Gift",t:"Gear",f:["Weapon"],c:4,p:4,r:4,num:93,col:"Green",text:"{Quick} 1 €$, {Spend} Discard 1. Defeat a spent rival Unit with cost equal to or less than the discarded card's cost."},
-{n:"Panam Palmer — Nomad Cavalry",t:"Legend",f:["Aldecaldo","Merc","Nomad"],c:null,p:0,r:2,num:75,col:"Green",text:"2 €$, {Spend} Move a Gear from this Legend to an unequipped friendly Unit. If you do, ready that Unit. At the end of your turn, if 5 or more friendly Units and/or Legends are equipped, ready them."},
+{n:"Panam Palmer — Nomad Cavalry",t:"Legend",f:["Aldecaldos","Merc","Nomad"],c:null,p:0,r:2,num:75,col:"Green",text:"2 €$, {Spend} Move a Gear from this Legend to an unequipped friendly Unit. If you do, ready that Unit. At the end of your turn, if 5 or more friendly Units and/or Legends are equipped, ready them."},
 {n:"Peace Offering",t:"Program",f:["Braindance"],c:1,p:null,r:1,num:101,col:"Green",text:"You may set a Gig's value to the value of another Gig. Then, if you control a value-pair, draw 1."},
 {n:"Pepe Najarro — Working Doubles",t:"Unit",f:["Valentino"],c:4,p:6,r:2,num:86,col:"Green",text:"{Attack} If you control a value-pair of Gigs, ready up to 2 MERC Legends in your Legends area."},
 {n:"Placide — Voodoo Sentinel",t:"Unit",f:["Ganger","Netrunner","Voodoo Boys"],c:8,p:10,r:2,num:123,col:"Blue",text:"{Play} {Attack} You may discard 1 Program. If you do, bottom-deck a rival Unit."},
@@ -81,7 +81,7 @@ const WNC_CARDS = [
 {n:"Sandayu Oda — Hanako's Guardian",t:"Unit",f:["Arasaka","Corpo"],c:7,p:8,r:2,num:88,col:"Green",text:"{Play} Spend a rival Unit for each friendly value-pair of Gigs. This Unit can attack rival Units the turn it's played."},
 {n:"Sandevistan",t:"Gear",f:["Cyberware"],c:3,p:2,r:3,num:95,col:"Green",text:"(Equip to a friendly Unit or face-up Legend.) At the end of your turn, ready this Unit or Legend."},
 {n:"Satori — Sword of Saburo",t:"Gear",f:["Arasaka","Weapon"],c:2,p:2,r:1,num:26,col:"Red",text:"(Equip to a friendly Unit or face-up Legend.) When this Unit wins a fight against a rival Unit, draw 1."},
-{n:"Saul Bright — Stormrider",t:"Unit",f:["Aldecaldo","Nomad"],c:8,p:14,r:2,num:89,col:"Green",text:"Other friendly Units have +2 power while attacking. At the end of your turn, ready up to 3 friendly Units."},
+{n:"Saul Bright — Stormrider",t:"Unit",f:["Aldecaldos","Nomad"],c:8,p:14,r:2,num:89,col:"Green",text:"Other friendly Units have +2 power while attacking. At the end of your turn, ready up to 3 friendly Units."},
 {n:"Screw — Lovelorn Fool",t:"Unit",f:["Ganger","Maelstrom"],c:5,p:7,r:2,num:18,col:"Red",text:"{Defeated} Add another Unit from your trash to your hand."},
 {n:"Secondhand Bombus",t:"Unit",f:["Drone","Zetatech"],c:2,p:0,r:2,num:53,col:"Yellow",text:"{Blocker} (You may spend this Unit to redirect a rival Unit's attack to it instead.) (Units with power 0 don't steal Gigs.)"},
 {n:"Sketchy Ripper",t:"Unit",f:["Ganger","Ripperdoc","Scavenger"],c:2,p:0,r:2,num:54,col:"Yellow",text:"{Attack} Search the top 3 cards of your deck. Reveal a Gear and add it to your hand. Bottom-deck the rest. (Units with power 0 don't steal Gigs.)"},
@@ -137,7 +137,7 @@ const WNC_CARDS = [
 {n:"Viktor Vektor — Drop Your Illusions",t:"Unit",f:["Ripperdoc"],c:5,p:5,r:2,num:57,col:"Yellow",text:"Play your first CYBERWARE Gear each turn for -3 €$, to a minimum of 1 €$."},
 {n:"Adrenaline Converter",t:"Gear",f:["Cyberware","Medtech"],c:2,p:3,r:4,num:59,col:"Yellow",text:"(Equip to a friendly Unit or face-up Legend.) If a Rival controls at least 2 more Gigs than you, this Unit has ADRENALINE. (This Unit can attack the turn it's played.)"},
 {n:"Padre — Man of the Cross",t:"Legend",f:["Fixer","Ganger","Valentino"],c:null,p:0,r:2,num:74,col:"Green",text:"{Call} Choose one effect. - Spend a rival Unit. - Draw 1. {Spend}: Set a player's Gig to the same value as another player's Gig."},
-{n:"Panam Palmer — Strength Through Family",t:"Unit",f:["Aldecaldo","Merc","Nomad"],c:6,p:6,r:4,num:85,col:"Green",text:"During your turn, you may Call a Legend for free. {Attack} Discard 1. If you do, draw 1 for each friendly face-up Legend."},
+{n:"Panam Palmer — Strength Through Family",t:"Unit",f:["Aldecaldos","Merc","Nomad"],c:6,p:6,r:4,num:85,col:"Green",text:"During your turn, you may Call a Legend for free. {Attack} Discard 1. If you do, draw 1 for each friendly face-up Legend."},
 {n:"Zetatech Berserk",t:"Gear",f:["Cyberware","Zetatech"],c:6,p:3,r:2,num:96,col:"Green",text:"Play this Gear for -1 €$ for each friendly face-up Legend, to a minimum of 1 €$."},
 {n:"Delamain — Rideshare AI",t:"Unit",f:["AI"],c:3,p:0,r:3,num:111,col:"Blue",text:"{Play} Draw 2. (Units with power 0 don't steal Gigs.)"},
 {n:"Modded Muramasa",t:"Unit",f:["Vehicle"],c:5,p:4,r:2,num:121,col:"Blue",text:"At the end of your turn, if you have less ★ (Street Cred) than a Rival, ready this Unit."},
@@ -159,6 +159,6 @@ const WNC_CARDS = [
 
 // ---- 3 cartes ajoutées le 04/09/2026 ----
 {n:"Tyger's Whisper",t:"Unit",f:["Fixer","Tyger Claws"],c:2,p:0,r:1,num:90,col:"Green",text:"{Play} You may Call a Legend for free. (You can only Call a Legend once per turn.) (Units with power 0 don't steal Gigs.)"},
-{n:"We Gotta Live Together",t:"Program",f:["Aldecaldo","Nomad"],c:5,p:null,r:2,num:104,col:"Green",text:"If a Rival controls at least 2 more Gigs than you, play this Program for 3 €$. Play up to 2 Units with cost 3 or less from your trash for free."},
+{n:"We Gotta Live Together",t:"Program",f:["Aldecaldos","Nomad"],c:5,p:null,r:2,num:104,col:"Green",text:"If a Rival controls at least 2 more Gigs than you, play this Program for 3 €$. Play up to 2 Units with cost 3 or less from your trash for free."},
 {n:"Towerfall",t:"Program",f:["Braindance"],c:6,p:null,r:4,num:138,col:"Blue",text:"Choose one effect. If you have less \u2605 (Street Cred) than a Rival, choose both instead. - Give all rival Units -5 power this turn. - Bottom-deck all rival Units with power 0."},
 ];
