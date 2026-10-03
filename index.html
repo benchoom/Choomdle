@@ -442,9 +442,9 @@
 <!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
-<script src="/sets/wnc.js?v=20261002"></script>
-<script src="/sets/promo.js?v=20261002"></script>
-<script src="/i18n.js?v=20261002"></script>
+<script src="/sets/wnc.js?v=20261003b"></script>
+<script src="/sets/promo.js?v=20261003b"></script>
+<script src="/i18n.js?v=20261003b"></script>
 <script>
 // Nettoyage d'un "#" résiduel VIDE dans l'URL uniquement (ex: laissé par erreur quelque part).
 // Important : on ne touche JAMAIS un hash qui contient du contenu (ex: #access_token=... utilisé
@@ -2735,18 +2735,42 @@ function daysSinceEpoch(dateStr){
   const [y,m,d] = dateStr.split('-').map(Number);
   return Math.round((Date.UTC(y,m-1,d) - CYCLE_EPOCH_MS) / 86400000);
 }
+// Chaque carte peut porter une date d'ajout ("added":"AAAA-M-J"). Une carte ajoutée n'entre dans le
+// roulement qu'au DÉBUT DU CYCLE SUIVANT (jamais en cours de cycle) : ainsi, ajouter des cartes ne
+// change ni la carte du jour, ni les réponses déjà passées affichées dans l'Archive. Les cartes
+// sans date ("added") existaient déjà au lancement et font partie du paquet depuis le début.
+function cardAddedIdx(c){ return c.added ? daysSinceEpoch(c.added) : -1e9; }
+function poolFor(gameKey, dayIdx){
+  const base = CARDS.filter(c=>cardAddedIdx(c) <= dayIdx);
+  if(gameKey==='legend') return base.filter(c=>c.t==="Legend" && c.n.includes(" — "));
+  if(gameKey==='ability') return base.filter(c=>c.text && c.text.trim().length>0);
+  return base; // classic et art : toutes les cartes
+}
 const _cycleCache = {};
+const _cycleStarts = {};
+function cycleStartsFor(gameKey, dayIdx){
+  const s = _cycleStarts[gameKey] || (_cycleStarts[gameKey] = [0]);
+  while(true){
+    const last = s[s.length-1];
+    const n = poolFor(gameKey, last).length;
+    if(last + n > dayIdx) return s;
+    s.push(last + n);
+  }
+}
 function naturalCycleOrder(gameKey, pool, cycleNum){
   return seededShuffle(pool, seededRng(gameKey+'-cycle-'+cycleNum));
 }
-function resolvedPick(gameKey, pool, higherPriorityFns, dayIndex){
+function resolvedPick(gameKey, higherPriorityFns, dayIndex){
+  const s = cycleStartsFor(gameKey, dayIndex);
+  let cycleNum = s.length-1;
+  while(s[cycleNum] > dayIndex) cycleNum--;
+  const cycleStartDay = s[cycleNum];
+  const pool = poolFor(gameKey, cycleStartDay);
   const n = pool.length;
-  const cycleNum = Math.floor(dayIndex/n);
-  const posInCycle = ((dayIndex%n)+n)%n;
+  const posInCycle = dayIndex - cycleStartDay;
   const cacheKey = gameKey+'-'+cycleNum;
   if(!_cycleCache[cacheKey]){
     const natural = naturalCycleOrder(gameKey, pool, cycleNum);
-    const cycleStartDay = cycleNum*n;
     const higherCardsPerPos = [];
     for(let p=0;p<n;p++){
       const d = cycleStartDay+p;
@@ -2768,18 +2792,18 @@ function resolvedPick(gameKey, pool, higherPriorityFns, dayIndex){
   }
   return _cycleCache[cacheKey][posInCycle];
 }
-function classicPickNew(dayIndex){ return resolvedPick('classic', CARDS, [], dayIndex); }
-function legendPickNew(dayIndex){ return resolvedPick('legend', LEGEND_CARDS, [classicPickNew], dayIndex); }
-function abilityPickNew(dayIndex){ return resolvedPick('ability', ABILITY_CARDS, [classicPickNew, legendPickNew], dayIndex); }
-function artPickNew(dayIndex){ return resolvedPick('art', ART_CARDS, [classicPickNew, legendPickNew, abilityPickNew], dayIndex); }
+function classicPickNew(dayIndex){ return resolvedPick('classic', [], dayIndex); }
+function legendPickNew(dayIndex){ return resolvedPick('legend', [classicPickNew], dayIndex); }
+function abilityPickNew(dayIndex){ return resolvedPick('ability', [classicPickNew, legendPickNew], dayIndex); }
+function artPickNew(dayIndex){ return resolvedPick('art', [classicPickNew, legendPickNew, abilityPickNew], dayIndex); }
 function dailyCardFor(gameKey, dateStr){
   const d = daysSinceEpoch(dateStr);
   const cutoverIdx = daysSinceEpoch(CUTOVER_DATE);
   if(d < cutoverIdx){
-    if(gameKey==='classic') return CARDS[seededIndex(dateStr, CARDS.length)];
-    if(gameKey==='legend') return LEGEND_CARDS[seededIndex(dateStr+'-legend', LEGEND_CARDS.length)];
-    if(gameKey==='ability') return ABILITY_CARDS[seededIndex(dateStr+'-ability', ABILITY_CARDS.length)];
-    if(gameKey==='art') return ART_CARDS[seededIndex(dateStr+'-art', ART_CARDS.length)];
+    // Ancien système (avant la bascule) : on utilise le paquet tel qu'il était ce jour-là.
+    const pool = poolFor(gameKey, d);
+    const suffix = gameKey==='classic' ? '' : '-'+gameKey;
+    return pool[seededIndex(dateStr+suffix, pool.length)];
   }
   if(gameKey==='classic') return classicPickNew(d);
   if(gameKey==='legend') return legendPickNew(d);
