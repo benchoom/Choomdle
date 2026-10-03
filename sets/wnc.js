@@ -90,7 +90,7 @@ const WNC_CARDS = [
 {n:"Take Control",t:"Program",f:["Quickhack"],c:2,p:null,r:2,num:103,col:"Green",text:"{Quick} A rival Unit steals 1 fewer Gig this turn. If that Unit is an AI, DRONE, or VEHICLE, draw 1."},
 {n:"The Heist",t:"Program",f:["Merc"],c:2,p:null,r:2,num:70,col:"Yellow",text:"Trash 4. Add a Gear from among them to your hand. If that Gear's cost equals the value of a friendly Gig, you may play it for free instead."},
 {n:"The Relic — Experimental Biochip",t:"Gear",f:["Arasaka","Cyberware"],c:5,p:3,r:4,num:63,col:"Yellow",text:"{Defeated} Play another Unit with cost 9 or less from your trash for free. Then, bottom-deck this Unit."},
-{n:"V — StreetKid",t:"Legend",f:["Merc"],c:5,p:6,r:2,edition:"SD01-HEI",num:1,col:"Red",text:"{Call} Trash 3. Then, add 1 BRAINDANCE Program from your trash to your hand. {Go Solo} (Pay this Legend's cost to play it as a ready Unit. It can attack this turn. If it leaves the field, remove it from the game.)"},
+{n:"V — StreetKid",t:"Legend",f:["Merc"],c:5,p:6,r:2,num:5,col:"Red",text:"{Call} Trash 3. Then, add 1 BRAINDANCE Program from your trash to your hand. {Go Solo} (Pay this Legend's cost to play it as a ready Unit. It can attack this turn. If it leaves the field, remove it from the game.)"},
 {n:"Valentino Guerrera",t:"Unit",f:["Ganger","Valentino"],c:3,p:4,r:2,num:21,col:"Red",text:"If you have more ★ (Street Cred) than a Rival, this Unit can attack ready Units with {Blocker}."},
 {n:"Valentino Street Racer",t:"Unit",f:["Valentino","Vehicle"],c:3,p:3,r:2,num:91,col:"Green",text:"{Play} Give another friendly Unit with cost 5 or less {Adrenaline} this turn. (A Unit with Adrenaline can attack the turn it's played.)"},
 {n:"Viktor Vektor — Sit Down and Relax",t:"Legend",f:["Ripperdoc"],c:null,p:null,r:2,edition:"SD01-HEI",num:1,col:"Yellow",text:"{Call} Search the top 5 cards of your deck. Reveal up to 2 Gears with cost 2 or less and add them to your hand. Bottom-deck the rest in a random order."},
@@ -128,7 +128,7 @@ const WNC_CARDS = [
 {n:"Unlikely Bond",t:"Program",f:["Maelstrom","Mox"],c:4,p:null,r:2,num:140,col:"Blue",text:"Bottom-deck a ready friendly Unit. If you do, bottom-deck a spent rival Unit."},
 
 // ---- Carte ajoutée le 08/08/2026 ----
-{n:"Rogue Amendiares — Preem Solo",t:"Legend",f:["Merc"],c:7,p:7,r:2,col:"Yellow",text:"{Go Solo} (Pay this Legend's cost to play it as a ready Unit. It can attack this turn. If it leaves the field, remove it from the game.) When a friendly Legend steals a Gig, if its value is even, draw 1. If its value is odd, a Rival discards 1."},
+{n:"Rogue Amendiares — Preem Solo",t:"Legend",f:["Merc"],c:7,p:7,r:2,num:40,col:"Yellow",text:"{Go Solo} (Pay this Legend's cost to play it as a ready Unit. It can attack this turn. If it leaves the field, remove it from the game.) When a friendly Legend steals a Gig, if its value is even, draw 1. If its value is odd, a Rival discards 1."},
 
 // ---- 26 cartes ajoutées le 30/08/2026 (nouveau champ "col" = couleur : Red/Yellow/Green/Blue) ----
 {n:"Deadman Transmitter",t:"Gear",f:["Cyberware","Trauma Team"],c:3,p:1,r:3,num:24,col:"Red",text:"(Equip to a friendly Unit or face-up Legend.) If this Unit would be defeated, defeat its \"DEADMAN TRANSMITTER\" instead."},
@@ -161,4 +161,6 @@ const WNC_CARDS = [
 {n:"Tyger's Whisper",t:"Unit",f:["Fixer","Tyger Claws"],c:2,p:0,r:1,num:90,col:"Green",text:"{Play} You may Call a Legend for free. (You can only Call a Legend once per turn.) (Units with power 0 don't steal Gigs.)"},
 {n:"We Gotta Live Together",t:"Program",f:["Aldecaldos","Nomad"],c:5,p:null,r:2,num:104,col:"Green",text:"If a Rival controls at least 2 more Gigs than you, play this Program for 3 €$. Play up to 2 Units with cost 3 or less from your trash for free."},
 {n:"Towerfall",t:"Program",f:["Braindance"],c:6,p:null,r:4,num:138,col:"Blue",text:"Choose one effect. If you have less \u2605 (Street Cred) than a Rival, choose both instead. - Give all rival Units -5 power this turn. - Bottom-deck all rival Units with power 0."},
+{n:"Maelstrom Goons",t:"Unit",f:["Ganger","Maelstrom"],c:3,p:3,r:2,num:49,col:"Yellow",added:"2026-10-3",text:"When this Unit steals a Gig, if it's equipped, a Rival discards 1."},
+{n:"Memory Relapse",t:"Program",f:["Braindance"],c:4,p:null,r:2,num:100,col:"Green",added:"2026-10-3",text:"Spend a rival Unit. It can't ready until your next turn. If your \u2605 (Street Cred) is an even number, draw 1."},
 ];
