@@ -23,7 +23,7 @@ const WNC_CARDS = [
 {n:"Corporate Surveillance",t:"Program",f:["Corpo"],c:2,p:null,r:1,num:97,col:"Green",text:"Spend a rival Unit with cost 4 or less."},
 {n:"Cyberpsychosis",t:"Program",f:["Quickhack"],c:3,p:null,r:2,num:67,col:"Yellow",text:"{Quick} Give an equipped Unit +3 power this turn for each of its equipped Gears. If that Unit steals or fights, defeat it at the end of this turn."},
 {n:"Delamain Cab",t:"Unit",f:["Vehicle"],c:4,p:4,r:3,num:112,col:"Blue",text:""},
-{n:"Dexter DeShawn — One Last Chance",t:"Unit",f:["Fixer"],c:3,p:4,r:2,num:2,col:"Yellow",text:"{Play} {Attack} Adjust a Gig by up to 1. {Defeated} If your ★ (Street Cred) differs from a Rival's by 10+, draw 2."},
+{n:"Dexter DeShawn — One Last Chance",t:"Unit",f:["Fixer"],c:3,p:4,r:2,edition:"SD01-HEI",num:2,col:"Yellow",text:"{Play} {Attack} Adjust a Gig by up to 1. {Defeated} If your ★ (Street Cred) differs from a Rival's by 10+, draw 2."},
 {n:"Dum Dum — Maelstrom Triggerman",t:"Legend",f:["Ganger","Maelstrom"],c:null,p:0,r:2,num:36,col:"Yellow",text:"{Call} You may defeat a friendly Gear. If you do, draw 2. Otherwise, draw 1. {Quick} 1 €$, {Spend} Give a friendly Unit +1 power this turn for each of its equipped Gear."},
 {n:"Dying Night — V's Pistol",t:"Gear",f:["Merc","Weapon"],c:2,p:2,r:2,num:128,col:"Blue",text:"(Equip to a friendly Unit or face-up Legend.) {Attack} Decrease a Gig by up to 2. At the end of your turn, if this Unit is named \"V\", ready 2 Eddies."},
 {n:"El Sombrerón — La Venganza Lenta",t:"Unit",f:["Ganger","Valentino"],c:5,p:4,r:4,num:9,col:"Red",text:"{Attack} You may pay 2 €$. If you do, this Unit gains power equal to a friendly max Gig this turn."},
@@ -163,4 +163,5 @@ const WNC_CARDS = [
 {n:"Towerfall",t:"Program",f:["Braindance"],c:6,p:null,r:4,num:138,col:"Blue",text:"Choose one effect. If you have less \u2605 (Street Cred) than a Rival, choose both instead. - Give all rival Units -5 power this turn. - Bottom-deck all rival Units with power 0."},
 {n:"Maelstrom Goons",t:"Unit",f:["Ganger","Maelstrom"],c:3,p:3,r:2,num:49,col:"Yellow",added:"2026-10-3",text:"When this Unit steals a Gig, if it's equipped, a Rival discards 1."},
 {n:"Memory Relapse",t:"Program",f:["Braindance"],c:4,p:null,r:2,num:100,col:"Green",added:"2026-10-3",text:"Spend a rival Unit. It can't ready until your next turn. If your \u2605 (Street Cred) is an even number, draw 1."},
+{n:"Dexter DeShawn — Off the Grid",t:"Legend",f:["Fixer"],c:null,p:0,r:2,num:2,col:"Red",added:"2026-10-3",text:"{Call} Choose one effect. - Give a friendly Unit +2 power this turn. - Draw 1. {Spend}: Increase a Gig by up to 2."},
 ];
