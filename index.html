@@ -158,6 +158,7 @@
     <button class="tab" data-panel="blitz" data-i18n="tab_blitz">Blitz</button>
     <button class="tab" data-panel="ability" data-i18n="tab_ability">Ability</button>
     <button class="tab" data-panel="art" data-i18n="tab_art">Art</button>
+    <button class="tab" data-panel="altart">Alt Art</button>
     <button class="tab" data-panel="cardslink" data-i18n="tab_cardslink">Cards Link</button>
     <button class="tab" data-panel="chrome" data-i18n="tab_chrome">Chrome Check</button>
     <button class="tab" data-panel="sequence" data-i18n="tab_sequence">Sequence</button>
@@ -281,6 +282,29 @@
     <div class="banner" id="artBanner"></div>
   </div>
 
+  <!-- ALT ART -->
+  <div class="panel" id="panel-altart" style="display:none">
+    <div class="statusline">
+      <span id="altArtLabel"></span>
+      <span class="stat"><span data-i18n="endless_solved">Cartes résolues (total)</span> <b id="altArtSolved">0</b></span>
+    </div>
+    <div class="art-frame">
+      <canvas id="altArtCanvas" width="480" height="672" style="display:none;max-width:100%;height:auto;margin:0 auto;"></canvas>
+      <div class="art-placeholder" id="altArtPlaceholder" style="display:none;" data-i18n="art_missing">Visuel bientôt disponible pour cette carte.</div>
+    </div>
+    <div class="searchrow">
+      <input class="guessInput" id="guessInputAltArt" type="text" data-i18n-ph="classic_input_ph" placeholder="Tape le nom d'une carte..." autocomplete="off">
+      <div class="suggestions" id="suggestionsAltArt"></div>
+    </div>
+    <div class="gridwrap">
+      <table class="guesses">
+        <thead><tr><th style="text-align:left" data-i18n="col_card">Carte</th><th data-i18n="col_type">Type</th><th data-i18n="col_faction">Faction</th><th data-i18n="col_color">Couleur</th><th data-i18n="col_cost">Coût</th><th data-i18n="col_pwr">PWR</th><th data-i18n="col_ram">RAM</th></tr></thead>
+        <tbody id="altArtBody"></tbody>
+      </table>
+    </div>
+    <div class="banner" id="altArtBanner"></div>
+  </div>
+
   <!-- CHROME CHECK -->
   <div class="panel" id="panel-chrome" style="display:none">
     <div class="chromebar">
@@ -387,7 +411,8 @@
       <span data-i18n="collection_title">Collection de cartes</span>
       <span class="stat"><b id="collectionFoundCount">0</b> / <b id="collectionTotalCount">0</b></span>
     </div>
-    <div class="hint" data-i18n="collection_hint" style="margin-bottom:10px;">Devine une carte dans Classic, Legend, Ability ou Art pour la débloquer ici en couleur.</div>
+    <div class="hint" id="collectionAltHint" style="margin-bottom:10px;display:none;"></div>
+    <div class="hint" id="collectionBaseHint" data-i18n="collection_hint" style="margin-bottom:10px;">Devine une carte dans Classic, Legend, Ability ou Art pour la débloquer ici en couleur.</div>
     <nav id="collectionEditionTabs" class="tabs" style="margin-bottom:14px;"></nav>
     <div id="collectionGrid" class="collection-grid"></div>
   </div>
@@ -442,9 +467,10 @@
 <!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
-<script src="/sets/wnc.js?v=20261003b"></script>
-<script src="/sets/promo.js?v=20261003b"></script>
-<script src="/i18n.js?v=20261003b"></script>
+<script src="/sets/wnc.js?v=20261003c"></script>
+<script src="/sets/promo.js?v=20261003c"></script>
+<script src="/sets/wnc-alt.js?v=20261003c"></script>
+<script src="/i18n.js?v=20261003c"></script>
 <script>
 // Nettoyage d'un "#" résiduel VIDE dans l'URL uniquement (ex: laissé par erreur quelque part).
 // Important : on ne touche JAMAIS un hash qui contient du contenu (ex: #access_token=... utilisé
@@ -529,6 +555,7 @@ function applyLanguage(code){
   // actuellement affichés, pour que changer de langue sans quitter la page fonctionne aussi.
   try{
     if(typeof renderRarityBadge === 'function') renderRarityBadge();
+    if(typeof refreshAltTexts === 'function') refreshAltTexts();
     const achEl = document.getElementById('panel-achievements');
     if(achEl && achEl.style.display === 'block') renderAchievements();
     const statsEl = document.getElementById('panel-stats');
@@ -626,6 +653,18 @@ function shareArt(btn){
   const text = 'Choomdle Art — '+todayUTCString()+'\n'+(rows||'')+'\n'+resultLine+'\nchoomdle.com';
   shareToClipboard(text, btn);
 }
+function shareAltArt(btn){
+  const rows = altGuesses.map(name=>{
+    const card = altBaseCard(name);
+    if(!card) return '';
+    const r = compareCard(card, altSecret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const resultLine = altSolved && altGuesses.length && altAttempt<=5 ? t('win_tries').replace('{n}', altAttempt) : t('art_failed');
+  const text = 'Choomdle Alt Art — '+todayUTCString()+'\n'+(rows||'')+'\n'+resultLine+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
 function shareBlitz(btn){
   const text = 'Choomdle Blitz\n'+t('blitz_timeup')+' '+blitzScore+'\n'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'\nchoomdle.com';
   shareToClipboard(text, btn);
@@ -661,6 +700,7 @@ async function shareStats(btn){
     '♾️ '+t('tab_endless')+': '+(s.endlessSolved||0),
     '📜 '+t('tab_ability')+': '+(s.abilitySolved||0),
     '🖼️ '+t('tab_art')+': '+artWins,
+    '🎭 Alt Art: '+((s.altArt&&s.altArt.solved)||0),
     '⚙️ '+t('tab_chrome')+': '+t('stats_best_score')+' '+(s.chromeBestScore||0),
     '🔗 '+t('tab_cardslink')+': '+(s.cardsLinkWins||0),
     '🔢 '+t('tab_sequence')+': '+(s.sequenceWins||0),
@@ -713,7 +753,7 @@ function renderRow(guess, secret){
   const win = r.type==="match" && r.faction==="match" && r.col==="match" && r.c.state==="match" && r.p.state==="match" && r.r.state==="match";
   return {row, win};
 }
-function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
+function setupAutocomplete(inputEl, suggEl, onPick, excludeNames, poolFn){
   // Le menu déroulant est déplacé dans <body> et positionné en "fixed" pour échapper
   // au clip-path des panneaux (qui coupait visuellement la liste avant qu'elle finisse).
   if(suggEl.parentElement !== document.body){
@@ -731,7 +771,8 @@ function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
     suggEl.innerHTML = "";
     if(!q){ suggEl.style.display="none"; return; }
     const excl = excludeNames ? excludeNames() : [];
-    const allMatches = CARDS.filter(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
+    const POOL = poolFn ? poolFn() : CARDS;
+    const allMatches = POOL.filter(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
     const matches = allMatches.slice(0,10);
     if(!matches.length){ suggEl.style.display="none"; return; }
     matches.forEach(c=>{
@@ -755,8 +796,9 @@ function setupAutocomplete(inputEl, suggEl, onPick, excludeNames){
     if(e.key === 'Enter'){
       const q = inputEl.value.trim().toLowerCase();
       const excl = excludeNames ? excludeNames() : [];
-      const exact = CARDS.find(c=>c.n.toLowerCase()===q && !excl.includes(c.n));
-      const first = CARDS.find(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
+      const POOL = poolFn ? poolFn() : CARDS;
+      const exact = POOL.find(c=>c.n.toLowerCase()===q && !excl.includes(c.n));
+      const first = POOL.find(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
       const pick = exact || first;
       if(pick){ onPick(pick); inputEl.value=""; suggEl.style.display="none"; }
     }
@@ -789,7 +831,7 @@ function statsRowToLocal(row){
     lastClassicReward: meta.lastClassicReward||0, lastAbilityReward: meta.lastAbilityReward||0, lastArtReward: meta.lastArtReward||0,
     legendPlayed: meta.legendPlayed||0, legendWins: meta.legendWins||0,
     blitzSessions: meta.blitzSessions||0, blitzBestScore: meta.blitzBestScore||0, blitzTotalSolved: meta.blitzTotalSolved||0,
-    artPlayed: meta.artPlayed||0, artLostCount: meta.artLostCount||0,
+    artPlayed: meta.artPlayed||0, artLostCount: meta.artLostCount||0, altArt: meta.altArt||{},
     chromeSessions: meta.chromeSessions||0, chromeBestScore: meta.chromeBestScore||0, chromeTotalCorrect: meta.chromeTotalCorrect||0,
     lastCardsLinkPlayed: meta.lastCardsLinkPlayed||null, cardsLinkWon: meta.cardsLinkWon===undefined?null:meta.cardsLinkWon,
     lastCardsLinkReward: meta.lastCardsLinkReward||0, lastCardsLinkMistakes: meta.lastCardsLinkMistakes||0,
@@ -797,7 +839,7 @@ function statsRowToLocal(row){
     gamesPlayed: row.games_played||0, wins: row.wins||0,
     guessDistribution: row.guess_distribution||{},
     lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
-    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0, cardslink: meta.eddies_cardslink||0, sequence: meta.eddies_sequence||0 },
+    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0, cardslink: meta.eddies_cardslink||0, sequence: meta.eddies_sequence||0, altart: meta.eddies_altart||0 },
     monthEddies: meta.monthEddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
     yearEddies: meta.yearEddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
     monthEddiesPeriod: meta.monthEddiesPeriod || null, yearEddiesPeriod: meta.yearEddiesPeriod || null,
@@ -830,12 +872,12 @@ function localToStatsRow(s, uid){
       lastClassicReward: s.lastClassicReward||0, lastAbilityReward: s.lastAbilityReward||0, lastArtReward: s.lastArtReward||0,
       legendPlayed: s.legendPlayed||0, legendWins: s.legendWins||0,
       blitzSessions: s.blitzSessions||0, blitzBestScore: s.blitzBestScore||0, blitzTotalSolved: s.blitzTotalSolved||0,
-      artPlayed: s.artPlayed||0, artLostCount: s.artLostCount||0,
+      artPlayed: s.artPlayed||0, artLostCount: s.artLostCount||0, altArt: s.altArt||{},
       chromeSessions: s.chromeSessions||0, chromeBestScore: s.chromeBestScore||0, chromeTotalCorrect: s.chromeTotalCorrect||0,
       lastCardsLinkPlayed: s.lastCardsLinkPlayed||null, cardsLinkWon: (s.cardsLinkWon===undefined?null:s.cardsLinkWon),
       lastCardsLinkReward: s.lastCardsLinkReward||0, lastCardsLinkMistakes: s.lastCardsLinkMistakes||0,
       cardsLinkPlayed: s.cardsLinkPlayed||0, cardsLinkWins: s.cardsLinkWins||0,
-      eddies_cardslink: (s.eddies&&s.eddies.cardslink)||0,
+      eddies_cardslink: (s.eddies&&s.eddies.cardslink)||0, eddies_altart: (s.eddies&&s.eddies.altart)||0,
       monthEddies: s.monthEddies || {}, yearEddies: s.yearEddies || {},
       monthEddiesPeriod: s.monthEddiesPeriod || null, yearEddiesPeriod: s.yearEddiesPeriod || null,
       _lastKnownEddies: s._lastKnownEddies || {},
@@ -872,7 +914,7 @@ async function loadStats(){
 }
 function defaultStats(){
   return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
-    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0,altart:0},
     monthEddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
     yearEddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
     monthEddiesPeriod:null, yearEddiesPeriod:null, _lastKnownEddies:{},
@@ -882,7 +924,7 @@ function defaultStats(){
     legendPlayed:0, legendWins:0,
     blitzSessions:0, blitzBestScore:0, blitzTotalSolved:0,
     abilitySolved:0,
-    artPlayed:0, artLostCount:0,
+    artPlayed:0, artLostCount:0, altArt:{},
     chromeSessions:0, chromeBestScore:0, chromeTotalCorrect:0,
     lastCardsLinkPlayed:null, cardsLinkWon:null, lastCardsLinkReward:0, lastCardsLinkMistakes:0,
     cardsLinkPlayed:0, cardsLinkWins:0,
@@ -1237,7 +1279,7 @@ async function initAccount(){
     currentSession = null; currentPseudo = null;
     try{
       localStorage.removeItem('choomdle:stats');
-      ['classic','ability','art','sequence','cardslink'].forEach(k=>localStorage.removeItem('choomdle:progress:'+k));
+      ['classic','ability','art','altart','sequence','cardslink'].forEach(k=>localStorage.removeItem('choomdle:progress:'+k));
     }catch(e){} // évite d'afficher les données du compte précédent en tant qu'invité
     setLoggedOutUI();
     refreshEddiesUI(); refreshStreakUI();
@@ -1292,6 +1334,7 @@ async function loadCommunityRows(){
         const meta = r.meta || {};
         const cardslink = meta.eddies_cardslink || 0; // eddies Cards Link/Sequence stockés dans meta (pas de colonne dédiée)
         const sequence = meta.eddies_sequence || 0;
+        const altart = meta.eddies_altart || 0;
         // On réutilise statsRowToLocal (même logique que pour nos propres stats) pour pouvoir
         // calculer le nombre de succès débloqués, le palier de rareté, et les compteurs
         // mensuel/annuel de chaque joueur.
@@ -1305,8 +1348,8 @@ async function loadCommunityRows(){
         return {
           pseudo: (r.profiles && r.profiles.pseudo) || "Choomer",
           streak: r.streak, bestStreak: r.best_streak,
-          eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art, cardslink, sequence },
-          eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink+sequence,
+          eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art, cardslink, sequence, altart },
+          eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink+sequence+altart,
           achievementsUnlocked: unlocked,
           monthEddies, yearEddies,
           monthEddiesTotal: Object.values(monthEddies).reduce((a,b)=>a+(b||0),0),
@@ -1400,6 +1443,7 @@ function communityCategories(period){
     [t('podium_endless'), r=>(r[key]&&r[key].endless)||0],
     [t('podium_ability'), r=>(r[key]&&r[key].ability)||0],
     [t('podium_art'), r=>(r[key]&&r[key].art)||0],
+    ['Alt Art', r=>(r[key]&&r[key].altart)||0],
     [t('podium_chrome'), r=>(r[key]&&r[key].chrome)||0],
     [t('podium_cardslink'), r=>(r[key]&&r[key].cardslink)||0],
     [t('podium_sequence'), r=>(r[key]&&r[key].sequence)||0],
@@ -1720,11 +1764,12 @@ const ACHIEVEMENTS = [
   { id:'cc_2000', icon:'💯', fr:['Deux Mille Réponses','2000 bonnes réponses au total.'], en:['Two Thousand Correct','2000 total correct answers.'],es:['Dos Mil Respuestas','2000 respuestas correctas en total.'],de:['Zweitausend Richtige','2000 richtige Antworten insgesamt.'],pt:['Duas Mil Respostas','2000 respostas corretas no total.'],it:['Duemila Risposte','2000 risposte corrette in totale.'],pl:['Dwa Tysiące Odpowiedzi','2000 poprawnych odpowiedzi łącznie.'],ko:['2000개의 정답','누적 2000개 정답.'],zh:['两千答对','累计答对2000题。'],ja:['2000問正解','累計2000問正解。'], check:s=>(s.chromeTotalCorrect||0)>=2000 },
 ];
 function totalGamesPlayed(s){
-  return (s.gamesPlayed||0)+(s.legendPlayed||0)+(s.blitzSessions||0)+(s.endlessSolved||0)+(s.abilitySolved||0)+(s.artPlayed||0)+(s.chromeSessions||0)+(s.cardsLinkPlayed||0)+(s.sequencePlayed||0);
+  return (s.gamesPlayed||0)+(s.legendPlayed||0)+(s.blitzSessions||0)+(s.endlessSolved||0)+(s.abilitySolved||0)+(s.artPlayed||0)+((s.altArt&&s.altArt.played)||0)+(s.chromeSessions||0)+(s.cardsLinkPlayed||0)+(s.sequencePlayed||0);
 }
 // ======================= COLLECTION DE CARTES (Classic/Legend/Ability/Art) =======================
 const COLLECTION_EDITIONS = [
   { id: 'wnc', label: 'WNC', cards: WNC_CARDS.filter(c=>!c.edition) },
+  { id: 'wnc-alt', label: 'WNC Alt', alt: true, cards: WNC_ALT },
   { id: 'sd01-hei', label: 'SD01-HEI', cards: WNC_CARDS.filter(c=>c.edition==='SD01-HEI') },
   { id: 'sd02-ebp', label: 'SD02-EBP', cards: WNC_CARDS.filter(c=>c.edition==='SD02-EBP') },
   { id: 'prm01', label: 'PRM01', cards: WNC_CARDS.filter(c=>c.edition==='PRM01') },
@@ -1747,6 +1792,21 @@ async function renderCollection(){
   const edition = COLLECTION_EDITIONS.find(e=>e.id===currentCollectionEdition) || COLLECTION_EDITIONS[0];
   const grid = document.getElementById('collectionGrid');
   const s = await loadStats();
+  const baseHint = document.getElementById('collectionBaseHint'), altHint = document.getElementById('collectionAltHint');
+  if(baseHint) baseHint.style.display = edition.alt ? 'none' : '';
+  if(altHint){ altHint.style.display = edition.alt ? '' : 'none'; altHint.textContent = ALTART_COLLECTION_HINT[currentLang] || ALTART_COLLECTION_HINT.en; }
+  if(edition.alt){
+    // Onglet "WNC Alt" : une entrée = une illustration alternative (clé = id), débloquée dans le jeu Alt Art.
+    const foundAlt = new Set((s.altArt && s.altArt.collection) || []);
+    document.getElementById('collectionTotalCount').textContent = edition.cards.length;
+    document.getElementById('collectionFoundCount').textContent = edition.cards.filter(a=>foundAlt.has(a.id)).length;
+    grid.innerHTML = edition.cards.map(a=>{
+      const has = foundAlt.has(a.id);
+      const label = a.n+' — '+a.series+' '+String(a.num).padStart(3,'0')+(a.beta?' (β)':'');
+      return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+altImgUrl(a,true)+'" title="'+label.replace(/"/g,'&quot;')+'" loading="lazy">';
+    }).join('');
+    return;
+  }
   const found = new Set(s.collectionCards || []);
   // Triées par numéro de collection croissant (les cartes sans numéro connu vont à la fin).
   const cards = edition.cards.slice().sort((a,b)=>(a.num??9999)-(b.num??9999));
@@ -1854,6 +1914,10 @@ async function renderStatsPanel(){
     ]) +
     statBlock(t('tab_art'), [
       [t('stats_games'), artPlayed], [t('stats_wins'), artWins], [t('stats_winpct'), artPct+'%']
+    ]) +
+    statBlock('Alt Art', [
+      [t('stats_games'), (s.altArt&&s.altArt.played)||0], [t('stats_wins'), (s.altArt&&s.altArt.solved)||0],
+      [t('stats_winpct'), (((s.altArt&&s.altArt.played)||0) ? Math.round((((s.altArt&&s.altArt.solved)||0)/s.altArt.played)*100) : 0)+'%']
     ]) +
     statBlock(t('tab_chrome'), [
       [t('stats_sessions'), s.chromeSessions||0], [t('stats_best_score'), s.chromeBestScore||0], [t('stats_total_correct'), s.chromeTotalCorrect||0]
@@ -2422,6 +2486,184 @@ setupAutocomplete(artInput, artSugg, (card)=>{
   }
 }, ()=>artGuesses);
 
+// ======================= ALT ART (illustrations alternatives — même principe qu'Art) =======================
+// Chaque jour, UNE des illustrations alternatives de WNC_ALT (sets/wnc-alt.js) s'affiche floutée,
+// avec une barre noire (propre à chaque image, voir "bar") qui cache le nom de la carte. Il faut
+// deviner la carte de base. Récompenses, flou et nombre d'essais identiques à Art.
+// Toutes les données du jeu sont rangées dans s.altArt (last/won/lost/reward/played/lostCount/
+// solved/firstTry/collection) pour ne pas multiplier les champs dans les stats.
+const ALT_EXTRA_CARDS = (typeof WNC_ALT_EXTRA !== 'undefined' ? WNC_ALT_EXTRA : []);
+const ALT_GUESS_POOL = CARDS.concat(ALT_EXTRA_CARDS);
+function altBaseCard(name){ return ALT_GUESS_POOL.find(c=>c.n===name) || null; }
+function altImgUrl(entry, thumb){ return 'https://img.choomdle.com/'+(thumb?'cards-thumb/':'cards/')+entry.img+'.jpg'; }
+const ALTART_LABEL = {
+  fr:"Devine la carte à partir de son illustration alternative — le flou s'estompe un peu à chaque essai raté, et la couleur apparaît à partir du 3e essai. Une barre noire cache volontairement le nom et le texte de la carte.",
+  en:"Guess the card from its alternate artwork — the blur fades a bit with each wrong guess, and color appears from your 3rd try. A black bar deliberately hides the card's name and text.",
+  es:"Adivina la carta a partir de su ilustración alternativa — el desenfoque se reduce un poco con cada intento fallido, y el color aparece a partir del 3.º intento. Una barra negra oculta a propósito el nombre y el texto de la carta.",
+  de:"Errate die Karte anhand ihrer alternativen Illustration — die Unschärfe nimmt mit jedem falschen Versuch etwas ab, und ab dem 3. Versuch erscheint die Farbe. Ein schwarzer Balken verdeckt absichtlich den Namen und Text der Karte.",
+  pt:"Adivinhe a carta pela sua ilustração alternativa — o desfoque diminui um pouco a cada tentativa errada, e a cor aparece a partir da 3ª tentativa. Uma barra preta esconde propositalmente o nome e o texto da carta.",
+  it:"Indovina la carta dalla sua illustrazione alternativa — la sfocatura si riduce un po' a ogni tentativo sbagliato, e il colore appare dal 3° tentativo. Una barra nera nasconde volutamente il nome e il testo della carta.",
+  pl:"Odgadnij kartę na podstawie alternatywnej ilustracji — rozmycie zmniejsza się nieco po każdej błędnej próbie, a kolor pojawia się od 3. próby. Czarny pasek celowo zakrywa nazwę i tekst karty.",
+  ko:"대체 일러스트로 카드를 맞혀보세요 — 오답을 낼 때마다 흐림 효과가 조금씩 옅어지고, 3번째 시도부터 색상이 나타납니다. 검은 막대는 카드의 이름과 텍스트를 의도적으로 가립니다.",
+  zh:"根据备用插画猜卡牌——每次猜错，模糊程度都会减弱一些，从第3次尝试起会显示颜色。黑色条是特意用来遮挡卡牌名称和文字的。",
+  ja:"別バージョンのイラストからカードを当てよう — 間違えるたびにぼかしが少しずつ薄れ、3回目の試行から色が表示されます。黒いバーはカードの名前とテキストを意図的に隠しています。",
+};
+const ALTART_COLLECTION_HINT = {
+  fr:"Devine une illustration alternative dans Alt Art pour la débloquer ici en couleur.",
+  en:"Correctly guess an alternate artwork in Alt Art to unlock it here in color.",
+  es:"Adivina una ilustración alternativa en Alt Art para desbloquearla aquí a color.",
+  de:"Errate eine alternative Illustration in Alt Art, um sie hier in Farbe freizuschalten.",
+  pt:"Acerte uma ilustração alternativa em Alt Art para desbloqueá-la aqui em cores.",
+  it:"Indovina un'illustrazione alternativa in Alt Art per sbloccarla qui a colori.",
+  pl:"Odgadnij alternatywną ilustrację w Alt Art, aby odblokować ją tutaj w kolorze.",
+  ko:"Alt Art에서 대체 일러스트를 맞히면 여기서 컬러로 잠금 해제됩니다.",
+  zh:"在 Alt Art 中猜中一张备用插画，即可在此以彩色解锁。",
+  ja:"Alt Artで別バージョンのイラストを正解すると、ここでカラーで解放されます。",
+};
+function refreshAltTexts(){
+  const lab = document.getElementById('altArtLabel');
+  if(lab) lab.textContent = ALTART_LABEL[currentLang] || ALTART_LABEL.en;
+  const hint = document.getElementById('collectionAltHint');
+  if(hint && hint.style.display !== 'none') hint.textContent = ALTART_COLLECTION_HINT[currentLang] || ALTART_COLLECTION_HINT.en;
+}
+let altEntry, altSecret, altGuesses = [], altSolved = false, altAttempt = 1;
+const altBody = document.getElementById('altArtBody');
+const altInput = document.getElementById('guessInputAltArt');
+const altSugg = document.getElementById('suggestionsAltArt');
+const altBanner = document.getElementById('altArtBanner');
+function altFrame(){ return document.querySelector('#panel-altart .art-frame'); }
+function applyAltBlur(attempt){
+  const step = ART_FILTER_STEPS[Math.min(attempt, ART_FILTER_STEPS.length) - 1];
+  document.getElementById('altArtCanvas').style.filter = 'blur('+step.blur+'px) grayscale('+step.gray+')';
+}
+function hideAltImage(){
+  document.getElementById('altArtCanvas').style.display = 'none';
+  document.getElementById('altArtPlaceholder').style.display = 'none';
+  altFrame().style.display = 'none';
+}
+function showAltImage(entry){
+  const canvas = document.getElementById('altArtCanvas');
+  const placeholder = document.getElementById('altArtPlaceholder');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = ()=>{
+    canvas.style.display = 'block'; placeholder.style.display = 'none';
+    const cw = canvas.width, ch = canvas.height;
+    const scale = Math.max(cw/img.width, ch/img.height);
+    const dw = img.width*scale, dh = img.height*scale;
+    ctx.clearRect(0,0,cw,ch);
+    ctx.drawImage(img, (cw-dw)/2, (ch-dh)/2, dw, dh);
+    // Barre noire propre à chaque alt art : le nom de la carte n'est pas toujours à la même
+    // hauteur (Legends : en haut ; autres cartes : selon la longueur du texte).
+    const b = entry.bar || [0.586, 0.754];
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, ch*b[0], cw, ch*(b[1]-b[0]));
+  };
+  img.onerror = ()=>{ canvas.style.display='none'; placeholder.style.display='flex'; };
+  img.src = altImgUrl(entry);
+}
+function revealAltHTML(entry){
+  return '<img class="win-card-img" src="'+altImgUrl(entry)+'" alt="'+entry.n.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">';
+}
+function initAltArt(){
+  const today = todayUTCString();
+  altEntry = dailyAltFor(today);
+  altSecret = altBaseCard(altEntry.n);
+  altGuesses = []; altSolved = false; altAttempt = 1;
+  altBody.innerHTML = ""; altBanner.className = "banner"; altBanner.innerHTML = "";
+  altInput.disabled = false;
+  altFrame().style.display = '';
+  showAltImage(altEntry);
+  applyAltBlur(1);
+  refreshAltTexts();
+  loadInProgress('altart', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = altBaseCard(name);
+      if(card){
+        const {row} = renderRow(card, altSecret);
+        altBody.insertAdjacentHTML('beforeend', row);
+        altGuesses.push(name);
+      }
+    });
+    if(data.attempt) altAttempt = data.attempt;
+    if(!altSolved) applyAltBlur(Math.min(altAttempt,6));
+  });
+  loadStats().then(s=>{
+    const a = s.altArt || {};
+    document.getElementById('altArtSolved').textContent = a.solved || 0;
+    if(a.last === today && (a.won || a.lost)){
+      altSolved = true; altInput.disabled = true;
+      applyAltBlur(6); hideAltImage();
+      if(a.won){
+        altBanner.className = "banner win";
+        altBanner.innerHTML = t('endless_found')+' '+altSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', a.reward||0)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+      } else {
+        altBanner.className = "banner fail";
+        altBanner.innerHTML = t('art_failed')+' '+altSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+      }
+    }
+  });
+}
+setupAutocomplete(altInput, altSugg, (card)=>{
+  if(altSolved) return;
+  const {row, win} = renderRow(card, altSecret);
+  altBody.insertAdjacentHTML('beforeend', row);
+  altGuesses.push(card.n);
+  const today = todayUTCString();
+  if(win){
+    altSolved = true; altInput.disabled = true;
+    applyAltBlur(6); hideAltImage();
+    const reward = ART_REWARD_TABLE[altAttempt-1];
+    altBanner.className = "banner win";
+    altBanner.innerHTML = t('endless_found')+' '+altSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', altAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+    loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress.altart = {date: today, data: {guesses: altGuesses, attempt: altAttempt}};
+      s.altArt = s.altArt || {};
+      const a = s.altArt;
+      if(a.last !== today || (!a.won && !a.lost)){
+        a.last = today; a.won = true; a.lost = false;
+        a.played = (a.played||0)+1; a.solved = (a.solved||0)+1;
+        if(altAttempt===1) a.firstTry = (a.firstTry||0)+1;
+        a.collection = a.collection || [];
+        if(!a.collection.includes(altEntry.id)) a.collection.push(altEntry.id);
+        s.eddies = s.eddies || {};
+        s.eddies.altart = (s.eddies.altart||0) + reward;
+        a.reward = reward;
+        saveStats(s).then(()=>{
+          document.getElementById('altArtSolved').textContent = a.solved;
+          refreshEddiesUI();
+        });
+      } else {
+        saveStats(s);
+      }
+    });
+  } else {
+    altAttempt++;
+    if(altAttempt > 5){
+      altSolved = true; altInput.disabled = true;
+      applyAltBlur(6); hideAltImage();
+      altBanner.className = "banner fail";
+      altBanner.innerHTML = t('art_failed')+' '+altSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+      loadStats().then(s=>{
+        s.inProgress = s.inProgress || {};
+        s.inProgress.altart = {date: today, data: {guesses: altGuesses, attempt: altAttempt}};
+        s.altArt = s.altArt || {};
+        const a = s.altArt;
+        if(a.last !== today || (!a.won && !a.lost)){
+          a.last = today; a.won = false; a.lost = true;
+          a.played = (a.played||0)+1; a.lostCount = (a.lostCount||0)+1;
+        }
+        saveStats(s);
+      });
+    } else {
+      applyAltBlur(altAttempt);
+      saveInProgress('altart', today, {guesses: altGuesses, attempt: altAttempt});
+    }
+  }
+}, ()=>altGuesses, ()=>ALT_GUESS_POOL);
+
 // ======================= CHROME CHECK (Vrai/Faux, 40s, -5s si erreur, ">" ou "=") =======================
 let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null, chromeHistory=[], chromeEddiesEarned=0;
 function chromeNewQuestion(){
@@ -2741,6 +2983,7 @@ function daysSinceEpoch(dateStr){
 // sans date ("added") existaient déjà au lancement et font partie du paquet depuis le début.
 function cardAddedIdx(c){ return c.added ? daysSinceEpoch(c.added) : -1e9; }
 function poolFor(gameKey, dayIdx){
+  if(gameKey==='altart') return WNC_ALT.filter(a=>cardAddedIdx(a) <= dayIdx && altBaseCard(a.n));
   const base = CARDS.filter(c=>cardAddedIdx(c) <= dayIdx);
   if(gameKey==='legend') return base.filter(c=>c.t==="Legend" && c.n.includes(" — "));
   if(gameKey==='ability') return base.filter(c=>c.text && c.text.trim().length>0);
@@ -2796,6 +3039,10 @@ function classicPickNew(dayIndex){ return resolvedPick('classic', [], dayIndex);
 function legendPickNew(dayIndex){ return resolvedPick('legend', [classicPickNew], dayIndex); }
 function abilityPickNew(dayIndex){ return resolvedPick('ability', [classicPickNew, legendPickNew], dayIndex); }
 function artPickNew(dayIndex){ return resolvedPick('art', [classicPickNew, legendPickNew, abilityPickNew], dayIndex); }
+// Alt Art : même roulement sans répétition que les autres jeux ; la carte de base ne peut pas
+// non plus être la même, le même jour, que celle de Classic/Legend/Ability/Art.
+function altPickNew(dayIndex){ return resolvedPick('altart', [classicPickNew, legendPickNew, abilityPickNew, artPickNew], dayIndex); }
+function dailyAltFor(dateStr){ return altPickNew(daysSinceEpoch(dateStr)); }
 function dailyCardFor(gameKey, dateStr){
   const d = daysSinceEpoch(dateStr);
   const cutoverIdx = daysSinceEpoch(CUTOVER_DATE);
@@ -3263,6 +3510,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Une citation d'une Legend s'affiche — devine son <b>nom complet</b>.</p><ul><li>Un seul essai par jour</li><li>Une nouvelle Legend chaque jour à 00:00 UTC</li></ul>" },
     ability: { title:"Ability", body:"<p>Le texte de règles d'une carte s'affiche (sans son nom) — devine de quelle carte il s'agit, en comparant <b>Type, Faction, Couleur, Coût, Puissance et RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_FR },
     art: { title:"Art", body:"<p>L'illustration d'une carte se dévoile progressivement (moins floutée à chaque essai) — devine la carte avant qu'elle soit entièrement révélée.</p><ul><li>5 essais maximum</li><li>Plus tu trouves tôt, plus tu gagnes d'eddies</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Le même jeu qu'Art, mais avec les <b>illustrations alternatives</b> des cartes : chaque jour, l'une des {n} illustrations alternatives (promos, versions bêta et impressions spéciales) s'affiche floutée et sans son nom — devine de quelle carte il s'agit.</p><ul><li>5 essais maximum</li><li>Le flou s'estompe à chaque essai raté, la couleur apparaît dès le 3e essai</li><li>Plus tu trouves tôt, plus tu gagnes d'eddies</li><li>Les alt arts trouvées se débloquent dans Collection → WNC Alt</li></ul>" },
     endless: { title:"Endless", body:"<p>Le même jeu que Classic (comparaison d'attributs), mais en illimité — enchaîne autant de cartes aléatoires que tu veux, à ton rythme.</p>" },
     blitz: { title:"Blitz", body:"<p>77 secondes pour deviner un maximum de cartes d'affilée. Chaque bonne réponse relance immédiatement une nouvelle carte.</p>" },
     chrome: { title:"Chrome Check", body:"<p>Une comparaison entre deux cartes s'affiche (ex: coût, puissance...) — réponds <b>Vrai ou Faux</b> le plus vite possible, en 40 secondes chrono.</p>" },
@@ -3274,6 +3522,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>A quote from a Legend is shown — guess their <b>full name</b>.</p><ul><li>Only one guess per day</li><li>A new Legend every day at 00:00 UTC</li></ul>" },
     ability: { title:"Ability", body:"<p>A card's rules text is shown (without its name) — guess which card it is, comparing <b>Type, Faction, Color, Cost, Power, and RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_EN },
     art: { title:"Art", body:"<p>A card's artwork is revealed a little more with each guess — guess the card before it's fully revealed.</p><ul><li>5 guesses max</li><li>The earlier you guess, the more eddies you earn</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Same game as Art, but with the cards' <b>alternate artworks</b>: each day, one of the {n} alternate illustrations (promos, beta versions and special prints) is shown blurred and without its name — guess which card it is.</p><ul><li>5 guesses max</li><li>The blur fades with each wrong guess, color appears from the 3rd try</li><li>The earlier you guess, the more eddies you earn</li><li>Alt arts you find are unlocked in Collection → WNC Alt</li></ul>" },
     endless: { title:"Endless", body:"<p>Same game as Classic (attribute comparison), but unlimited — guess as many random cards as you like, at your own pace.</p>" },
     blitz: { title:"Blitz", body:"<p>77 seconds to guess as many cards in a row as possible. Every correct guess instantly starts a new card.</p>" },
     chrome: { title:"Chrome Check", body:"<p>A comparison between two cards is shown (e.g. cost, power...) — answer <b>True or False</b> as fast as you can, with a 40-second timer.</p>" },
@@ -3285,6 +3534,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Se muestra una cita de una Legend — adivina su <b>nombre completo</b>.</p><ul><li>Solo un intento por día</li><li>Una nueva Legend cada día a las 00:00 UTC</li></ul>" },
     ability: { title:"Ability", body:"<p>Se muestra el texto de reglas de una carta (sin su nombre) — adivina de qué carta se trata, comparando <b>Tipo, Facción, Color, Coste, Poder y RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_ES+"" },
     art: { title:"Art", body:"<p>La ilustración de una carta se revela un poco más con cada intento — adivina la carta antes de que se revele por completo.</p><ul><li>5 intentos máximo</li><li>Cuanto antes aciertes, más eddies ganas</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>El mismo juego que Art, pero con las <b>ilustraciones alternativas</b> de las cartas: cada día se muestra una de las {n} ilustraciones alternativas (promos, versiones beta e impresiones especiales), borrosa y sin su nombre — adivina de qué carta se trata.</p><ul><li>5 intentos máximo</li><li>El desenfoque se reduce con cada intento fallido y el color aparece desde el 3.er intento</li><li>Cuanto antes aciertes, más eddies ganas</li><li>Las alt arts acertadas se desbloquean en Colección → WNC Alt</li></ul>" },
     endless: { title:"Endless", body:"<p>El mismo juego que Classic (comparación de atributos), pero ilimitado — adivina tantas cartas aleatorias como quieras, a tu ritmo.</p>" },
     blitz: { title:"Blitz", body:"<p>77 segundos para adivinar tantas cartas seguidas como puedas. Cada acierto inicia inmediatamente una nueva carta.</p>" },
     chrome: { title:"Chrome Check", body:"<p>Se muestra una comparación entre dos cartas (p. ej. coste, poder...) — responde <b>Verdadero o Falso</b> lo más rápido posible, con un cronómetro de 40 segundos.</p>" },
@@ -3296,6 +3546,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Ein Zitat einer Legend wird gezeigt — errate ihren <b>vollständigen Namen</b>.</p><ul><li>Nur ein Versuch pro Tag</li><li>Jeden Tag um 00:00 UTC eine neue Legend</li></ul>" },
     ability: { title:"Ability", body:"<p>Der Regeltext einer Karte wird gezeigt (ohne ihren Namen) — errate, um welche Karte es sich handelt, indem du <b>Typ, Fraktion, Farbe, Kosten, Stärke und RAM</b> vergleichst.</p>"+HOWTOPLAY_GRID_LEGEND_DE+"" },
     art: { title:"Art", body:"<p>Das Artwork einer Karte wird mit jedem Versuch etwas mehr enthüllt — errate die Karte, bevor sie vollständig sichtbar ist.</p><ul><li>Maximal 5 Versuche</li><li>Je früher du errätst, desto mehr Eddies verdienst du</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Das gleiche Spiel wie Art, aber mit den <b>alternativen Illustrationen</b> der Karten: Jeden Tag wird eine von {n} alternativen Illustrationen (Promos, Beta-Versionen und Sonderdrucke) unscharf und ohne Namen gezeigt — errate, um welche Karte es sich handelt.</p><ul><li>Maximal 5 Versuche</li><li>Die Unschärfe nimmt mit jedem falschen Versuch ab, ab dem 3. Versuch erscheint die Farbe</li><li>Je früher du errätst, desto mehr Eddies verdienst du</li><li>Erratene Alt Arts werden unter Sammlung → WNC Alt freigeschaltet</li></ul>" },
     endless: { title:"Endless", body:"<p>Das gleiche Spiel wie Classic (Attributvergleich), aber unbegrenzt — errate so viele zufällige Karten, wie du möchtest, in deinem eigenen Tempo.</p>" },
     blitz: { title:"Blitz", body:"<p>77 Sekunden, um so viele Karten hintereinander wie möglich zu erraten. Jede richtige Antwort startet sofort eine neue Karte.</p>" },
     chrome: { title:"Chrome Check", body:"<p>Ein Vergleich zwischen zwei Karten wird gezeigt (z. B. Kosten, Stärke...) — antworte so schnell wie möglich mit <b>Wahr oder Falsch</b>, mit einem 40-Sekunden-Timer.</p>" },
@@ -3307,6 +3558,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Uma citação de uma Legend é exibida — adivinhe o <b>nome completo</b> dela.</p><ul><li>Apenas uma tentativa por dia</li><li>Uma nova Legend todo dia às 00:00 UTC</li></ul>" },
     ability: { title:"Ability", body:"<p>O texto de regras de uma carta é exibido (sem o nome dela) — adivinhe de qual carta se trata, comparando <b>Tipo, Facção, Cor, Custo, Poder e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PT+"" },
     art: { title:"Art", body:"<p>A ilustração de uma carta é revelada um pouco mais a cada tentativa — adivinhe a carta antes que ela seja totalmente revelada.</p><ul><li>5 tentativas no máximo</li><li>Quanto mais cedo você acertar, mais eddies ganha</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>O mesmo jogo que o Art, mas com as <b>ilustrações alternativas</b> das cartas: todo dia, uma das {n} ilustrações alternativas (promos, versões beta e impressões especiais) é exibida desfocada e sem o nome — adivinhe de qual carta se trata.</p><ul><li>5 tentativas no máximo</li><li>O desfoque diminui a cada tentativa errada e a cor aparece a partir da 3ª tentativa</li><li>Quanto mais cedo você acertar, mais eddies ganha</li><li>As alt arts acertadas são desbloqueadas em Coleção → WNC Alt</li></ul>" },
     endless: { title:"Endless", body:"<p>O mesmo jogo que o Classic (comparação de atributos), mas ilimitado — adivinhe quantas cartas aleatórias quiser, no seu ritmo.</p>" },
     blitz: { title:"Blitz", body:"<p>77 segundos para adivinhar o máximo de cartas seguidas possível. Cada acerto inicia imediatamente uma nova carta.</p>" },
     chrome: { title:"Chrome Check", body:"<p>Uma comparação entre duas cartas é exibida (ex: custo, poder...) — responda <b>Verdadeiro ou Falso</b> o mais rápido possível, com cronômetro de 40 segundos.</p>" },
@@ -3318,6 +3570,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Viene mostrata una citazione di una Legend — indovina il suo <b>nome completo</b>.</p><ul><li>Un solo tentativo al giorno</li><li>Una nuova Legend ogni giorno alle 00:00 UTC</li></ul>" },
     ability: { title:"Ability", body:"<p>Viene mostrato il testo delle regole di una carta (senza il nome) — indovina di quale carta si tratta, confrontando <b>Tipo, Fazione, Colore, Costo, Potenza e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_IT+"" },
     art: { title:"Art", body:"<p>L'illustrazione di una carta viene rivelata un po' di più a ogni tentativo — indovina la carta prima che sia completamente svelata.</p><ul><li>Massimo 5 tentativi</li><li>Prima indovini, più eddies guadagni</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Lo stesso gioco di Art, ma con le <b>illustrazioni alternative</b> delle carte: ogni giorno viene mostrata una delle {n} illustrazioni alternative (promo, versioni beta e stampe speciali), sfocata e senza nome — indovina di quale carta si tratta.</p><ul><li>Massimo 5 tentativi</li><li>La sfocatura si riduce a ogni tentativo sbagliato e il colore appare dal 3° tentativo</li><li>Prima indovini, più eddies guadagni</li><li>Le alt art indovinate si sbloccano in Collezione → WNC Alt</li></ul>" },
     endless: { title:"Endless", body:"<p>Lo stesso gioco di Classic (confronto attributi), ma illimitato — indovina tutte le carte casuali che vuoi, al tuo ritmo.</p>" },
     blitz: { title:"Blitz", body:"<p>77 secondi per indovinare il maggior numero possibile di carte di fila. Ogni risposta corretta avvia immediatamente una nuova carta.</p>" },
     chrome: { title:"Chrome Check", body:"<p>Viene mostrato un confronto tra due carte (es. costo, potenza...) — rispondi <b>Vero o Falso</b> il più velocemente possibile, con un timer di 40 secondi.</p>" },
@@ -3329,6 +3582,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Wyświetlany jest cytat Legend — odgadnij jej <b>pełne imię</b>.</p><ul><li>Tylko jedna próba dziennie</li><li>Nowa Legend każdego dnia o 00:00 UTC</li></ul>" },
     ability: { title:"Ability", body:"<p>Wyświetlany jest tekst zasad karty (bez jej nazwy) — odgadnij, o którą kartę chodzi, porównując <b>Typ, Frakcję, Kolor, Koszt, Moc i RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PL+"" },
     art: { title:"Art", body:"<p>Ilustracja karty jest odkrywana coraz bardziej z każdą próbą — odgadnij kartę, zanim zostanie w pełni odsłonięta.</p><ul><li>Maksymalnie 5 prób</li><li>Im wcześniej odgadniesz, tym więcej eddies zdobędziesz</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Ta sama gra co Art, ale z <b>alternatywnymi ilustracjami</b> kart: każdego dnia wyświetlana jest jedna z {n} alternatywnych ilustracji (promo, wersje beta i druki specjalne), rozmyta i bez nazwy — odgadnij, o którą kartę chodzi.</p><ul><li>Maksymalnie 5 prób</li><li>Rozmycie zmniejsza się po każdej błędnej próbie, a kolor pojawia się od 3. próby</li><li>Im wcześniej odgadniesz, tym więcej eddies zdobędziesz</li><li>Odgadnięte alt arty odblokowują się w Kolekcji → WNC Alt</li></ul>" },
     endless: { title:"Endless", body:"<p>Ta sama gra co Classic (porównywanie atrybutów), ale bez limitu — odgaduj dowolną liczbę losowych kart we własnym tempie.</p>" },
     blitz: { title:"Blitz", body:"<p>77 sekund na odgadnięcie jak największej liczby kart z rzędu. Każda poprawna odpowiedź od razu uruchamia nową kartę.</p>" },
     chrome: { title:"Chrome Check", body:"<p>Wyświetlane jest porównanie dwóch kart (np. koszt, moc...) — odpowiedz <b>Prawda lub Fałsz</b> najszybciej jak potrafisz, z 40-sekundowym limitem czasu.</p>" },
@@ -3340,6 +3594,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Legend의 명언이 표시됩니다 — <b>전체 이름</b>을 맞혀보세요.</p><ul><li>하루에 한 번만 시도 가능</li><li>매일 00:00 UTC에 새로운 Legend</li></ul>" },
     ability: { title:"Ability", body:"<p>카드의 규칙 텍스트가 표시됩니다(이름 없이) — 타입, 진영, 색상, 비용, 파워, RAM을 비교하여 어떤 카드인지 맞혀보세요.</p>"+HOWTOPLAY_GRID_LEGEND_KO+"" },
     art: { title:"Art", body:"<p>카드의 일러스트가 시도할 때마다 조금씩 더 드러납니다 — 완전히 공개되기 전에 카드를 맞혀보세요.</p><ul><li>최대 5회 시도</li><li>일찍 맞힐수록 더 많은 eddies를 획득합니다</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Art와 같은 게임이지만 카드의 <b>대체 일러스트</b>로 진행합니다. 매일 {n}개의 대체 일러스트(프로모, 베타 버전, 특별 인쇄본) 중 하나가 흐릿하게, 이름 없이 표시됩니다 — 어떤 카드인지 맞혀보세요.</p><ul><li>최대 5회 시도</li><li>오답을 낼 때마다 흐림이 옅어지고, 3번째 시도부터 색상이 나타납니다</li><li>일찍 맞힐수록 더 많은 eddies를 획득합니다</li><li>맞힌 Alt Art는 컬렉션 → WNC Alt에서 잠금 해제됩니다</li></ul>" },
     endless: { title:"Endless", body:"<p>Classic과 동일한 게임(속성 비교)이지만 무제한입니다 — 원하는 만큼 무작위 카드를 자신의 속도로 맞혀보세요.</p>" },
     blitz: { title:"Blitz", body:"<p>77초 안에 최대한 많은 카드를 연속으로 맞혀보세요. 정답을 맞힐 때마다 즉시 새 카드가 시작됩니다.</p>" },
     chrome: { title:"Chrome Check", body:"<p>두 카드 간의 비교(예: 비용, 파워...)가 표시됩니다 — 40초 타이머 안에 최대한 빠르게 <b>참 또는 거짓</b>으로 답하세요.</p>" },
@@ -3351,6 +3606,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>会显示一句传奇（Legend）的台词——猜出她/他的<b>全名</b>。</p><ul><li>每天只能尝试一次</li><li>每天00:00 UTC推出新的Legend</li></ul>" },
     ability: { title:"Ability", body:"<p>会显示一张卡牌的规则文本（不含名称）——通过比较<b>类型、阵营、颜色、费用、力量和RAM</b>来猜出是哪张卡牌。</p>"+HOWTOPLAY_GRID_LEGEND_ZH+"" },
     art: { title:"Art", body:"<p>卡牌插图会随着每次尝试逐渐显现——在完全显现之前猜出卡牌。</p><ul><li>最多5次尝试</li><li>猜得越早，获得的eddies越多</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>与 Art 相同的玩法，但使用卡牌的<b>备用插画</b>：每天会显示 {n} 张备用插画（宣传卡、测试版和特别印刷版）之一，画面模糊且不含名称——猜出是哪张卡牌。</p><ul><li>最多5次尝试</li><li>每次猜错模糊程度都会减弱，从第3次尝试起会显示颜色</li><li>猜得越早，获得的eddies越多</li><li>猜中的 Alt Art 会在 收藏 → WNC Alt 中解锁</li></ul>" },
     endless: { title:"Endless", body:"<p>与Classic相同的游戏（属性比较），但无限制——按自己的节奏猜测任意数量的随机卡牌。</p>" },
     blitz: { title:"Blitz", body:"<p>77秒内尽可能连续猜中更多卡牌。每次答对会立即开始一张新卡牌。</p>" },
     chrome: { title:"Chrome Check", body:"<p>会显示两张卡牌之间的比较（例如费用、力量等）——在40秒计时内尽快回答<b>对或错</b>。</p>" },
@@ -3362,6 +3618,7 @@ const HOWTOPLAY_CONTENT = {
     legend: { title:"Legend", body:"<p>Legendの名言が表示されます — <b>フルネーム</b>を当てよう。</p><ul><li>1日1回のみ挑戦可能</li><li>毎日00:00 UTCに新しいLegend</li></ul>" },
     ability: { title:"Ability", body:"<p>カードのルールテキストが表示されます（名前なし）— タイプ、派閥、色、コスト、パワー、RAMを比較してどのカードか当てよう。</p>"+HOWTOPLAY_GRID_LEGEND_JA+"" },
     art: { title:"Art", body:"<p>カードのイラストが試行するたびに少しずつ明らかになります — 完全に表示される前にカードを当てよう。</p><ul><li>最大5回まで挑戦可能</li><li>早く当てるほど、多くのeddiesを獲得できます</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Artと同じゲームですが、カードの<b>別バージョンのイラスト</b>を使います。毎日、{n}枚の別イラスト（プロモ、ベータ版、特別印刷）のうち1枚が、ぼかされ名前なしで表示されます — どのカードか当てよう。</p><ul><li>最大5回まで挑戦可能</li><li>間違えるたびにぼかしが薄れ、3回目の試行から色が表示されます</li><li>早く当てるほど、多くのeddiesを獲得できます</li><li>正解したAlt Artは コレクション → WNC Alt で解放されます</li></ul>" },
     endless: { title:"Endless", body:"<p>Classicと同じゲーム（属性比較）ですが、無制限です — 好きなだけランダムなカードを自分のペースで当てよう。</p>" },
     blitz: { title:"Blitz", body:"<p>77秒以内にできるだけ多くのカードを連続で当てよう。正解するとすぐに新しいカードが始まります。</p>" },
     chrome: { title:"Chrome Check", body:"<p>2枚のカードの比較（例：コスト、パワーなど）が表示されます — 40秒のタイマー内でできるだけ早く<b>正しいか間違っているか</b>を答えよう。</p>" },
@@ -3385,7 +3642,7 @@ function showHowToPlay(){
   const entry = dict[currentActivePanel];
   document.getElementById('howToPlayTitle').textContent = entry ? entry.title : 'Choomdle';
   const fallbacks = { fr:HOWTOPLAY_FALLBACK_FR, en:HOWTOPLAY_FALLBACK_EN, es:HOWTOPLAY_FALLBACK_ES, de:HOWTOPLAY_FALLBACK_DE, pt:HOWTOPLAY_FALLBACK_PT, it:HOWTOPLAY_FALLBACK_IT, pl:HOWTOPLAY_FALLBACK_PL, ko:HOWTOPLAY_FALLBACK_KO, zh:HOWTOPLAY_FALLBACK_ZH, ja:HOWTOPLAY_FALLBACK_JA };
-  document.getElementById('howToPlayBody').innerHTML = entry ? entry.body : (fallbacks[lang] || HOWTOPLAY_FALLBACK_EN);
+  document.getElementById('howToPlayBody').innerHTML = entry ? entry.body.replace('{n}', (typeof WNC_ALT!=='undefined'?WNC_ALT.length:80)) : (fallbacks[lang] || HOWTOPLAY_FALLBACK_EN);
   document.getElementById('howToPlayOverlay').style.display = 'flex';
 }
 function closeHowToPlay(){ document.getElementById('howToPlayOverlay').style.display = 'none'; }
@@ -3450,7 +3707,7 @@ function closeGlitchPopup(){
 }
 let guestPitchPopupShown = false;
 let guestPitchTimer = null;
-const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','cardslink','chrome','sequence','breach','community','communityArchive','stats','collection','achievements','archive','feedback'];
+const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','altart','cardslink','chrome','sequence','breach','community','communityArchive','stats','collection','achievements','archive','feedback'];
 let currentActivePanel = 'classic';
 function showPanel(name){
   currentActivePanel = name;
@@ -3529,6 +3786,7 @@ initFeedback();
   initLegend();
   initAbility();
   initArt();
+  initAltArt();
   initCardsLink();
   initSequence();
   initArchive();
@@ -3555,7 +3813,7 @@ function recheckDailyDateRollover(){
   const now = todayUTCString();
   if(now !== lastKnownDailyDate){
     lastKnownDailyDate = now;
-    initClassic(); initLegend(); initAbility(); initArt(); initCardsLink(); initSequence();
+    initClassic(); initLegend(); initAbility(); initArt(); initAltArt(); initCardsLink(); initSequence();
   }
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') recheckDailyDateRollover(); });
