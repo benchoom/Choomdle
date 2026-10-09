@@ -131,7 +131,7 @@ const WNC_CARDS = [
 {n:"Rogue Amendiares — Preem Solo",t:"Legend",f:["Merc"],c:7,p:7,r:2,num:40,col:"Yellow",text:"{Go Solo} (Pay this Legend's cost to play it as a ready Unit. It can attack this turn. If it leaves the field, remove it from the game.) When a friendly Legend steals a Gig, if its value is even, draw 1. If its value is odd, a Rival discards 1."},
 
 // ---- 26 cartes ajoutées le 30/08/2026 (nouveau champ "col" = couleur : Red/Yellow/Green/Blue) ----
-{n:"Deadman Transmitter",t:"Gear",f:["Cyberware","Trauma Team"],c:3,p:1,r:3,num:24,col:"Red",text:"(Equip to a friendly Unit or face-up Legend.) If this Unit would be defeated, defeat its \"DEADMAN TRANSMITTER\" instead."},
+{n:"Deadman Transmitter",t:"Gear",f:["Cyberware","Trauma Team"],c:3,p:1,r:3,num:24,col:"Red",text:"(Equip to a friendly Unit or face-up Legend.) If this Unit would be defeated, defeat it instead."},
 {n:"Gunpoint Diplomacy",t:"Program",f:["Ganger","Plan"],c:4,p:null,r:3,num:32,col:"Red",text:"Give a friendly Unit these effects. If you have less ★ (Street Cred) than a Rival, they instead choose one effect for you. - The next time this Unit attacks this turn, it may attack ready Units. - Give this Unit +3 power this turn."},
 {n:"Trauma Team Operatives",t:"Unit",f:["Medtech","Trauma Team"],c:6,p:7,r:2,num:56,col:"Yellow",text:"Play this Unit for -1 €$ for each Unit in your trash, to a minimum of 1 €$."},
 {n:"Viktor Vektor — Drop Your Illusions",t:"Unit",f:["Ripperdoc"],c:5,p:5,r:2,num:57,col:"Yellow",text:"Play your first CYBERWARE Gear each turn for -3 €$, to a minimum of 1 €$."},
