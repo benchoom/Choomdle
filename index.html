@@ -467,10 +467,10 @@
 <!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
-<script src="/sets/wnc.js?v=20261009b"></script>
-<script src="/sets/promo.js?v=20261009b"></script>
-<script src="/sets/wnc-alt.js?v=20261009b"></script>
-<script src="/i18n.js?v=20261009b"></script>
+<script src="/sets/wnc.js?v=20261009d"></script>
+<script src="/sets/promo.js?v=20261009d"></script>
+<script src="/sets/wnc-alt.js?v=20261009d"></script>
+<script src="/i18n.js?v=20261009d"></script>
 <script>
 // Nettoyage d'un "#" résiduel VIDE dans l'URL uniquement (ex: laissé par erreur quelque part).
 // Important : on ne touche JAMAIS un hash qui contient du contenu (ex: #access_token=... utilisé
@@ -3096,9 +3096,14 @@ function cardsLinkCategoryDefs(){
   const factions = {};
   CARDS.forEach(c=>c.f.forEach(f=>{ factions[f]=(factions[f]||0)+1; }));
   const CORP_FACTIONS = ['Arasaka','Militech','Zetatech','Trauma Team'];
+  const GANG_FACTIONS = ['Maelstrom','Valentinos','Tyger Claws','Voodoo Boys','The Mox','6th Street','Raffen Shiv','Animal'];
+  const NOMAD_FACTIONS = ['Aldecaldos','Wraiths'];
   Object.keys(factions).forEach(f=>{
     if(factions[f] >= 4){
-      const key = CORP_FACTIONS.includes(f) ? 'cl_cat_corp' : 'cl_cat_faction';
+      const key = CORP_FACTIONS.includes(f) ? 'cl_cat_corp'
+                : GANG_FACTIONS.includes(f) ? 'cl_cat_gang'
+                : NOMAD_FACTIONS.includes(f) ? 'cl_cat_nomad'
+                : 'cl_cat_faction';
       defs.push({ label: t(key).replace('{f}', f), filter: c=>c.f.includes(f) });
     }
   });
