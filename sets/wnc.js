@@ -22,7 +22,7 @@ const WNC_CARDS = [
 {n:"Corpo Security",t:"Unit",f:["Corpo"],c:2,p:2,r:1,num:76,col:"Green",text:"This Unit can't attack. {Blocker} (You may spend this Unit to redirect a rival Unit's attack to it instead.)"},
 {n:"Corporate Surveillance",t:"Program",f:["Corpo"],c:2,p:null,r:1,num:97,col:"Green",text:"Spend a rival Unit with cost 4 or less."},
 {n:"Cyberpsychosis",t:"Program",f:["Quickhack"],c:3,p:null,r:2,num:67,col:"Yellow",text:"{Quick} Give an equipped Unit +3 power this turn for each of its equipped Gears. If that Unit steals or fights, defeat it at the end of this turn."},
-{n:"Delamain Cab",t:"Unit",f:["Vehicle"],c:4,p:4,r:3,num:112,col:"Blue",text:""},
+{n:"Delamain Cab",t:"Unit",f:["Vehicle"],c:4,p:4,r:2,num:112,col:"Blue",text:""},
 {n:"Dexter DeShawn — One Last Chance",t:"Unit",f:["Fixer"],c:3,p:4,r:2,edition:"SD01-HEI",num:2,col:"Yellow",text:"{Play} {Attack} Adjust a Gig by up to 1. {Defeated} If your ★ (Street Cred) differs from a Rival's by 10+, draw 2."},
 {n:"Dum Dum — Maelstrom Triggerman",t:"Legend",f:["Ganger","Maelstrom"],c:null,p:0,r:2,num:36,col:"Yellow",text:"{Call} You may defeat a friendly Gear. If you do, draw 2. Otherwise, draw 1. {Quick} 1 €$, {Spend} Give a friendly Unit +1 power this turn for each of its equipped Gear."},
 {n:"Dying Night — V's Pistol",t:"Gear",f:["Merc","Weapon"],c:2,p:2,r:2,num:128,col:"Blue",text:"(Equip to a friendly Unit or face-up Legend.) {Attack} Decrease a Gig by up to 2. At the end of your turn, if this Unit is named \"V\", ready 2 Eddies."},
