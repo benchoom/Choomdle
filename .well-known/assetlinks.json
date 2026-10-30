@@ -3,6 +3,6 @@
       "target": {
         "namespace": "android_app",
         "package_name": "com.choomdle.twa",
-        "sha256_cert_fingerprints": ["20:B7:D3:9E:9F:32:E4:93:1C:35:C6:3B:8D:FB:BE:06:2E:94:E6:06:FE:04:58:89:0F:45:2C:37:7F:12:8D:07"]
+        "sha256_cert_fingerprints": ["CC:8C:A4:0B:DC:A3:46:FE:22:72:26:B2:C7:8F:05:C9:24:AD:C7:05:4B:F3:C2:AA:52:8C:C3:2F:59:68:F9:8D"]
       }
     }]
