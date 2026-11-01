@@ -71,7 +71,7 @@ const WNC_CARDS = [
 {n:"Pepe Najarro — Working Doubles",t:"Unit",f:["Valentinos"],c:4,p:6,r:2,num:86,col:"Green",text:"{Attack} If you control a value-pair of Gigs, ready up to 2 MERC Legends in your Legends area."},
 {n:"Placide — Voodoo Sentinel",t:"Unit",f:["Ganger","Netrunner","Voodoo Boys"],c:8,p:10,r:2,num:123,col:"Blue",text:"{Play} {Attack} You may discard 1 Program. If you do, bottom-deck a rival Unit."},
 {n:"Psycho Squad",t:"Unit",f:["NCPD"],c:4,p:6,r:1,num:124,col:"Blue",text:"Their protocol stops at \"shoot first.\""},
-{n:"Reboot Optics",t:"Program",f:["Quickhack"],c:2,p:null,r:2,num:136,col:"Yellow",text:"{Quick} The next time a rival Unit fights this turn, it doesn't defeat the opposing friendly Unit."},
+{n:"Reboot Optics",t:"Program",f:["Quickhack"],c:2,p:null,r:2,num:136,col:"Blue",text:"{Quick} The next time a rival Unit fights this turn, it doesn't defeat the opposing friendly Unit."},
 {n:"Riding Nomad",t:"Unit",f:["Nomad"],c:5,p:4,r:4,num:87,col:"Green",text:"{Adrenaline} (This Unit can attack the turn it's played.)"},
 {n:"River Ward — Detective on the Hunt",t:"Legend",f:["NCPD"],c:null,p:0,r:2,num:39,col:"Yellow",text:"{Quick} {Spend} Play a Gear with cost 2 or less from your hand for free. When a friendly equipped Unit is defeated, search the top 2 cards of your deck and trash 1."},
 {n:"Royce — Don't Call Me Simon",t:"Unit",f:["Ganger","Maelstrom"],c:5,p:4,r:2,num:16,col:"Red",text:"{Play} Defeat a rival Unit with power 2 or less. If you have more ★ (Street Cred) than a Rival, defeat a rival Unit with power 3 or less instead."},
