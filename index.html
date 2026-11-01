@@ -467,10 +467,10 @@
 <!-- Client Supabase — gère la base de données, les comptes et la connexion Google -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- Sets de cartes : un fichier par set, à inclure ici. Ajouter les futurs sets de la même façon. -->
-<script src="/sets/wnc.js?v=20261024a"></script>
-<script src="/sets/promo.js?v=20261024a"></script>
-<script src="/sets/wnc-alt.js?v=20261024a"></script>
-<script src="/i18n.js?v=20261024a"></script>
+<script src="/sets/wnc.js?v=20261101a"></script>
+<script src="/sets/promo.js?v=20261101a"></script>
+<script src="/sets/wnc-alt.js?v=20261101a"></script>
+<script src="/i18n.js?v=20261101a"></script>
 <script>
 // Nettoyage d'un "#" résiduel VIDE dans l'URL uniquement (ex: laissé par erreur quelque part).
 // Important : on ne touche JAMAIS un hash qui contient du contenu (ex: #access_token=... utilisé
@@ -712,8 +712,7 @@ async function shareStats(btn){
 const RARITY_EMOJI = { common:'🔽', uncommon:'🔼', rare:'🔷', epic:'💠', secret:'🔶', iconic:'✴️', nova:'🌟' };
 async function shareAchievements(btn){
   const s = await loadStats();
-  let unlocked = 0;
-  ACHIEVEMENTS.forEach(a=>{ try{ if(a.check(s)) unlocked++; }catch(e){} });
+  const unlocked = achCount(s);
   const total = ACHIEVEMENTS.length;
   const filled = Math.round((unlocked/total)*10);
   const bar = '🟨'.repeat(filled) + '⬛'.repeat(10-filled);
@@ -855,6 +854,7 @@ function statsRowToLocal(row){
     communityVisited: meta.communityVisited||false, feedbackCount: meta.feedbackCount||0,
     earlyBirdWin: meta.earlyBirdWin||false, nightOwlWin: meta.nightOwlWin||false,
     inProgress: meta.inProgress||{},
+    unlockedAch: Array.isArray(meta.unlockedAch)?meta.unlockedAch:[],
   };
 }
 function localToStatsRow(s, uid){
@@ -892,7 +892,8 @@ function localToStatsRow(s, uid){
       cardsDiscovered: s.cardsDiscovered||[], collectionCards: s.collectionCards||[], languagesUsed: s.languagesUsed||[],
       communityVisited: s.communityVisited||false, feedbackCount: s.feedbackCount||0,
       earlyBirdWin: s.earlyBirdWin||false, nightOwlWin: s.nightOwlWin||false,
-      inProgress: s.inProgress||{} }
+      inProgress: s.inProgress||{},
+      unlockedAch: Array.isArray(s.unlockedAch)?s.unlockedAch:[] }
   };
 }
 
@@ -932,7 +933,7 @@ function defaultStats(){
     artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false, hasSeenWelcomeNew:false,
     activityStreak:0, bestActivityStreak:0, lastActiveDate:null,
     cardsDiscovered:[], collectionCards:[], languagesUsed:[], communityVisited:false, feedbackCount:0,
-    earlyBirdWin:false, nightOwlWin:false, inProgress:{}};
+    earlyBirdWin:false, nightOwlWin:false, inProgress:{}, unlockedAch:[]};
 }
 async function saveStats(stats){
   // Suivi mensuel/annuel des eddies, calculé UNIQUEMENT ici (un seul point de code, jamais
@@ -960,6 +961,7 @@ async function saveStats(stats){
     Object.keys(cur).forEach(game=>{ snapshot[game] = cur[game]||0; });
     stats._lastKnownEddies = snapshot;
   }catch(e){}
+  try{ stats.unlockedAch = achUnionIds(stats); }catch(e){}
   lsSetJSON('choomdle:stats', stats);
   if(supabaseReady && currentSession){
     try{ await supabaseClient.from('stats').upsert(localToStatsRow(stats, currentSession.user.id)); }catch(e){}
@@ -997,8 +999,7 @@ function renderRarityBadge(){
   const badge = document.getElementById('rarityBadge');
   if(!supabaseReady || !currentSession){ badge.style.display = 'none'; return; }
   loadStats().then(s=>{
-    let unlocked = 0;
-    ACHIEVEMENTS.forEach(a=>{ try{ if(a.check(s)) unlocked++; }catch(e){} });
+    const unlocked = achCount(s);
     const rarity = rarityForCount(unlocked);
     badge.className = 'rarity-badge rarity-' + rarity.id;
     document.getElementById('rarityIcon').innerHTML = RARITY_ICONS[rarity.id];
@@ -1341,7 +1342,7 @@ async function loadCommunityRows(){
         let unlocked = 0, localShape = null;
         try{
           localShape = statsRowToLocal(r);
-          ACHIEVEMENTS.forEach(a=>{ try{ if(a.check(localShape)) unlocked++; }catch(e){} });
+          unlocked = achCount(localShape);
         }catch(e){}
         const monthEddies = (localShape && localShape.monthEddies) || {};
         const yearEddies = (localShape && localShape.yearEddies) || {};
@@ -1578,15 +1579,27 @@ async function shareAllRanks(btn){
 // true = un joueur qui avait DÉJÀ gagné l'ancien succès Chrome Check le garde (son compteur et son rang de rareté
 // ne baissent pas). Mettre false pour une rupture nette : seul l'Alt Art compte alors.
 const GRANDFATHER_CHROME_ACHIEVEMENTS = true;
+// Un succès, une fois gagné, ne se perd JAMAIS : on mémorise les identifiants débloqués (stats.unlockedAch,
+// sauvegardé avec le reste) et un succès compte comme gagné s'il est mémorisé OU si sa condition est vraie maintenant.
+function achOwned(a, s){
+  try{ if(s && Array.isArray(s.unlockedAch) && s.unlockedAch.indexOf(a.id) !== -1) return true; }catch(e){}
+  try{ return !!a.check(s); }catch(e){ return false; }
+}
+function achUnionIds(s){
+  const out = [];
+  ACHIEVEMENTS.forEach(a=>{ if(achOwned(a, s)) out.push(a.id); });
+  return out;
+}
+function achCount(s){ return achUnionIds(s).length; }
 const ACHIEVEMENTS = [
   // --- Classic ---
   { id:'cl_first', icon:'🩸', fr:['Premier Contact','Gagne ta première partie Classic.'], en:['First Contact','Win your first Classic challenge.'],es:['Primer Contacto','Gana tu primer desafío Classic.'],de:['Erster Kontakt','Gewinne deine erste Classic-Herausforderung.'],pt:['Primeiro Contato','Vença seu primeiro desafio Classic.'],it:['Primo Contatto','Vinci la tua prima sfida Classic.'],pl:['Pierwszy Kontakt','Wygraj swoje pierwsze wyzwanie Classic.'],ko:['첫 접촉','첫 Classic 도전에서 승리하세요.'],zh:['初次接触','赢得你的第一场Classic挑战。'],ja:['ファーストコンタクト','初めてのClassicチャレンジに勝利しよう。'], check:s=>(s.wins||0)>=1 },
   { id:'cl_10', icon:'🕶️', fr:['Netrunner','10 victoires en Classic.'], en:['Netrunner','10 Classic wins.'],es:['Netrunner','10 victorias en Classic.'],de:['Netrunner','10 Classic-Siege.'],pt:['Netrunner','10 vitórias em Classic.'],it:['Netrunner','10 vittorie in Classic.'],pl:['Netrunner','10 zwycięstw w Classic.'],ko:['넷러너','Classic 10승.'],zh:['网络行者','Classic模式10场胜利。'],ja:['ネットランナー','Classicで10勝。'], check:s=>(s.wins||0)>=10 },
   { id:'cl_50', icon:'🏙️', fr:['Légende de la Rue','50 victoires en Classic.'], en:['Street Legend','50 Classic wins.'],es:['Leyenda de la Calle','50 victorias en Classic.'],de:['Straßenlegende','50 Classic-Siege.'],pt:['Lenda das Ruas','50 vitórias em Classic.'],it:['Leggenda di Strada','50 vittorie in Classic.'],pl:['Legenda Ulicy','50 zwycięstw w Classic.'],ko:['거리의 전설','Classic 50승.'],zh:['街头传奇','Classic模式50场胜利。'],ja:['ストリートレジェンド','Classicで50勝。'], check:s=>(s.wins||0)>=50 },
   { id:'cl_100', icon:'👑', fr:['Icône de Night City','100 victoires en Classic.'], en:["Night City Icon",'100 Classic wins.'],es:['Ícono de Night City','100 victorias en Classic.'],de:['Night-City-Ikone','100 Classic-Siege.'],pt:['Ícone de Night City','100 vitórias em Classic.'],it:['Icona di Night City','100 vittorie in Classic.'],pl:['Ikona Night City','100 zwycięstw w Classic.'],ko:['나이트 시티의 아이콘','Classic 100승.'],zh:['夜之城标志','Classic模式100场胜利。'],ja:['ナイトシティの象徴','Classicで100勝。'], check:s=>(s.wins||0)>=100 },
-  { id:'cl_streak3', icon:'🔥', fr:['Sur une Lancée','Série de 3 jours.'], en:['On A Roll','3-day streak.'],es:['Con Impulso','Racha de 3 días.'],de:['Im Lauf','3-Tage-Serie.'],pt:['Em Alta','Sequência de 3 dias.'],it:['In Serie','Serie di 3 giorni.'],pl:['Na Fali','Seria 3 dni.'],ko:['상승세','3일 연속 기록.'],zh:['势头正猛','连续3天。'],ja:['波に乗って','3日連続。'], check:s=>(s.streak||0)>=3 },
-  { id:'cl_streak7', icon:'🔥', fr:['Habitué de Night City','Série de 7 jours.'], en:['Night City Regular','7-day streak.'],es:['Habitual de Night City','Racha de 7 días.'],de:['Night-City-Stammgast','7-Tage-Serie.'],pt:['Frequentador de Night City','Sequência de 7 dias.'],it:['Habitué di Night City','Serie di 7 giorni.'],pl:['Stały Bywalec Night City','Seria 7 dni.'],ko:['나이트 시티 단골','7일 연속 기록.'],zh:['夜之城常客','连续7天。'],ja:['ナイトシティの常連','7日連続。'], check:s=>(s.streak||0)>=7 },
-  { id:'cl_streak30', icon:'💀', fr:['Choom4Life','Série de 30 jours.'], en:['Choom4Life','30-day streak.'],es:['Choom4Life','Racha de 30 días.'],de:['Choom4Life','30-Tage-Serie.'],pt:['Choom4Life','Sequência de 30 dias.'],it:['Choom4Life','Serie di 30 giorni.'],pl:['Choom4Life','Seria 30 dni.'],ko:['Choom4Life','30일 연속 기록.'],zh:['Choom4Life','连续30天。'],ja:['Choom4Life','30日連続。'], check:s=>(s.streak||0)>=30 },
+  { id:'cl_streak3', icon:'🔥', fr:['Sur une Lancée','Série de 3 jours.'], en:['On A Roll','3-day streak.'],es:['Con Impulso','Racha de 3 días.'],de:['Im Lauf','3-Tage-Serie.'],pt:['Em Alta','Sequência de 3 dias.'],it:['In Serie','Serie di 3 giorni.'],pl:['Na Fali','Seria 3 dni.'],ko:['상승세','3일 연속 기록.'],zh:['势头正猛','连续3天。'],ja:['波に乗って','3日連続。'], check:s=>(s.streak||0)>=3 || (s.bestStreak||0)>=3 },
+  { id:'cl_streak7', icon:'🔥', fr:['Habitué de Night City','Série de 7 jours.'], en:['Night City Regular','7-day streak.'],es:['Habitual de Night City','Racha de 7 días.'],de:['Night-City-Stammgast','7-Tage-Serie.'],pt:['Frequentador de Night City','Sequência de 7 dias.'],it:['Habitué di Night City','Serie di 7 giorni.'],pl:['Stały Bywalec Night City','Seria 7 dni.'],ko:['나이트 시티 단골','7일 연속 기록.'],zh:['夜之城常客','连续7天。'],ja:['ナイトシティの常連','7日連続。'], check:s=>(s.streak||0)>=7 || (s.bestStreak||0)>=7 },
+  { id:'cl_streak30', icon:'💀', fr:['Choom4Life','Série de 30 jours.'], en:['Choom4Life','30-day streak.'],es:['Choom4Life','Racha de 30 días.'],de:['Choom4Life','30-Tage-Serie.'],pt:['Choom4Life','Sequência de 30 dias.'],it:['Choom4Life','Serie di 30 giorni.'],pl:['Choom4Life','Seria 30 dni.'],ko:['Choom4Life','30일 연속 기록.'],zh:['Choom4Life','连续30天。'],ja:['Choom4Life','30日連続。'], check:s=>(s.streak||0)>=30 || (s.bestStreak||0)>=30 },
   // --- Legend ---
   { id:'lg_first', icon:'🪪', fr:['Identité Confirmée','Première victoire en Legend.'], en:['Identity Confirmed','First Legend win.'],es:['Identidad Confirmada','Primera victoria en Legend.'],de:['Identität Bestätigt','Erster Legend-Sieg.'],pt:['Identidade Confirmada','Primeira vitória em Legend.'],it:['Identità Confermata','Prima vittoria in Legend.'],pl:['Tożsamość Potwierdzona','Pierwsze zwycięstwo w Legend.'],ko:['신원 확인','Legend 첫 승리.'],zh:['身份确认','Legend模式首胜。'],ja:['アイデンティティ確認','Legend初勝利。'], check:s=>(s.legendWins||0)>=1 },
   { id:'lg_10', icon:'🕵️', fr:['Sous Couverture','10 victoires en Legend.'], en:['Deep Cover','10 Legend wins.'],es:['Encubierto','10 victorias en Legend.'],de:['Tief Verdeckt','10 Legend-Siege.'],pt:['Disfarce Profundo','10 vitórias em Legend.'],it:['Sotto Copertura','10 vittorie in Legend.'],pl:['Głęboko Ukryty','10 zwycięstw w Legend.'],ko:['깊은 잠입','Legend 10승.'],zh:['深度潜伏','Legend模式10场胜利。'],ja:['潜入捜査','Legendで10勝。'], check:s=>(s.legendWins||0)>=10 },
@@ -1703,7 +1716,7 @@ const ACHIEVEMENTS = [
   { id:'meta_share', icon:'📣', fr:['Le Partage, Ça Compte','Partage un résultat au moins une fois.'], en:['Sharing is Caring','Share a result at least once.'],es:['Compartir Es Cuidar','Comparte un resultado al menos una vez.'],de:['Teilen Ist Fürsorge','Teile mindestens einmal ein Ergebnis.'],pt:['Compartilhar é Cuidar','Compartilhe um resultado pelo menos uma vez.'],it:['Condividere è un Bene','Condividi un risultato almeno una volta.'],pl:['Dzielenie Się Ma Znaczenie','Udostępnij wynik przynajmniej raz.'],ko:['나눔의 미덕','결과를 최소 1회 공유하세요.'],zh:['分享是关怀','至少分享一次结果。'],ja:['シェアは思いやり','結果を1回以上共有。'], check:s=>s.hasShared===true },
   { id:'meta_pseudo', icon:'🪞', fr:["Changement d'Identité",'Change ton pseudo au moins une fois.'], en:['Identity Change','Change your handle at least once.'],es:['Cambio de Identidad','Cambia tu apodo al menos una vez.'],de:['Identitätswechsel','Ändere deinen Nickname mindestens einmal.'],pt:['Mudança de Identidade','Mude seu apelido pelo menos uma vez.'],it:['Cambio d\'Identità','Cambia il tuo nickname almeno una volta.'],pl:['Zmiana Tożsamości','Zmień swój nick przynajmniej raz.'],ko:['신원 변경','닉네임을 최소 1회 변경하세요.'],zh:['身份变更','至少更改一次昵称。'],ja:['アイデンティティ変更','ニックネームを1回以上変更。'], check:s=>s.hasChangedPseudo===true },
   { id:'meta_hunter', icon:'🏹', fr:['Chasseur de Succès','Débloque au moins 40 des 50 premiers succès.'], en:['Achievement Hunter','Unlock at least 40 of the first 50 achievements.'],es:['Cazador de Logros','Desbloquea al menos 40 de los primeros 50 logros.'],de:['Erfolgsjäger','Schalte mindestens 40 der ersten 50 Erfolge frei.'],pt:['Caçador de Conquistas','Desbloqueie ao menos 40 das primeiras 50 conquistas.'],it:['Cacciatore di Obiettivi','Sblocca almeno 40 dei primi 50 obiettivi.'],pl:['Łowca Osiągnięć','Odblokuj co najmniej 40 z pierwszych 50 osiągnięć.'],ko:['업적 사냥꾼','첫 50개 업적 중 40개 이상 달성하세요.'],zh:['成就猎人','解锁前50个成就中的至少40个。'],ja:['実績ハンター','最初の50個の実績のうち40個以上を解除。'],
-    check:s=>ACHIEVEMENTS.slice(0,50).filter(a=>{ try{ return a.check(s); }catch(e){ return false; } }).length>=40 },
+    check:s=>ACHIEVEMENTS.slice(0,50).filter(a=>achOwned(a,s)).length>=40 },
   // ===================================================================
   // ---- Lot 3 : 50 succès supplémentaires (total 150, pour Nova Rare) ----
   // NOTE : traduits en FR/EN pour l'instant, les 8 autres langues à suivre.
@@ -1751,7 +1764,7 @@ const ACHIEVEMENTS = [
   { id:'meta_community', icon:'👥', fr:['Curieux du Classement',"Consulte l'onglet Communauté."], en:['Curious Observer','Check out the Community tab.'],es:['Observador Curioso','Consulta la pestaña Comunidad.'],de:['Neugieriger Beobachter','Schau dir den Community-Tab an.'],pt:['Observador Curioso','Confira a aba Comunidade.'],it:['Osservatore Curioso','Dai un\'occhiata alla scheda Community.'],pl:['Ciekawski Obserwator','Sprawdź zakładkę Społeczność.'],ko:['호기심 많은 관찰자','커뮤니티 탭을 확인하세요.'],zh:['好奇的观察者','查看社区标签页。'],ja:['好奇心旺盛な観察者','コミュニティタブをチェック。'], check:s=>s.communityVisited===true },
   { id:'meta_feedback3', icon:'💬', fr:['Voix Persistante','Envoie 3 retours via Feedback.'], en:['Persistent Voice','Send feedback 3 times.'],es:['Voz Persistente','Envía comentarios 3 veces.'],de:['Beharrliche Stimme','Sende 3 Mal Feedback.'],pt:['Voz Persistente','Envie feedback 3 vezes.'],it:['Voce Persistente','Invia feedback 3 volte.'],pl:['Wytrwały Głos','Wyślij opinię 3 razy.'],ko:['끈질긴 목소리','피드백을 3번 보내세요.'],zh:['坚持发声','发送3次反馈。'],ja:['粘り強い声','フィードバックを3回送信。'], check:s=>(s.feedbackCount||0)>=3 },
   { id:'meta_hunter2', icon:'🎯', fr:['Maître des Succès','Débloque au moins 90 des 100 premiers succès.'], en:['Achievement Master','Unlock at least 90 of the first 100 achievements.'],es:['Maestro de Logros','Desbloquea al menos 90 de los primeros 100 logros.'],de:['Erfolgsmeister','Schalte mindestens 90 der ersten 100 Erfolge frei.'],pt:['Mestre das Conquistas','Desbloqueie ao menos 90 das primeiras 100 conquistas.'],it:['Maestro degli Obiettivi','Sblocca almeno 90 dei primi 100 obiettivi.'],pl:['Mistrz Osiągnięć','Odblokuj co najmniej 90 z pierwszych 100 osiągnięć.'],ko:['업적의 달인','첫 100개 업적 중 90개 이상 달성하세요.'],zh:['成就大师','解锁前100个成就中的至少90个。'],ja:['実績マスター','最初の100個の実績のうち90個以上を解除。'],
-    check:s=>ACHIEVEMENTS.slice(0,100).filter(a=>{ try{ return a.check(s); }catch(e){ return false; } }).length>=90 },
+    check:s=>ACHIEVEMENTS.slice(0,100).filter(a=>achOwned(a,s)).length>=90 },
   // --- Paliers plus profonds sur les jeux existants ---
   { id:'cl_500', icon:'🏙️', fr:['Icône Vivante','500 victoires en Classic.'], en:['Living Icon','500 Classic wins.'],es:['Ícono Viviente','500 victorias en Classic.'],de:['Lebende Ikone','500 Classic-Siege.'],pt:['Ícone Vivo','500 vitórias em Classic.'],it:['Icona Vivente','500 vittorie in Classic.'],pl:['Żywa Ikona','500 zwycięstw w Classic.'],ko:['살아있는 아이콘','Classic 500승.'],zh:['活标志','Classic模式500场胜利。'],ja:['生ける象徴','Classicで500勝。'], check:s=>(s.wins||0)>=500 },
   { id:'cl_beststreak365', icon:'🔥', fr:['Résilience Absolue','Meilleure série de 365 jours en Classic.'], en:['Absolute Resilience','365-day best streak in Classic.'],es:['Resiliencia Absoluta','Mejor racha de 365 días en Classic.'],de:['Absolute Widerstandskraft','365-Tage-Bestserie in Classic.'],pt:['Resiliência Absoluta','Melhor sequência de 365 dias em Classic.'],it:['Resilienza Assoluta','Migliore serie di 365 giorni in Classic.'],pl:['Absolutna Wytrzymałość','Najlepsza 365-dniowa seria w Classic.'],ko:['절대적인 회복력','Classic 최고 기록 365일 연속.'],zh:['绝对韧性','Classic模式最佳连续记录365天。'],ja:['絶対的な回復力','Classicでの最高連続記録365日。'], check:s=>(s.bestStreak||0)>=365 },
@@ -1852,8 +1865,7 @@ async function renderAchievements(){
     t('rarity_tiers_intro')+'<br>'+tiers.map(([key,n])=>t(key)+' ('+n+')').join(' · ');
   let unlockedCount = 0;
   grid.innerHTML = ACHIEVEMENTS.map(a=>{
-    let unlocked = false;
-    try{ unlocked = !!a.check(s); }catch(e){}
+    const unlocked = achOwned(a, s);
     if(unlocked) unlockedCount++;
     const [title, desc] = a[lang];
     return '<div class="achievement-card'+(unlocked?' unlocked':'')+'">'+
@@ -1863,6 +1875,8 @@ async function renderAchievements(){
   }).join('');
   document.getElementById('achievementsUnlockedCount').textContent = unlockedCount;
   document.getElementById('achievementsTotalCount').textContent = ACHIEVEMENTS.length;
+  // Mémorise les succès tout juste constatés (ex. série atteinte avant d'être cassée).
+  try{ if(unlockedCount !== (s.unlockedAch||[]).length){ s.unlockedAch = achUnionIds(s); await saveStats(s); } }catch(e){}
 }
 
 async function renderStatsPanel(){
