@@ -1,0 +1,3440 @@
+// --- Remplace les anciens attributs onclick/onerror intégrés au HTML (interdits par la CSP sans 'unsafe-inline') ---
+document.addEventListener('click', function(ev){
+  var el = ev.target && ev.target.closest ? ev.target.closest('[data-share]') : null;
+  if(!el) return;
+  var fn = el.getAttribute('data-share');
+  try{
+    if(fn === 'shareCommunityRank'){
+      window.shareCommunityRank(el.getAttribute('data-title'), el.getAttribute('data-rank'), el.getAttribute('data-value'), el);
+    } else if(typeof window[fn] === 'function'){
+      window[fn](el);
+    }
+  }catch(e){}
+});
+// 'error' ne remonte pas dans le DOM : on l'écoute en phase de capture.
+document.addEventListener('error', function(ev){
+  var el = ev.target;
+  if(el && el.tagName === 'IMG' && el.hasAttribute('data-hide-on-error')) el.style.display = 'none';
+}, true);
+// Nettoyage d'un "#" résiduel VIDE dans l'URL uniquement (ex: laissé par erreur quelque part).
+// Important : on ne touche JAMAIS un hash qui contient du contenu (ex: #access_token=... utilisé
+// par Supabase juste après une connexion Google) — sinon on supprime le jeton de connexion avant
+// même que Supabase ait pu l'utiliser pour établir la session.
+if(window.location.hash === '#'){
+  try{ window.history.replaceState({}, document.title, window.location.pathname + window.location.search); }catch(e){}
+}
+// ======================= CARTES =======================
+// Les cartes viennent des fichiers de sets inclus plus haut (voir sets/wnc.js, sets/promo.js).
+// Pour ajouter un futur set : inclue son <script src="sets/xxx.js"> dans le <head>,
+// puis ajoute sa variable ici, ex: const CARDS = [...WNC_CARDS, ...PROMO_CARDS, ...XXX_CARDS];
+// ⚠️ PROMO_CARDS volontairement exclues du pool actif pour le moment (mises de côté pour plus
+// tard, sur demande de Benjamin le 15/08/2026). Les données restent dans sets/promo.js, prêtes
+// à être réintégrées d'un coup en remettant simplement ", ...PROMO_CARDS" ci-dessous.
+const CARDS = [...WNC_CARDS];
+
+// ======================= I18N =======================
+// Traductions maison, correctes pour un usage fan/hobby. Une relecture native
+// est recommandée avant mise en ligne publique, surtout pour KO / ZH / JA.
+// Le dictionnaire de traductions I18N vient de i18n.js (inclus dans le <head>).
+const LANG_LABELS = { fr:"Français", en:"English", es:"Español", de:"Deutsch", pt:"Português", it:"Italiano", pl:"Polski", ko:"한국어", zh:"中文", ja:"日本語" };
+let currentLang = "en";
+
+function initLangSelect(){
+  const list = document.getElementById('langSelectList');
+  const btn = document.getElementById('langSelectBtn');
+  Object.keys(LANG_LABELS).forEach(code=>{
+    const opt = document.createElement('button');
+    opt.type = 'button';
+    opt.dataset.code = code;
+    opt.textContent = LANG_LABELS[code];
+    if(code === currentLang) opt.classList.add('active');
+    opt.addEventListener('click', ()=>{
+      applyLanguage(code);
+      list.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.code===code));
+      btn.textContent = code.toUpperCase() + ' ▾';
+      list.style.display = 'none';
+      try{ window.history.pushState({}, '', '/'+code); }catch(e){}
+    });
+    list.appendChild(opt);
+  });
+  btn.textContent = currentLang.toUpperCase() + ' ▾';
+  btn.addEventListener('click', ()=>{
+    list.style.display = list.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', (e)=>{
+    const wrap = document.getElementById('langSelectWrap');
+    if(wrap && !wrap.contains(e.target)) list.style.display = 'none';
+  });
+}
+function applyLanguage(code){
+  currentLang = code;
+  const dict = I18N[code] || I18N.fr;
+  if(typeof loadStats === 'function'){
+    loadStats().then(s=>{
+      s.languagesUsed = s.languagesUsed || [];
+      if(!s.languagesUsed.includes(code)){ s.languagesUsed.push(code); saveStats(s); }
+    });
+  }
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    if(dict[key]!==undefined) el.textContent = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-ph');
+    if(dict[key]!==undefined) el.placeholder = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-title');
+    if(dict[key]!==undefined) el.title = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-html');
+    if(dict[key]!==undefined) el.innerHTML = dict[key];
+  });
+  document.documentElement.lang = code;
+  try{ localStorage.setItem('choomdle:lang', code); }catch(e){}
+  // Le nom du badge profil est généré dynamiquement (pas via data-i18n) : on le rafraîchit ici.
+  if(typeof currentSession !== 'undefined' && !currentSession){ try{ setLoggedOutUI(); }catch(e){} }
+  // Certains panneaux sont générés en JS (pas via data-i18n) : on les reconstruit s'ils sont
+  // actuellement affichés, pour que changer de langue sans quitter la page fonctionne aussi.
+  try{
+    if(typeof renderRarityBadge === 'function') renderRarityBadge();
+    if(typeof refreshAltTexts === 'function') refreshAltTexts();
+    const achEl = document.getElementById('panel-achievements');
+    if(achEl && achEl.style.display === 'block') renderAchievements();
+    const statsEl = document.getElementById('panel-stats');
+    if(statsEl && statsEl.style.display === 'block') renderStatsPanel();
+    const commEl = document.getElementById('panel-community');
+    if(commEl && commEl.style.display === 'block') renderCommunity();
+    const seqEl = document.getElementById('panel-sequence');
+    if(seqEl && seqEl.style.display === 'block' && typeof sequenceAttr !== 'undefined'){
+      document.getElementById('sequenceInstruction').innerHTML = t('sequence_instruction').replace('{attr}', '<span class="hl">'+sequenceAttrLabel(sequenceAttr)+'</span>');
+    }
+  }catch(e){}
+}
+function t(key){ return (I18N[currentLang]||I18N.fr)[key] || key; }
+
+// ======================= HELPERS =======================
+function fmtVal(v){ return v===null || v===undefined ? "—" : v; }
+function seededIndex(dateStr, len){ let h=0; for(let i=0;i<dateStr.length;i++){ h=(h*31+dateStr.charCodeAt(i))>>>0; } return h % len; }
+function todayUTCString(){ const d=new Date(); return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1)+"-"+d.getUTCDate(); }
+function yesterdayUTCString(){ const d=new Date(); d.setUTCDate(d.getUTCDate()-1); return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1)+"-"+d.getUTCDate(); }
+function randCard(){ return CARDS[Math.floor(Math.random()*CARDS.length)]; }
+
+// Barème de récompense (÷10) : 100 eddies au 1er essai, -10 par essai supplémentaire, plancher 10.
+function computeReward(tries){ return Math.max(10, 100 - (tries-1)*10); }
+const ENDLESS_REWARD_TABLE = [10,9,8,7,6,5,4,3,2,1]; // essai 1 à 10 ; au-delà, plancher à 1
+function endlessReward(tries){ return ENDLESS_REWARD_TABLE[Math.min(tries,10)-1]; }
+function shareToClipboard(text, btnEl){
+  loadStats().then(s=>{ if(!s.hasShared){ s.hasShared = true; saveStats(s); } });
+  const done = ()=>{
+    if(!btnEl) return;
+    const orig = btnEl.textContent;
+    btnEl.textContent = t('share_copied');
+    setTimeout(()=>{ btnEl.textContent = orig; }, 2000);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(done);
+  } else {
+    try{
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    }catch(e){}
+    done();
+  }
+}
+function shareButtonHTML(fnName){
+  return '<button class="share-btn" data-share="'+fnName+'">'+t('share_button')+'</button>';
+}
+function shareClassic(btn){
+  const rows = classicGuesses.map(name=>{
+    const card = CARDS.find(c=>c.n===name);
+    if(!card) return '';
+    const r = compareCard(card, classicSecret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const text = 'Choomdle Classic — '+todayUTCString()+'\n'+(rows||'✅')+'\n'+t('win_tries').replace('{n}', classicGuesses.length||'?')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareLegend(btn){
+  const text = 'Choomdle Legend — '+todayUTCString()+'\n✅\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareCardsLink(btn){
+  const colors = ['🟨','🟩','🟦','🟪'];
+  const order = cardsLinkSolveOrder.length ? cardsLinkSolveOrder : cardsLinkGroups.map((g,i)=>i);
+  const colorFor = gi => { const rank = order.indexOf(gi); return rank>=0 ? colors[rank] : '⬛'; };
+  const cells = cardsLinkOriginalCells.length ? cardsLinkOriginalCells : cardsLinkGroups.flatMap((g,gi)=>g.cards.map(c=>({groupIndex:gi})));
+  const rows = [];
+  for(let i=0;i<cells.length;i+=4){
+    rows.push(cells.slice(i,i+4).map(c=>colorFor(c.groupIndex)).join(''));
+  }
+  const text = 'Choomdle Cards Link — '+todayUTCString()+'\n'+rows.join('\n')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareGuessGrid(gameName, secret, guesses, tries, btn){
+  const rows = guesses.map(name=>{
+    const card = CARDS.find(c=>c.n===name);
+    if(!card) return '';
+    const r = compareCard(card, secret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const text = 'Choomdle '+gameName+' — '+todayUTCString()+'\n'+(rows||'✅')+'\n'+t('win_tries').replace('{n}', tries||'?')+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareAbility(btn){ shareGuessGrid('Ability', abilitySecret, abilityGuesses, abilityGuesses.length, btn); }
+function shareArt(btn){
+  const rows = artGuesses.map(name=>{
+    const card = CARDS.find(c=>c.n===name);
+    if(!card) return '';
+    const r = compareCard(card, artSecret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const resultLine = artSolved && artGuesses.length && artAttempt<=5 ? t('win_tries').replace('{n}', artAttempt) : t('art_failed');
+  const text = 'Choomdle Art — '+todayUTCString()+'\n'+(rows||'')+'\n'+resultLine+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareAltArt(btn){
+  const rows = altGuesses.map(name=>{
+    const card = altBaseCard(name);
+    if(!card) return '';
+    const r = compareCard(card, altSecret);
+    const em = s => s==='match' ? '🟩' : s==='partial' ? '🟧' : '⬛';
+    return em(r.type)+em(r.faction)+em(r.c.state)+em(r.p.state)+em(r.r.state);
+  }).filter(Boolean).join('\n');
+  const resultLine = altSolved && altGuesses.length && altAttempt<=5 ? t('win_tries').replace('{n}', altAttempt) : t('art_failed');
+  const text = 'Choomdle Alt Art — '+todayUTCString()+'\n'+(rows||'')+'\n'+resultLine+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareBlitz(btn){
+  const text = 'Choomdle Blitz\n'+t('blitz_timeup')+' '+blitzScore+'\n'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareCommunityRank(title, rank, value, btn){
+  const text = 'Choomdle — '+title+'\n#'+rank+' — '+value+' eddies\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareChrome(btn){
+  const totalCorrect = chromeHistory.filter(h=>h.correct).length;
+  const totalWrong = chromeHistory.filter(h=>!h.correct).length;
+  const text = 'Choomdle Chrome Check — '+todayUTCString()+'\n'+t('chrome_timeup')+' '+chromeScore+'\n🟩='+totalCorrect+' 🟥='+totalWrong+'\n'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+function shareSequence(btn){
+  const rows = sequenceAttemptHistory.map(h=>{
+    return '🟩='+h.correct+(h.wrong>0 ? ' 🟥='+h.wrong : ' ');
+  }).join('\n');
+  const resultLine = sequenceAttemptHistory.length && sequenceAttemptHistory[sequenceAttemptHistory.length-1].wrong===0
+    ? t('win_tries').replace('{n}', sequenceAttemptHistory.length)
+    : t('sequence_lose');
+  const text = 'Choomdle Sequence — '+todayUTCString()+'\n'+rows+'\n'+resultLine+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+async function shareStats(btn){
+  const s = await loadStats();
+  const artWins = (s.artPlayed||0)-(s.artLostCount||0);
+  const lines = [
+    'Choomdle — '+t('stats_title'),
+    '🎯 '+t('tab_classic')+': '+(s.wins||0)+' ('+t('stats_streak')+' '+(s.streak||0)+', '+t('stats_best')+' '+(s.bestStreak||0)+')',
+    '🪪 '+t('tab_legend')+': '+(s.legendWins||0),
+    '⚡ '+t('tab_blitz')+': '+t('stats_best_score')+' '+(s.blitzBestScore||0),
+    '♾️ '+t('tab_endless')+': '+(s.endlessSolved||0),
+    '📜 '+t('tab_ability')+': '+(s.abilitySolved||0),
+    '🖼️ '+t('tab_art')+': '+artWins,
+    '🎭 Alt Art: '+((s.altArt&&s.altArt.solved)||0),
+    ...(FEATURES.chromeCheck ? ['⚙️ '+t('tab_chrome')+': '+t('stats_best_score')+' '+(s.chromeBestScore||0)] : []),
+    '🔗 '+t('tab_cardslink')+': '+(s.cardsLinkWins||0),
+    '🔢 '+t('tab_sequence')+': '+(s.sequenceWins||0),
+    '€$ '+eddiesTotal(s),
+    'choomdle.com'
+  ];
+  shareToClipboard(lines.join('\n'), btn);
+}
+const RARITY_EMOJI = { common:'🔽', uncommon:'🔼', rare:'🔷', epic:'💠', secret:'🔶', iconic:'✴️', nova:'🌟' };
+async function shareAchievements(btn){
+  const s = await loadStats();
+  const unlocked = achCount(s);
+  const total = ACHIEVEMENTS.length;
+  const filled = Math.round((unlocked/total)*10);
+  const bar = '🟨'.repeat(filled) + '⬛'.repeat(10-filled);
+  const rarity = rarityForCount(unlocked);
+  const emoji = RARITY_EMOJI[rarity.id] || '';
+  const text = 'Choomdle — '+t('achievements_title')+' : '+unlocked+'/'+total+' ('+emoji+' '+t(rarity.key)+' '+emoji+')\n'+bar+'\nchoomdle.com';
+  shareToClipboard(text, btn);
+}
+
+function compareCard(guess, secret){
+  const res = {};
+  res.type = guess.t === secret.t ? "match" : "miss";
+  const shared = guess.f.filter(x=>secret.f.includes(x));
+  res.faction = shared.length === guess.f.length && shared.length === secret.f.length ? "match" : shared.length > 0 ? "partial" : "miss";
+  res.col = guess.col === secret.col ? "match" : "miss";
+  ["c","p","r"].forEach(k=>{
+    const gv = guess[k], sv = secret[k];
+    if(gv === null && sv === null){ res[k] = {state:"match", arrow:""}; }
+    else if(gv === null || sv === null){ res[k] = {state:"miss", arrow:""}; }
+    else if(gv === sv){ res[k] = {state:"match", arrow:""}; }
+    else { res[k] = {state:"miss", arrow: gv < sv ? "↑" : "↓"}; }
+  });
+  return res;
+}
+function makeCell(cls, content, arrow){ return '<td><div class="cell '+cls+'">'+content+(arrow?'<span class="arrow">'+arrow+'</span>':'')+'</div></td>'; }
+function colorLabel(col){ return col ? t('color_'+col.toLowerCase()) : '—'; }
+function renderRow(guess, secret){
+  const r = compareCard(guess, secret);
+  let row = '<tr><td><div class="cell name">'+guess.n+'</div></td>';
+  row += makeCell(r.type, guess.t);
+  row += makeCell(r.faction, guess.f.join(" · "));
+  row += makeCell(r.col, '<span class="color-dot color-dot-'+(guess.col||'').toLowerCase()+'"></span>'+colorLabel(guess.col));
+  row += makeCell(r.c.state, fmtVal(guess.c), r.c.arrow);
+  row += makeCell(r.p.state, fmtVal(guess.p), r.p.arrow);
+  row += makeCell(r.r.state, fmtVal(guess.r), r.r.arrow);
+  row += '</tr>';
+  const win = r.type==="match" && r.faction==="match" && r.col==="match" && r.c.state==="match" && r.p.state==="match" && r.r.state==="match";
+  return {row, win};
+}
+function setupAutocomplete(inputEl, suggEl, onPick, excludeNames, poolFn){
+  // Le menu déroulant est déplacé dans <body> et positionné en "fixed" pour échapper
+  // au clip-path des panneaux (qui coupait visuellement la liste avant qu'elle finisse).
+  if(suggEl.parentElement !== document.body){
+    document.body.appendChild(suggEl);
+    suggEl.classList.add('suggestions-floating');
+  }
+  function positionSugg(){
+    const r = inputEl.getBoundingClientRect();
+    suggEl.style.left = r.left + 'px';
+    suggEl.style.top = (r.bottom) + 'px';
+    suggEl.style.width = r.width + 'px';
+  }
+  inputEl.addEventListener('input', ()=>{
+    const q = inputEl.value.trim().toLowerCase();
+    suggEl.innerHTML = "";
+    if(!q){ suggEl.style.display="none"; return; }
+    const excl = excludeNames ? excludeNames() : [];
+    const POOL = poolFn ? poolFn() : CARDS;
+    const allMatches = POOL.filter(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
+    const matches = allMatches.slice(0,10);
+    if(!matches.length){ suggEl.style.display="none"; return; }
+    matches.forEach(c=>{
+      const div = document.createElement('div');
+      div.innerHTML = c.n + ' <small>'+c.t+'</small>';
+      div.addEventListener('click', ()=>{ onPick(c); inputEl.value=""; suggEl.style.display="none"; });
+      suggEl.appendChild(div);
+    });
+    if(allMatches.length > 10){
+      const more = document.createElement('div');
+      more.className = 'suggestions-more';
+      more.textContent = '···';
+      suggEl.appendChild(more);
+    }
+    positionSugg();
+    suggEl.style.display = "block";
+  });
+  window.addEventListener('resize', ()=>{ if(suggEl.style.display==='block') positionSugg(); });
+  window.addEventListener('scroll', ()=>{ if(suggEl.style.display==='block') positionSugg(); }, true);
+  inputEl.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      const q = inputEl.value.trim().toLowerCase();
+      const excl = excludeNames ? excludeNames() : [];
+      const POOL = poolFn ? poolFn() : CARDS;
+      const exact = POOL.find(c=>c.n.toLowerCase()===q && !excl.includes(c.n));
+      const first = POOL.find(c=>c.n.toLowerCase().includes(q) && !excl.includes(c.n));
+      const pick = exact || first;
+      if(pick){ onPick(pick); inputEl.value=""; suggEl.style.display="none"; }
+    }
+  });
+  document.addEventListener('click', (e)=>{ if(e.target !== inputEl) suggEl.style.display="none"; });
+}
+
+// ======================= SUPABASE =======================
+// Remplace ces deux valeurs (Supabase -> Project Settings -> API) puis tout se branche
+// automatiquement. Tant qu'elles ne sont pas remplacées, le site continue de fonctionner
+// en local (comme avant) sans rien casser.
+const SUPABASE_URL = "https://btaidgywgabzzzfnuxhv.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0YWlkZ3l3Z2Fienp6Zm51eGh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4Mzc2NzYsImV4cCI6MjEwMTQxMzY3Nn0.A-qysep6zcWCamCc3YAiBZiRF8aTmSeAV2pDsZX1qwg";
+const supabaseReady = !SUPABASE_URL.startsWith("REMPLACE") && !!window.supabase;
+const supabaseClient = supabaseReady ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let currentSession = null;
+let currentPseudo = null;
+
+// Conversion entre le format interne (JS) et les colonnes de la table `stats`.
+// Note : les eddies de Netrunner Breach (désactivé) ne sont pas encore en base ;
+// ils restent en local uniquement pour l'instant.
+function statsRowToLocal(row){
+  const meta = row.meta || {};
+  return {
+    streak: row.streak||0, bestStreak: row.best_streak||0,
+    lastWin: meta.lastWin||null, endlessSolved: meta.endlessSolved||0,
+    abilitySolved: meta.abilitySolved||0, artSolved: meta.artSolved||0,
+    lastAbilityPlayed: meta.lastAbilityPlayed||null, abilityWon: meta.abilityWon||false,
+    lastArtPlayed: meta.lastArtPlayed||null, artWon: meta.artWon||false, artLost: meta.artLost||false,
+    lastClassicReward: meta.lastClassicReward||0, lastAbilityReward: meta.lastAbilityReward||0, lastArtReward: meta.lastArtReward||0,
+    legendPlayed: meta.legendPlayed||0, legendWins: meta.legendWins||0,
+    blitzSessions: meta.blitzSessions||0, blitzBestScore: meta.blitzBestScore||0, blitzTotalSolved: meta.blitzTotalSolved||0,
+    artPlayed: meta.artPlayed||0, artLostCount: meta.artLostCount||0, altArt: meta.altArt||{},
+    chromeSessions: meta.chromeSessions||0, chromeBestScore: meta.chromeBestScore||0, chromeTotalCorrect: meta.chromeTotalCorrect||0,
+    lastCardsLinkPlayed: meta.lastCardsLinkPlayed||null, cardsLinkWon: meta.cardsLinkWon===undefined?null:meta.cardsLinkWon,
+    lastCardsLinkReward: meta.lastCardsLinkReward||0, lastCardsLinkMistakes: meta.lastCardsLinkMistakes||0,
+    cardsLinkPlayed: meta.cardsLinkPlayed||0, cardsLinkWins: meta.cardsLinkWins||0,
+    gamesPlayed: row.games_played||0, wins: row.wins||0,
+    guessDistribution: row.guess_distribution||{},
+    lastLegendPlayed: meta.lastLegendPlayed||null, legendResult: meta.legendResult||null,
+    eddies: { classic:row.eddies_classic||0, legend:row.eddies_legend||0, blitz:row.eddies_blitz||0, endless:row.eddies_endless||0, chrome:row.eddies_chrome||0, ability:row.eddies_ability||0, art:row.eddies_art||0, cardslink: meta.eddies_cardslink||0, sequence: meta.eddies_sequence||0, altart: meta.eddies_altart||0 },
+    monthEddies: meta.monthEddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    yearEddies: meta.yearEddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    monthEddiesPeriod: meta.monthEddiesPeriod || null, yearEddiesPeriod: meta.yearEddiesPeriod || null,
+    _lastKnownEddies: meta._lastKnownEddies || {},
+    hasPublishedCommunity: meta.hasPublishedCommunity||false,
+    lastSequencePlayed: meta.lastSequencePlayed||null, sequenceWon: meta.sequenceWon||false, sequenceLost: meta.sequenceLost||false, lastSequenceReward: meta.lastSequenceReward||0,
+    sequencePlayed: meta.sequencePlayed||0, sequenceWins: meta.sequenceWins||0,
+    artFirstTryWins: meta.artFirstTryWins||0, cardsLinkFlawlessCount: meta.cardsLinkFlawlessCount||0,
+    sequenceFirstTryWins: meta.sequenceFirstTryWins||0, hasUsedArchive: meta.hasUsedArchive||false,
+    hasShared: meta.hasShared||false, hasChangedPseudo: meta.hasChangedPseudo||false, hasSeenWelcomeNew: meta.hasSeenWelcomeNew||false,
+    activityStreak: meta.activityStreak||0, bestActivityStreak: meta.bestActivityStreak||0, lastActiveDate: meta.lastActiveDate||null,
+    cardsDiscovered: meta.cardsDiscovered||[], collectionCards: meta.collectionCards||[], languagesUsed: meta.languagesUsed||[],
+    communityVisited: meta.communityVisited||false, feedbackCount: meta.feedbackCount||0,
+    earlyBirdWin: meta.earlyBirdWin||false, nightOwlWin: meta.nightOwlWin||false,
+    inProgress: meta.inProgress||{},
+    unlockedAch: Array.isArray(meta.unlockedAch)?meta.unlockedAch:[],
+  };
+}
+function localToStatsRow(s, uid){
+  return {
+    user_id: uid, streak: s.streak||0, best_streak: s.bestStreak||0,
+    games_played: s.gamesPlayed||0, wins: s.wins||0,
+    guess_distribution: s.guessDistribution||{},
+    eddies_classic: (s.eddies&&s.eddies.classic)||0, eddies_legend: (s.eddies&&s.eddies.legend)||0,
+    eddies_blitz: (s.eddies&&s.eddies.blitz)||0, eddies_endless: (s.eddies&&s.eddies.endless)||0,
+    eddies_chrome: (s.eddies&&s.eddies.chrome)||0, eddies_ability: (s.eddies&&s.eddies.ability)||0,
+    eddies_art: (s.eddies&&s.eddies.art)||0,
+    meta: { lastWin: s.lastWin||null, endlessSolved: s.endlessSolved||0, abilitySolved: s.abilitySolved||0, artSolved: s.artSolved||0,
+      lastAbilityPlayed: s.lastAbilityPlayed||null, abilityWon: s.abilityWon||false,
+      lastArtPlayed: s.lastArtPlayed||null, artWon: s.artWon||false, artLost: s.artLost||false,
+      lastClassicReward: s.lastClassicReward||0, lastAbilityReward: s.lastAbilityReward||0, lastArtReward: s.lastArtReward||0,
+      legendPlayed: s.legendPlayed||0, legendWins: s.legendWins||0,
+      blitzSessions: s.blitzSessions||0, blitzBestScore: s.blitzBestScore||0, blitzTotalSolved: s.blitzTotalSolved||0,
+      artPlayed: s.artPlayed||0, artLostCount: s.artLostCount||0, altArt: s.altArt||{},
+      chromeSessions: s.chromeSessions||0, chromeBestScore: s.chromeBestScore||0, chromeTotalCorrect: s.chromeTotalCorrect||0,
+      lastCardsLinkPlayed: s.lastCardsLinkPlayed||null, cardsLinkWon: (s.cardsLinkWon===undefined?null:s.cardsLinkWon),
+      lastCardsLinkReward: s.lastCardsLinkReward||0, lastCardsLinkMistakes: s.lastCardsLinkMistakes||0,
+      cardsLinkPlayed: s.cardsLinkPlayed||0, cardsLinkWins: s.cardsLinkWins||0,
+      eddies_cardslink: (s.eddies&&s.eddies.cardslink)||0, eddies_altart: (s.eddies&&s.eddies.altart)||0,
+      monthEddies: s.monthEddies || {}, yearEddies: s.yearEddies || {},
+      monthEddiesPeriod: s.monthEddiesPeriod || null, yearEddiesPeriod: s.yearEddiesPeriod || null,
+      _lastKnownEddies: s._lastKnownEddies || {},
+      hasPublishedCommunity: s.hasPublishedCommunity||false,
+      lastSequencePlayed: s.lastSequencePlayed||null, sequenceWon: s.sequenceWon||false, sequenceLost: s.sequenceLost||false, lastSequenceReward: s.lastSequenceReward||0,
+      sequencePlayed: s.sequencePlayed||0, sequenceWins: s.sequenceWins||0, eddies_sequence: (s.eddies&&s.eddies.sequence)||0,
+      lastLegendPlayed: s.lastLegendPlayed||null, legendResult: s.legendResult||null,
+      artFirstTryWins: s.artFirstTryWins||0, cardsLinkFlawlessCount: s.cardsLinkFlawlessCount||0,
+      sequenceFirstTryWins: s.sequenceFirstTryWins||0, hasUsedArchive: s.hasUsedArchive||false,
+      hasShared: s.hasShared||false, hasChangedPseudo: s.hasChangedPseudo||false, hasSeenWelcomeNew: s.hasSeenWelcomeNew||false,
+      activityStreak: s.activityStreak||0, bestActivityStreak: s.bestActivityStreak||0, lastActiveDate: s.lastActiveDate||null,
+      cardsDiscovered: s.cardsDiscovered||[], collectionCards: s.collectionCards||[], languagesUsed: s.languagesUsed||[],
+      communityVisited: s.communityVisited||false, feedbackCount: s.feedbackCount||0,
+      earlyBirdWin: s.earlyBirdWin||false, nightOwlWin: s.nightOwlWin||false,
+      inProgress: s.inProgress||{},
+      unlockedAch: Array.isArray(s.unlockedAch)?s.unlockedAch:[] }
+  };
+}
+
+// ======================= STATS (Supabase si connecté, sinon localStorage réel du navigateur) =======================
+function lsGetJSON(key){
+  try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }catch(e){ return null; }
+}
+function lsSetJSON(key, obj){
+  try{ localStorage.setItem(key, JSON.stringify(obj)); }catch(e){}
+}
+async function loadStats(){
+  if(supabaseReady && currentSession){
+    try{
+      const { data, error } = await supabaseClient.from('stats').select('*').eq('user_id', currentSession.user.id).maybeSingle();
+      if(!error && data) return statsRowToLocal(data);
+    }catch(e){}
+  }
+  return lsGetJSON('choomdle:stats') || defaultStats();
+}
+function defaultStats(){
+  return {streak:0,bestStreak:0,lastWin:null,endlessSolved:0,gamesPlayed:0,wins:0,guessDistribution:{},
+    eddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0,altart:0},
+    monthEddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    yearEddies:{classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0},
+    monthEddiesPeriod:null, yearEddiesPeriod:null, _lastKnownEddies:{},
+    lastLegendPlayed:null, legendResult:null,
+    lastAbilityPlayed:null, abilityWon:false, lastArtPlayed:null, artWon:false, artLost:false,
+    lastClassicReward:0, lastAbilityReward:0, lastArtReward:0,
+    legendPlayed:0, legendWins:0,
+    blitzSessions:0, blitzBestScore:0, blitzTotalSolved:0,
+    abilitySolved:0,
+    artPlayed:0, artLostCount:0, altArt:{},
+    chromeSessions:0, chromeBestScore:0, chromeTotalCorrect:0,
+    lastCardsLinkPlayed:null, cardsLinkWon:null, lastCardsLinkReward:0, lastCardsLinkMistakes:0,
+    cardsLinkPlayed:0, cardsLinkWins:0,
+    lastSequencePlayed:null, sequenceWon:false, sequenceLost:false, lastSequenceReward:0, sequencePlayed:0, sequenceWins:0,
+    artFirstTryWins:0, cardsLinkFlawlessCount:0, sequenceFirstTryWins:0, hasUsedArchive:false, hasShared:false, hasChangedPseudo:false, hasSeenWelcomeNew:false,
+    activityStreak:0, bestActivityStreak:0, lastActiveDate:null,
+    cardsDiscovered:[], collectionCards:[], languagesUsed:[], communityVisited:false, feedbackCount:0,
+    earlyBirdWin:false, nightOwlWin:false, inProgress:{}, unlockedAch:[]};
+}
+async function saveStats(stats){
+  // Suivi mensuel/annuel des eddies, calculé UNIQUEMENT ici (un seul point de code, jamais
+  // touché dans chaque jeu individuellement) — donc aucun risque pour le fonctionnement actuel
+  // des jeux. On compare "avant/après" sur le total à vie de chaque jeu pour en déduire le gain
+  // réel de cette sauvegarde, sans jamais modifier ce total à vie lui-même.
+  try{
+    const cur = stats.eddies || {};
+    const prev = stats._lastKnownEddies;
+    // Migration en douceur pour les comptes déjà existants : la première fois qu'on rencontre
+    // ce compte (pas encore de référence connue), on initialise SANS compter de gain — sinon
+    // tout le total déjà gagné avant aujourd'hui serait faussement ajouté au mois en cours.
+    if(prev && Object.keys(prev).length > 0){
+      stats.monthEddies = stats.monthEddies || {};
+      stats.yearEddies = stats.yearEddies || {};
+      Object.keys(cur).forEach(game=>{
+        const delta = (cur[game]||0) - (prev[game]||0);
+        if(delta > 0){
+          stats.monthEddies[game] = (stats.monthEddies[game]||0) + delta;
+          stats.yearEddies[game] = (stats.yearEddies[game]||0) + delta;
+        }
+      });
+    }
+    const snapshot = {};
+    Object.keys(cur).forEach(game=>{ snapshot[game] = cur[game]||0; });
+    stats._lastKnownEddies = snapshot;
+  }catch(e){}
+  try{ stats.unlockedAch = achUnionIds(stats); }catch(e){}
+  lsSetJSON('choomdle:stats', stats);
+  if(supabaseReady && currentSession){
+    try{ await supabaseClient.from('stats').upsert(localToStatsRow(stats, currentSession.user.id)); }catch(e){}
+  }
+}
+async function addEddies(game, amount){
+  const s = await loadStats();
+  s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0};
+  s.eddies[game] = (s.eddies[game]||0) + amount;
+  await saveStats(s);
+  refreshEddiesUI();
+  return s;
+}
+function eddiesTotal(s){ const e = s.eddies||{}; return Object.values(e).reduce((a,b)=>a+(b||0),0); }
+// ======================= RARETÉ (basée sur le nombre de succès débloqués) =======================
+const RARITY_ICONS = {
+  common: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  uncommon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  rare: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l6-6 6 6"/><path d="M6 14l6 6 6-6"/></svg>',
+  epic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="10" transform="rotate(45 12 12)"/></svg>',
+  secret: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" transform="rotate(45 12 12)"/><rect x="9" y="9" width="6" height="6" transform="rotate(45 12 12)"/></svg>',
+  iconic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 2L15 9L22 12L15 15L12 22L9 15L2 12L9 9Z"/></svg>',
+  nova: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="14" height="14" transform="rotate(45 12 12)" fill-opacity="0.3"/><rect x="10" y="10" width="4" height="4" transform="rotate(45 12 12)"/></svg>',
+};
+function rarityForCount(n){
+  if(n>=150) return { id:'nova', key:'rarity_nova' };
+  if(n>=120) return { id:'iconic', key:'rarity_iconic' };
+  if(n>=95) return { id:'secret', key:'rarity_secret' };
+  if(n>=77) return { id:'epic', key:'rarity_epic' };
+  if(n>=50) return { id:'rare', key:'rarity_rare' };
+  if(n>=25) return { id:'uncommon', key:'rarity_uncommon' };
+  return { id:'common', key:'rarity_common' };
+}
+function renderRarityBadge(){
+  const badge = document.getElementById('rarityBadge');
+  if(!supabaseReady || !currentSession){ badge.style.display = 'none'; return; }
+  loadStats().then(s=>{
+    const unlocked = achCount(s);
+    const rarity = rarityForCount(unlocked);
+    badge.className = 'rarity-badge rarity-' + rarity.id;
+    document.getElementById('rarityIcon').innerHTML = RARITY_ICONS[rarity.id];
+    document.getElementById('rarityLabel').textContent = t(rarity.key);
+    badge.title = t(rarity.key) + ' (' + unlocked + '/' + ACHIEVEMENTS.length + ')';
+    badge.style.display = 'inline-flex';
+  });
+}
+function refreshEddiesUI(){ loadStats().then(s=>{ document.getElementById('eddiesTotal').textContent = eddiesTotal(s); }); renderRarityBadge(); }
+function addDiscoveredCard(s, name){
+  s.cardsDiscovered = s.cardsDiscovered || [];
+  if(!s.cardsDiscovered.includes(name)) s.cardsDiscovered.push(name);
+}
+function addCollectionCard(s, name){
+  // Séparé de cardsDiscovered (qui sert aux succès et inclut Endless) : la page Collection ne
+  // compte QUE Classic/Legend/Ability/Art, comme demandé, sans changer le calcul des succès.
+  s.collectionCards = s.collectionCards || [];
+  if(!s.collectionCards.includes(name)) s.collectionCards.push(name);
+}
+// Série de jours d'affilée où le joueur s'est connecté/a joué (tous jeux confondus), + petits succès horaires.
+// ======================= ROLLOVER MENSUEL / ANNUEL DES EDDIES (Community) =======================
+// Se déclenche une fois par session, pour un compte connecté uniquement (le classement mensuel/
+// annuel n'a de sens que pour un compte, comme les succès). Quand le mois/l'année change depuis
+// la dernière visite, on ARCHIVE l'ancien total avant de le remettre à zéro — jamais l'inverse,
+// pour ne jamais perdre de données même en cas d'erreur réseau pendant l'archivage.
+function currentMonthPeriod(){ const d=new Date(); return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1); }
+function currentYearPeriod(){ return String(new Date().getUTCFullYear()); }
+async function archiveEddiesPeriod(kind, period, eddiesObj){
+  if(!(supabaseReady && currentSession) || !period) return;
+  const total = Object.values(eddiesObj||{}).reduce((a,b)=>a+(b||0),0);
+  try{
+    await supabaseClient.from('community_period_archive').upsert({
+      kind, period, user_id: currentSession.user.id, pseudo: currentPseudo || null,
+      eddies: eddiesObj || {}, eddies_total: total
+    }, { onConflict: 'kind,period,user_id' });
+  }catch(e){}
+}
+async function rolloverMonthYearIfNeeded(){
+  if(!(supabaseReady && currentSession)) return;
+  const s = await loadStats();
+  const nowMonth = currentMonthPeriod(), nowYear = currentYearPeriod();
+  let changed = false;
+  if(!s.monthEddiesPeriod){ s.monthEddiesPeriod = nowMonth; changed = true; }
+  else if(s.monthEddiesPeriod !== nowMonth){
+    await archiveEddiesPeriod('month', s.monthEddiesPeriod, s.monthEddies);
+    s.monthEddies = {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0};
+    s.monthEddiesPeriod = nowMonth;
+    changed = true;
+  }
+  if(!s.yearEddiesPeriod){ s.yearEddiesPeriod = nowYear; changed = true; }
+  else if(s.yearEddiesPeriod !== nowYear){
+    await archiveEddiesPeriod('year', s.yearEddiesPeriod, s.yearEddies);
+    s.yearEddies = {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0,ability:0,art:0,cardslink:0,sequence:0};
+    s.yearEddiesPeriod = nowYear;
+    changed = true;
+  }
+  if(changed) await saveStats(s);
+}
+function updateEngagementStats(){
+  loadStats().then(s=>{
+    const today = todayUTCString();
+    let changed = false;
+    const isGuest = !(supabaseReady && currentSession);
+    // Sans compte, TOUTES les stats (pas seulement les eddies) repartent de zéro chaque jour —
+    // seul un compte créé garde un historique cumulé dans la durée.
+    if(isGuest && s.lastActiveDate !== today){
+      const wasFirstEver = !s.lastActiveDate;
+      s = defaultStats();
+      s.lastActiveDate = today;
+      s.activityStreak = 1; s.bestActivityStreak = Math.max(1, wasFirstEver?1:0);
+      changed = true;
+    }
+    if(s.lastActiveDate !== today){
+      s.activityStreak = (s.lastActiveDate === yesterdayUTCString()) ? (s.activityStreak||0)+1 : 1;
+      s.bestActivityStreak = Math.max(s.bestActivityStreak||0, s.activityStreak);
+      s.lastActiveDate = today;
+      changed = true;
+    }
+    const hour = new Date().getUTCHours();
+    if(hour>=4 && hour<7 && !s.earlyBirdWin){ s.earlyBirdWin = true; changed = true; }
+    if(hour>=0 && hour<3 && !s.nightOwlWin){ s.nightOwlWin = true; changed = true; }
+    if(changed) saveStats(s).then(refreshEddiesUI);
+  });
+}
+
+// ======================= ACCOUNT (email+mot de passe avec confirmation, ou Google) =======================
+// L'ancien "compte gratuit" par pseudo seul (connexion anonyme) est retiré : une session
+// anonyme ne peut pas être "re-connectée" après une déconnexion, ce qui causait le problème
+// de reconnexion. Email+mot de passe et Google sont deux identités durables et récupérables.
+function cleanUrl(){ return window.location.origin + window.location.pathname; }
+function stripAuthParamsFromUrl(){
+  if(window.location.search || window.location.hash){
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+async function initSupabaseAuth(){
+  if(!supabaseReady) return;
+  const { data } = await supabaseClient.auth.getSession();
+  currentSession = data.session;
+  stripAuthParamsFromUrl();
+  if(currentSession) await onLoggedIn();
+  supabaseClient.auth.onAuthStateChange(async (event, session)=>{
+    currentSession = session;
+    stripAuthParamsFromUrl();
+    if(session) await onLoggedIn();
+    else setLoggedOutUI();
+  });
+}
+async function onLoggedIn(){
+  // Une session vient d'être confirmée (même restaurée silencieusement au chargement) : on
+  // annule tout popup "invité" qui aurait pu être programmé pendant le bref instant où la page
+  // semblait déconnectée — il ne doit jamais s'afficher dans ce cas.
+  if(guestPitchTimer){ clearTimeout(guestPitchTimer); guestPitchTimer = null; }
+  const uid = currentSession.user.id;
+  try{
+    const { data: profile } = await supabaseClient.from('profiles').select('pseudo, pseudo_changed_at').eq('id', uid).maybeSingle();
+    if(profile && profile.pseudo){
+      currentPseudo = profile.pseudo;
+      setLoggedInUI(currentPseudo);
+      if(sessionStorage.getItem('choomdle:explicitLogin')){
+        sessionStorage.removeItem('choomdle:explicitLogin');
+        setTimeout(()=>showGlitchPopup('welcomeBack'), 500);
+      }
+    } else {
+      // Première connexion : pas encore de pseudo enregistré, on le demande.
+      sessionStorage.removeItem('choomdle:explicitLogin'); // évite qu'il traîne jusqu'à la prochaine visite
+      const suggested = (currentSession.user.user_metadata && currentSession.user.user_metadata.full_name) || '';
+      currentPseudo = null;
+      showPseudoPicker(suggested);
+    }
+    refreshEddiesUI(); refreshStreakUI();
+    checkAdminFeedbackView();
+    // Publication automatique au classement communautaire dès qu'un compte est connecté — plus
+    // besoin de cliquer sur un bouton. Couvre aussi les comptes déjà existants qui n'avaient
+    // jamais publié auparavant.
+    loadStats().then(s=>{
+      if(!s.hasPublishedCommunity){ s.hasPublishedCommunity = true; saveStats(s); }
+    });
+  }catch(e){}
+}
+function showPseudoPicker(suggested){
+  document.getElementById('legendProfile').classList.remove('is-logged-in');
+  document.getElementById('legendProfileName').textContent = t('acc_choose_pseudo');
+  document.getElementById('authForm').style.display = 'none';
+  document.getElementById('loggedInMenu').style.display = 'none';
+  document.getElementById('pseudoPickForm').style.display = 'block';
+  document.getElementById('pseudoInput').value = (suggested||'').slice(0,20);
+  document.getElementById('legendProfileMenu').style.display = 'block';
+}
+async function initAccount(){
+  if(!supabaseReady){
+    document.getElementById('legendProfileName').textContent = "Accounts unavailable";
+    return;
+  }
+  document.getElementById('signUpBtn').addEventListener('click', async ()=>{
+    const email = document.getElementById('emailInput').value.trim();
+    const password = document.getElementById('passwordInput').value;
+    const msg = document.getElementById('authMsg');
+    msg.textContent = '';
+    if(!email || !password) return;
+    try{
+      const { error } = await supabaseClient.auth.signUp({ email, password, options:{ emailRedirectTo: cleanUrl() } });
+      if(error) throw error;
+      msg.textContent = t('acc_check_email');
+    }catch(e){ msg.textContent = e.message || t('acc_error_generic'); }
+  });
+  document.getElementById('signInBtn').addEventListener('click', async ()=>{
+    const email = document.getElementById('emailInput').value.trim();
+    const password = document.getElementById('passwordInput').value;
+    const msg = document.getElementById('authMsg');
+    msg.textContent = '';
+    if(!email || !password) return;
+    try{
+      sessionStorage.setItem('choomdle:explicitLogin', '1');
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+    }catch(e){ sessionStorage.removeItem('choomdle:explicitLogin'); msg.textContent = e.message || t('acc_error_generic'); }
+  });
+  document.getElementById('googleBtn').addEventListener('click', async ()=>{
+    sessionStorage.setItem('choomdle:explicitLogin', '1');
+    await supabaseClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: cleanUrl() } });
+  });
+  document.getElementById('savePseudoBtn').addEventListener('click', async ()=>{
+    // Utilisé uniquement pour le choix du PREMIER pseudo (juste après inscription/connexion).
+    // Le changement ultérieur passe par le menu du badge Legend (limité à 1x/semaine).
+    const newPseudo = document.getElementById('pseudoInput').value.trim().slice(0,20);
+    const msg = document.getElementById('authMsg');
+    msg.textContent = '';
+    if(!newPseudo || !currentSession) return;
+    try{
+      const { error } = await supabaseClient.from('profiles').upsert({ id: currentSession.user.id, pseudo: newPseudo, pseudo_changed_at: new Date().toISOString() });
+      if(error){
+        if(error.code === '23505'){ msg.textContent = t('acc_pseudo_taken'); return; }
+        throw error;
+      }
+      currentPseudo = newPseudo;
+      setLoggedInUI(newPseudo);
+      // Verrou persistant côté compte : ce popup ne doit JAMAIS pouvoir se redéclencher pour un
+      // compte qui l'a déjà vu une fois, quelle que soit la façon dont ce code serait ré-exécuté.
+      loadStats().then(s=>{
+        if(!s.hasSeenWelcomeNew){
+          s.hasSeenWelcomeNew = true;
+          saveStats(s);
+          setTimeout(()=>showGlitchPopup('welcomeNew'), 500);
+        }
+      });
+    }catch(e){ msg.textContent = t('acc_error_generic'); }
+  });
+
+  // ---- Badge profil Legend : ouverture/fermeture du menu ----
+  document.getElementById('legendProfileBtn').addEventListener('click', ()=>{
+    const menu = document.getElementById('legendProfileMenu');
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('menuSubpanel').style.display = 'none';
+    document.getElementById('menuSubpanel').innerHTML = '';
+  });
+  document.addEventListener('click', (e)=>{
+    const wrap = document.getElementById('legendProfile');
+    if(wrap && !wrap.contains(e.target)){
+      document.getElementById('legendProfileMenu').style.display = 'none';
+    }
+  });
+
+  // ---- Changer de pseudo (1x/semaine max) ----
+  document.getElementById('menuEditPseudo').addEventListener('click', async ()=>{
+    const sub = document.getElementById('menuSubpanel');
+    sub.innerHTML = '';
+    try{
+      const { data: profile } = await supabaseClient.from('profiles').select('pseudo_changed_at').eq('id', currentSession.user.id).maybeSingle();
+      const last = profile && profile.pseudo_changed_at ? new Date(profile.pseudo_changed_at) : null;
+      const nextAllowed = last ? new Date(last.getTime() + 7*24*60*60*1000) : null;
+      if(nextAllowed && nextAllowed > new Date()){
+        sub.innerHTML = '<span class="submsg">'+t('acc_pseudo_cooldown').replace('{date}', nextAllowed.toLocaleDateString())+'</span>';
+      } else {
+        sub.innerHTML = '<input type="text" id="menuPseudoInput" maxlength="20" value="'+currentPseudo+'"><button id="menuPseudoSaveBtn">'+t('acc_save')+'</button><span class="submsg" id="menuPseudoMsg"></span>';
+        document.getElementById('menuPseudoSaveBtn').addEventListener('click', async ()=>{
+          const newPseudo = document.getElementById('menuPseudoInput').value.trim().slice(0,20);
+          const msg = document.getElementById('menuPseudoMsg');
+          if(!newPseudo) return;
+          try{
+            const { error } = await supabaseClient.from('profiles').upsert({ id: currentSession.user.id, pseudo: newPseudo, pseudo_changed_at: new Date().toISOString() });
+            if(error){
+              if(error.code === '23505'){ msg.textContent = t('acc_pseudo_taken'); return; }
+              throw error;
+            }
+            currentPseudo = newPseudo;
+            document.getElementById('legendProfileName').textContent = newPseudo;
+            msg.textContent = t('acc_pseudo_updated');
+            loadStats().then(st=>{ if(!st.hasChangedPseudo){ st.hasChangedPseudo = true; saveStats(st); } });
+          }catch(e){ msg.textContent = t('acc_error_generic'); }
+        });
+      }
+      sub.style.display = 'block';
+    }catch(e){}
+  });
+
+  // ---- Changer le mot de passe ----
+  document.getElementById('menuChangePassword').addEventListener('click', ()=>{
+    const sub = document.getElementById('menuSubpanel');
+    sub.innerHTML = '<input type="password" id="newPasswordInput" data-i18n-ph="acc_new_password_ph" placeholder="New password">'+
+      '<button id="savePasswordBtn">'+t('acc_save')+'</button><span class="submsg" id="passwordMsg"></span>';
+    sub.style.display = 'block';
+    document.getElementById('savePasswordBtn').addEventListener('click', async ()=>{
+      const newPassword = document.getElementById('newPasswordInput').value;
+      const msg = document.getElementById('passwordMsg');
+      if(!newPassword || newPassword.length < 6){ msg.textContent = t('acc_password_too_short'); return; }
+      try{
+        const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+        if(error) throw error;
+        msg.textContent = t('acc_password_updated');
+      }catch(e){ msg.textContent = e.message || t('acc_error_generic'); }
+    });
+  });
+
+  // ---- Déconnexion ----
+  document.getElementById('menuLogout').addEventListener('click', async ()=>{
+    try{ await supabaseClient.auth.signOut(); }catch(e){}
+    currentSession = null; currentPseudo = null;
+    try{
+      localStorage.removeItem('choomdle:stats');
+      ['classic','ability','art','altart','sequence','cardslink'].forEach(k=>localStorage.removeItem('choomdle:progress:'+k));
+    }catch(e){} // évite d'afficher les données du compte précédent en tant qu'invité
+    setLoggedOutUI();
+    refreshEddiesUI(); refreshStreakUI();
+  });
+}
+function setLoggedInUI(pseudo){
+  document.getElementById('legendProfile').classList.add('is-logged-in');
+  document.getElementById('legendProfileName').textContent = pseudo;
+  document.getElementById('authForm').style.display = 'none';
+  document.getElementById('pseudoPickForm').style.display = 'none';
+  document.getElementById('loggedInMenu').style.display = 'block';
+  document.getElementById('authMsg').textContent = '';
+  const notice = document.getElementById('accountNoticeLine'); if(notice) notice.style.display = 'none';
+}
+function setLoggedOutUI(){
+  const notice = document.getElementById('accountNoticeLine'); if(notice) notice.style.display = '';
+  document.getElementById('rarityBadge').style.display = 'none';
+  document.getElementById('legendProfile').classList.remove('is-logged-in');
+  document.getElementById('legendProfileMenu').style.display = 'none';
+  document.getElementById('legendProfileName').innerHTML =
+    '<span class="name-default">'+t('acc_not_connected')+'</span>'+
+    '<span class="name-hover">'+t('acc_click_signin')+'</span>';
+  document.getElementById('authForm').style.display = 'block';
+  document.getElementById('pseudoPickForm').style.display = 'none';
+  document.getElementById('loggedInMenu').style.display = 'none';
+  if(!guestPitchPopupShown && !guestPitchTimer){
+    // Délai volontairement plus long : au chargement de la page, une session déjà active met
+    // parfois une fraction de seconde à se restaurer silencieusement — le temps qu'elle le
+    // fasse, on annule complètement ce popup au lieu de l'afficher à tort (voir onLoggedIn).
+    guestPitchTimer = setTimeout(()=>{
+      guestPitchTimer = null;
+      guestPitchPopupShown = true;
+      showGlitchPopup('guestPitch');
+    }, 1200);
+  }
+  document.getElementById('pseudoInput').value = '';
+  document.getElementById('emailInput').value = '';
+  document.getElementById('passwordInput').value = '';
+  document.getElementById('authMsg').textContent = '';
+}
+async function getPseudo(){ return currentPseudo || "Anonyme"; }
+
+// ======================= COMMUNITY (podiums par jeu + cumulé) =======================
+async function loadCommunityRows(){
+  if(supabaseReady){
+    try{
+      const { data, error } = await supabaseClient.from('stats')
+        .select('*, profiles(pseudo)')
+        .limit(500);
+      if(error) throw error;
+      return (data||[]).map(r=>{
+        const meta = r.meta || {};
+        const cardslink = meta.eddies_cardslink || 0; // eddies Cards Link/Sequence stockés dans meta (pas de colonne dédiée)
+        const sequence = meta.eddies_sequence || 0;
+        const altart = meta.eddies_altart || 0;
+        // On réutilise statsRowToLocal (même logique que pour nos propres stats) pour pouvoir
+        // calculer le nombre de succès débloqués, le palier de rareté, et les compteurs
+        // mensuel/annuel de chaque joueur.
+        let unlocked = 0, localShape = null;
+        try{
+          localShape = statsRowToLocal(r);
+          unlocked = achCount(localShape);
+        }catch(e){}
+        const monthEddies = (localShape && localShape.monthEddies) || {};
+        const yearEddies = (localShape && localShape.yearEddies) || {};
+        return {
+          pseudo: (r.profiles && r.profiles.pseudo) || "Choomer",
+          streak: r.streak, bestStreak: r.best_streak,
+          eddies: { classic:r.eddies_classic, legend:r.eddies_legend, blitz:r.eddies_blitz, endless:r.eddies_endless, chrome:r.eddies_chrome, ability:r.eddies_ability, art:r.eddies_art, cardslink, sequence, altart },
+          eddiesTotal: (r.eddies_classic||0)+(r.eddies_legend||0)+(r.eddies_blitz||0)+(r.eddies_endless||0)+(r.eddies_chrome||0)+(r.eddies_ability||0)+(r.eddies_art||0)+cardslink+sequence+altart,
+          achievementsUnlocked: unlocked,
+          monthEddies, yearEddies,
+          monthEddiesTotal: Object.values(monthEddies).reduce((a,b)=>a+(b||0),0),
+          yearEddiesTotal: Object.values(yearEddies).reduce((a,b)=>a+(b||0),0)
+        };
+      });
+    }catch(e){ return []; }
+  }
+  const list = await window.storage.list('community:', true);
+  if(!list || !list.keys || !list.keys.length) return [];
+  const rows = [];
+  for(const k of list.keys){
+    try{ const r = await window.storage.get(k, true); if(r) rows.push(JSON.parse(r.value)); }catch(e){}
+  }
+  return rows;
+}
+function podiumHTML(title, rows, keyFn){
+  const sorted = rows.slice().sort((a,b)=>keyFn(b)-keyFn(a));
+  const medals = ["🥇","🥈","🥉"];
+  const top = sorted.slice(0,50);
+  let rowsHtml = '';
+  if(!sorted.length){ rowsHtml += '<div class="podiumrow"><span>—</span></div>'; }
+  top.forEach((r,i)=>{
+    const isMe = currentPseudo && r.pseudo === currentPseudo;
+    rowsHtml += '<div class="podiumrow'+(isMe?' podiumrow-me':'')+'"><span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
+  });
+  // Si le joueur connecté n'est pas dans le top 50, on l'affiche séparément avec son vrai rang.
+  let myRank = null, myValue = null;
+  if(currentPseudo){
+    const myIndex = sorted.findIndex(r=>r.pseudo === currentPseudo);
+    if(myIndex > -1){ myRank = myIndex+1; myValue = keyFn(sorted[myIndex]); }
+    if(myIndex >= 50){
+      const r = sorted[myIndex];
+      rowsHtml += '<div class="podium-separator"></div>';
+      rowsHtml += '<div class="podiumrow podiumrow-me"><span>#'+(myIndex+1)+' '+r.pseudo+'</span><span class="val">'+keyFn(r)+'</span></div>';
+    }
+  }
+  let html = '<div class="podiumbox"><h4>'+title+'</h4><div class="podiumbox-rows">'+rowsHtml+'</div>';
+  if(myRank !== null){
+    const safeTitle = String(title).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    html += '<button class="share-btn" style="margin:8px 0 0;font-size:10px;padding:6px 12px;" data-share="shareCommunityRank" data-title="'+safeTitle+'" data-rank="'+myRank+'" data-value="'+myValue+'">'+t('share_button')+'</button>';
+  }
+  html += '</div>';
+  return html;
+}
+function cumulativePodiumHTML(title, rows, totalKey){
+  totalKey = totalKey || 'eddiesTotal';
+  const sorted = rows.slice().sort((a,b)=>(b[totalKey]||0)-(a[totalKey]||0));
+  const medals = ["🥇","🥈","🥉"];
+  const top = sorted.slice(0,50);
+  let rowsHtml = '';
+  if(!sorted.length){ rowsHtml += '<div class="podiumrow"><span>—</span></div>'; }
+  top.forEach((r,i)=>{
+    const isMe = currentPseudo && r.pseudo === currentPseudo;
+    const rarity = rarityForCount(r.achievementsUnlocked||0);
+    rowsHtml += '<div class="podiumrow podiumrow-cumul'+(isMe?' podiumrow-me':'')+'">'+
+      '<span>'+(medals[i]||(i+1)+".")+' '+r.pseudo+'</span>'+
+      '<span class="podiumrow-rarity"><span class="podiumrow-rarity-icon">'+RARITY_ICONS[rarity.id]+'</span>'+t(rarity.key)+' · '+(r.achievementsUnlocked||0)+'/'+ACHIEVEMENTS.length+'</span>'+
+      '<span class="val">'+(r[totalKey]||0)+'</span></div>';
+  });
+  let myRank = null, myValue = null;
+  if(currentPseudo){
+    const myIndex = sorted.findIndex(r=>r.pseudo === currentPseudo);
+    if(myIndex > -1){ myRank = myIndex+1; myValue = sorted[myIndex][totalKey]||0; }
+    if(myIndex >= 50){
+      const r = sorted[myIndex];
+      const rarity = rarityForCount(r.achievementsUnlocked||0);
+      rowsHtml += '<div class="podium-separator"></div>';
+      rowsHtml += '<div class="podiumrow podiumrow-cumul podiumrow-me">'+
+        '<span>#'+(myIndex+1)+' '+r.pseudo+'</span>'+
+        '<span class="podiumrow-rarity"><span class="podiumrow-rarity-icon">'+RARITY_ICONS[rarity.id]+'</span>'+t(rarity.key)+' · '+(r.achievementsUnlocked||0)+'/'+ACHIEVEMENTS.length+'</span>'+
+        '<span class="val">'+(r[totalKey]||0)+'</span></div>';
+    }
+  }
+  let html = '<div class="podiumbox podiumbox-cumul"><h4>'+title+'</h4><div class="podiumbox-rows">'+rowsHtml+'</div>';
+  if(myRank !== null){
+    const safeTitle = String(title).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    html += '<button class="share-btn" style="margin:8px 0 0;font-size:10px;padding:6px 12px;" data-share="shareCommunityRank" data-title="'+safeTitle+'" data-rank="'+myRank+'" data-value="'+myValue+'">'+t('share_button')+'</button>';
+  }
+  html += '</div>';
+  return html;
+}
+function communityCategories(period){
+  const key = period === 'month' ? 'monthEddies' : period === 'year' ? 'yearEddies' : 'eddies';
+  const totalKey = period === 'month' ? 'monthEddiesTotal' : period === 'year' ? 'yearEddiesTotal' : 'eddiesTotal';
+  const cats = [
+    [t('podium_cumul'), r=>r[totalKey]||0],
+    [t('podium_classic'), r=>(r[key]&&r[key].classic)||0],
+    [t('podium_legend'), r=>(r[key]&&r[key].legend)||0],
+    [t('podium_blitz'), r=>(r[key]&&r[key].blitz)||0],
+    [t('podium_endless'), r=>(r[key]&&r[key].endless)||0],
+    [t('podium_ability'), r=>(r[key]&&r[key].ability)||0],
+    [t('podium_art'), r=>(r[key]&&r[key].art)||0],
+    ['Alt Art', r=>(r[key]&&r[key].altart)||0],
+    [t('podium_chrome'), r=>(r[key]&&r[key].chrome)||0],
+    [t('podium_cardslink'), r=>(r[key]&&r[key].cardslink)||0],
+    [t('podium_sequence'), r=>(r[key]&&r[key].sequence)||0],
+  ];
+  return FEATURES.chromeCheck ? cats : cats.filter(x=>x[0]!==t('podium_chrome'));
+}
+function previousMonthPeriod(){
+  const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()-1);
+  return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1);
+}
+async function loadTopOfPeriod(kind, period, limit){
+  if(!supabaseReady) return [];
+  try{
+    const { data, error } = await supabaseClient.from('community_period_archive')
+      .select('pseudo, eddies_total').eq('kind', kind).eq('period', period)
+      .order('eddies_total', { ascending: false }).limit(limit||3);
+    if(error) throw error;
+    return data || [];
+  }catch(e){ return []; }
+}
+function top3BannerHTML(rows){
+  const medals = ["🥇","🥈","🥉"];
+  if(!rows.length) return '<div class="hint" style="text-align:center;">'+t('community_no_archive_yet')+'</div>';
+  return '<div class="top3-banner">'+rows.map((r,i)=>
+    '<div class="top3-item"><span class="top3-medal">'+medals[i]+'</span><span class="top3-name">'+r.pseudo+'</span><span class="top3-val">'+(r.eddies_total||0)+'</span></div>'
+  ).join('')+'</div>';
+}
+function top3ShareButtonHTML(rows){
+  if(!rows.length) return '';
+  return '<div style="text-align:center;margin-bottom:14px;"><button class="share-btn" data-share="shareTop3Month">'+t('share_button')+'</button></div>';
+}
+async function shareTop3Month(btn){
+  const rows = await loadTopOfPeriod('month', previousMonthPeriod(), 3);
+  if(!rows.length) return;
+  const medals = ["🥇","🥈","🥉"];
+  let text = t('community_top3_last_month')+' — Choomdle\n';
+  rows.forEach((r,i)=>{ text += (medals[i]||(i+1)+'.')+' '+r.pseudo+' — '+(r.eddies_total||0)+' eddies\n'; });
+  text += 'choomdle.com';
+  shareToClipboard(text, btn);
+}
+async function renderCommunity(){
+  loadStats().then(s=>{ if(!s.communityVisited){ s.communityVisited = true; saveStats(s); } });
+  const grid = document.getElementById('podiumGrid');
+  grid.innerHTML = '<div class="podiumbox">…</div>';
+  try{
+    const rows = await loadCommunityRows();
+    const cats = communityCategories();
+    const cumulHtml = cumulativePodiumHTML(cats[0][0], rows);
+
+    // Mois en cours ("Month Eddies") — vivant, se remet à zéro tout seul au changement de mois.
+    const monthCats = communityCategories('month');
+    const monthCumulHtml = cumulativePodiumHTML(monthCats[0][0], rows, 'monthEddiesTotal');
+    const monthGamesHtml = monthCats.slice(1).map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
+
+    // Top 3 du mois précédent, tiré de l'archive figée (pas du direct).
+    const top3Rows = await loadTopOfPeriod('month', previousMonthPeriod(), 3);
+
+    // Cumul de l'année en cours.
+    const yearCumulHtml = cumulativePodiumHTML(t('podium_cumul_year'), rows, 'yearEddiesTotal');
+
+    grid.innerHTML =
+      '<h4 class="month-eddies-top3-title" data-i18n="community_top3_last_month">'+t('community_top3_last_month')+'</h4>' +
+      top3BannerHTML(top3Rows) +
+      top3ShareButtonHTML(top3Rows) +
+      '<div class="month-eddies-frame"><h3 class="month-eddies-title">'+t('community_month_eddies')+'</h3>' +
+        monthCumulHtml + '<div class="podiumgrid-games">'+monthGamesHtml+'</div>' +
+      '</div>' +
+      '<div class="year-eddies-frame"><h3 class="year-eddies-title">'+t('community_year_eddies')+'</h3>' +
+        yearCumulHtml +
+      '</div>' +
+      '<div class="afterlife-frame"><h3 class="afterlife-title">The Afterlife - Hall of Fame</h3>' + cumulHtml + '</div>';
+  }catch(e){
+    grid.innerHTML = '<div class="podiumbox">Stockage communautaire indisponible.</div>';
+  }
+}
+async function loadCommunityArchiveMonth(period){
+  const area = document.getElementById('communityArchiveArea');
+  area.innerHTML = '<div class="podiumbox">…</div>';
+  try{
+    const { data, error } = await supabaseClient.from('community_period_archive')
+      .select('*').eq('kind','month').eq('period', period);
+    if(error) throw error;
+    const rows = (data||[]).map(r=>({
+      pseudo: r.pseudo || 'Choomer',
+      monthEddies: r.eddies || {},
+      monthEddiesTotal: r.eddies_total || 0
+    }));
+    if(!rows.length){
+      area.innerHTML = '<div class="podiumbox">'+t('community_no_archive_yet')+'</div>';
+      return;
+    }
+    const cats = communityCategories('month');
+    // Vue figée : on utilise podiumHTML (sans le bandeau de rareté, non pertinent pour une
+    // archive passée) même pour la ligne cumulative.
+    const cumulHtml = podiumHTML(cats[0][0], rows, cats[0][1]);
+    const gamesHtml = cats.slice(1).map(([title,keyFn])=>podiumHTML(title, rows, keyFn)).join('');
+    area.innerHTML = cumulHtml + '<div class="podiumgrid-games">'+gamesHtml+'</div>';
+  }catch(e){
+    area.innerHTML = '<div class="podiumbox">—</div>';
+  }
+}
+document.getElementById('communityArchiveLoadBtn').addEventListener('click', ()=>{
+  const val = document.getElementById('communityArchiveMonthInput').value; // "2026-09"
+  if(!val) return;
+  const [y,m] = val.split('-');
+  const period = parseInt(y,10)+"-"+parseInt(m,10);
+  loadCommunityArchiveMonth(period);
+});
+async function shareAllRanks(btn){
+  try{
+    const rows = await loadCommunityRows();
+    const lines = [];
+    communityCategories().forEach(([title,keyFn])=>{
+      if(!currentPseudo) return;
+      const sorted = rows.slice().sort((a,b)=>keyFn(b)-keyFn(a));
+      const myIndex = sorted.findIndex(r=>r.pseudo === currentPseudo);
+      if(myIndex > -1){
+        lines.push(title+': #'+(myIndex+1)+' — '+keyFn(sorted[myIndex])+' eddies');
+      }
+    });
+    const text = 'Choomdle — '+t('community_title')+'\n'+(lines.length ? lines.join('\n') : '—')+'\nchoomdle.com';
+    shareToClipboard(text, btn);
+  }catch(e){
+    shareToClipboard('Choomdle — '+t('community_title')+'\nchoomdle.com', btn);
+  }
+}
+
+// ======================= PERSONAL STATS PANEL =======================
+// ======================= ACHIEVEMENTS =======================
+// Titres/descriptions traduits dans les 10 langues (fr, en, es, de, pt, it, pl, ko, zh, ja).
+// Les 12 anciens succès Chrome Check ont été remplacés par 12 succès Alt Art (mêmes positions, total toujours 150).
+// true = un joueur qui avait DÉJÀ gagné l'ancien succès Chrome Check le garde (son compteur et son rang de rareté
+// ne baissent pas). Mettre false pour une rupture nette : seul l'Alt Art compte alors.
+const GRANDFATHER_CHROME_ACHIEVEMENTS = true;
+// Un succès, une fois gagné, ne se perd JAMAIS : on mémorise les identifiants débloqués (stats.unlockedAch,
+// sauvegardé avec le reste) et un succès compte comme gagné s'il est mémorisé OU si sa condition est vraie maintenant.
+function achOwned(a, s){
+  try{ if(s && Array.isArray(s.unlockedAch) && s.unlockedAch.indexOf(a.id) !== -1) return true; }catch(e){}
+  try{ return !!a.check(s); }catch(e){ return false; }
+}
+function achUnionIds(s){
+  const out = [];
+  ACHIEVEMENTS.forEach(a=>{ if(achOwned(a, s)) out.push(a.id); });
+  return out;
+}
+function achCount(s){ return achUnionIds(s).length; }
+const ACHIEVEMENTS = [
+  // --- Classic ---
+  { id:'cl_first', icon:'🩸', fr:['Premier Contact','Gagne ta première partie Classic.'], en:['First Contact','Win your first Classic challenge.'],es:['Primer Contacto','Gana tu primer desafío Classic.'],de:['Erster Kontakt','Gewinne deine erste Classic-Herausforderung.'],pt:['Primeiro Contato','Vença seu primeiro desafio Classic.'],it:['Primo Contatto','Vinci la tua prima sfida Classic.'],pl:['Pierwszy Kontakt','Wygraj swoje pierwsze wyzwanie Classic.'],ko:['첫 접촉','첫 Classic 도전에서 승리하세요.'],zh:['初次接触','赢得你的第一场Classic挑战。'],ja:['ファーストコンタクト','初めてのClassicチャレンジに勝利しよう。'], check:s=>(s.wins||0)>=1 },
+  { id:'cl_10', icon:'🕶️', fr:['Netrunner','10 victoires en Classic.'], en:['Netrunner','10 Classic wins.'],es:['Netrunner','10 victorias en Classic.'],de:['Netrunner','10 Classic-Siege.'],pt:['Netrunner','10 vitórias em Classic.'],it:['Netrunner','10 vittorie in Classic.'],pl:['Netrunner','10 zwycięstw w Classic.'],ko:['넷러너','Classic 10승.'],zh:['网络行者','Classic模式10场胜利。'],ja:['ネットランナー','Classicで10勝。'], check:s=>(s.wins||0)>=10 },
+  { id:'cl_50', icon:'🏙️', fr:['Légende de la Rue','50 victoires en Classic.'], en:['Street Legend','50 Classic wins.'],es:['Leyenda de la Calle','50 victorias en Classic.'],de:['Straßenlegende','50 Classic-Siege.'],pt:['Lenda das Ruas','50 vitórias em Classic.'],it:['Leggenda di Strada','50 vittorie in Classic.'],pl:['Legenda Ulicy','50 zwycięstw w Classic.'],ko:['거리의 전설','Classic 50승.'],zh:['街头传奇','Classic模式50场胜利。'],ja:['ストリートレジェンド','Classicで50勝。'], check:s=>(s.wins||0)>=50 },
+  { id:'cl_100', icon:'👑', fr:['Icône de Night City','100 victoires en Classic.'], en:["Night City Icon",'100 Classic wins.'],es:['Ícono de Night City','100 victorias en Classic.'],de:['Night-City-Ikone','100 Classic-Siege.'],pt:['Ícone de Night City','100 vitórias em Classic.'],it:['Icona di Night City','100 vittorie in Classic.'],pl:['Ikona Night City','100 zwycięstw w Classic.'],ko:['나이트 시티의 아이콘','Classic 100승.'],zh:['夜之城标志','Classic模式100场胜利。'],ja:['ナイトシティの象徴','Classicで100勝。'], check:s=>(s.wins||0)>=100 },
+  { id:'cl_streak3', icon:'🔥', fr:['Sur une Lancée','Série de 3 jours.'], en:['On A Roll','3-day streak.'],es:['Con Impulso','Racha de 3 días.'],de:['Im Lauf','3-Tage-Serie.'],pt:['Em Alta','Sequência de 3 dias.'],it:['In Serie','Serie di 3 giorni.'],pl:['Na Fali','Seria 3 dni.'],ko:['상승세','3일 연속 기록.'],zh:['势头正猛','连续3天。'],ja:['波に乗って','3日連続。'], check:s=>(s.streak||0)>=3 || (s.bestStreak||0)>=3 },
+  { id:'cl_streak7', icon:'🔥', fr:['Habitué de Night City','Série de 7 jours.'], en:['Night City Regular','7-day streak.'],es:['Habitual de Night City','Racha de 7 días.'],de:['Night-City-Stammgast','7-Tage-Serie.'],pt:['Frequentador de Night City','Sequência de 7 dias.'],it:['Habitué di Night City','Serie di 7 giorni.'],pl:['Stały Bywalec Night City','Seria 7 dni.'],ko:['나이트 시티 단골','7일 연속 기록.'],zh:['夜之城常客','连续7天。'],ja:['ナイトシティの常連','7日連続。'], check:s=>(s.streak||0)>=7 || (s.bestStreak||0)>=7 },
+  { id:'cl_streak30', icon:'💀', fr:['Choom4Life','Série de 30 jours.'], en:['Choom4Life','30-day streak.'],es:['Choom4Life','Racha de 30 días.'],de:['Choom4Life','30-Tage-Serie.'],pt:['Choom4Life','Sequência de 30 dias.'],it:['Choom4Life','Serie di 30 giorni.'],pl:['Choom4Life','Seria 30 dni.'],ko:['Choom4Life','30일 연속 기록.'],zh:['Choom4Life','连续30天。'],ja:['Choom4Life','30日連続。'], check:s=>(s.streak||0)>=30 || (s.bestStreak||0)>=30 },
+  // --- Legend ---
+  { id:'lg_first', icon:'🪪', fr:['Identité Confirmée','Première victoire en Legend.'], en:['Identity Confirmed','First Legend win.'],es:['Identidad Confirmada','Primera victoria en Legend.'],de:['Identität Bestätigt','Erster Legend-Sieg.'],pt:['Identidade Confirmada','Primeira vitória em Legend.'],it:['Identità Confermata','Prima vittoria in Legend.'],pl:['Tożsamość Potwierdzona','Pierwsze zwycięstwo w Legend.'],ko:['신원 확인','Legend 첫 승리.'],zh:['身份确认','Legend模式首胜。'],ja:['アイデンティティ確認','Legend初勝利。'], check:s=>(s.legendWins||0)>=1 },
+  { id:'lg_10', icon:'🕵️', fr:['Sous Couverture','10 victoires en Legend.'], en:['Deep Cover','10 Legend wins.'],es:['Encubierto','10 victorias en Legend.'],de:['Tief Verdeckt','10 Legend-Siege.'],pt:['Disfarce Profundo','10 vitórias em Legend.'],it:['Sotto Copertura','10 vittorie in Legend.'],pl:['Głęboko Ukryty','10 zwycięstw w Legend.'],ko:['깊은 잠입','Legend 10승.'],zh:['深度潜伏','Legend模式10场胜利。'],ja:['潜入捜査','Legendで10勝。'], check:s=>(s.legendWins||0)>=10 },
+  { id:'lg_25', icon:'⚔️', fr:['Edgerunner','25 victoires en Legend.'], en:['Edgerunner','25 Legend wins.'],es:['Edgerunner','25 victorias en Legend.'],de:['Edgerunner','25 Legend-Siege.'],pt:['Edgerunner','25 vitórias em Legend.'],it:['Edgerunner','25 vittorie in Legend.'],pl:['Edgerunner','25 zwycięstw w Legend.'],ko:['엣지러너','Legend 25승.'],zh:['边缘行者','Legend模式25场胜利。'],ja:['エッジランナー','Legendで25勝。'], check:s=>(s.legendWins||0)>=25 },
+  { id:'lg_50', icon:'🌟', fr:['Légendaire','50 victoires en Legend.'], en:['Legendary','50 Legend wins.'],es:['Legendario','50 victorias en Legend.'],de:['Legendär','50 Legend-Siege.'],pt:['Lendário','50 vitórias em Legend.'],it:['Leggendario','50 vittorie in Legend.'],pl:['Legendarny','50 zwycięstw w Legend.'],ko:['전설적인','Legend 50승.'],zh:['传奇','Legend模式50场胜利。'],ja:['伝説的','Legendで50勝。'], check:s=>(s.legendWins||0)>=50 },
+  { id:'lg_played5', icon:'🎭', fr:['Pas de Faux Papiers','5 parties jouées en Legend.'], en:['No Fake ID','5 Legend games played.'],es:['Sin Documentos Falsos','5 partidas jugadas en Legend.'],de:['Keine Falsche ID','5 gespielte Legend-Runden.'],pt:['Sem Identidade Falsa','5 partidas jogadas em Legend.'],it:['Niente Documenti Falsi','5 partite giocate in Legend.'],pl:['Bez Fałszywego Dowodu','5 rozegranych gier w Legend.'],ko:['위조 신분증 없음','Legend 5회 플레이.'],zh:['无需假身份','Legend模式游玩5次。'],ja:['偽造IDなし','Legendを5回プレイ。'], check:s=>(s.legendPlayed||0)>=5 },
+  // --- Blitz ---
+  { id:'bz_first', icon:'⚡', fr:['Dégainé Rapide','Joue ta première partie Blitz.'], en:['Quickdraw','Play your first Blitz.'],es:['Desenfunde Rápido','Juega tu primera partida Blitz.'],de:['Schnellzieher','Spiele deine erste Blitz-Runde.'],pt:['Saque Rápido','Jogue sua primeira partida Blitz.'],it:['Estrazione Rapida','Gioca la tua prima partita Blitz.'],pl:['Szybki Strzelec','Zagraj swoją pierwszą rundę Blitz.'],ko:['빠른 발사','첫 Blitz 게임을 플레이하세요.'],zh:['快速出手','游玩你的第一场Blitz。'],ja:['クイックドロー','初めてのBlitzをプレイ。'], check:s=>(s.blitzSessions||0)>=1 },
+  { id:'bz_score5', icon:'🏃', fr:['Vitesse Démon','Score de 5+ en une partie Blitz.'], en:['Speed Demon','Score 5+ in one Blitz run.'],es:['Demonio de Velocidad','Puntuación de 5+ en una partida Blitz.'],de:['Speed Demon','5+ Punkte in einer Blitz-Runde.'],pt:['Demônio da Velocidade','Pontuação de 5+ em uma partida Blitz.'],it:['Demone della Velocità','Punteggio di 5+ in una partita Blitz.'],pl:['Demon Prędkości','Wynik 5+ w jednej rundzie Blitz.'],ko:['스피드 데몬','한 Blitz 게임에서 5점 이상.'],zh:['速度恶魔','单场Blitz得分5+。'],ja:['スピードデーモン','1回のBlitzで5点以上。'], check:s=>(s.blitzBestScore||0)>=5 },
+  { id:'bz_score10', icon:'💉', fr:["Montée d'Adrénaline",'Score de 10+ en une partie Blitz.'], en:['Adrenaline Rush','Score 10+ in one Blitz run.'],es:['Subidón de Adrenalina','Puntuación de 10+ en una partida Blitz.'],de:['Adrenalinschub','10+ Punkte in einer Blitz-Runde.'],pt:['Onda de Adrenalina','Pontuação de 10+ em uma partida Blitz.'],it:['Scarica di Adrenalina','Punteggio di 10+ in una partita Blitz.'],pl:['Zastrzyk Adrenaliny','Wynik 10+ w jednej rundzie Blitz.'],ko:['아드레날린 러시','한 Blitz 게임에서 10점 이상.'],zh:['肾上腺素飙升','单场Blitz得分10+。'],ja:['アドレナリンラッシュ','1回のBlitzで10点以上。'], check:s=>(s.blitzBestScore||0)>=10 },
+  { id:'bz_total50', icon:'🏁', fr:['Marathonien','50 cartes résolues au total en Blitz.'], en:['Marathon Runner','50 total cards solved in Blitz.'],es:['Maratonista','50 cartas resueltas en total en Blitz.'],de:['Marathonläufer','50 gelöste Karten insgesamt in Blitz.'],pt:['Maratonista','50 cartas resolvidas no total em Blitz.'],it:['Maratoneta','50 carte risolte in totale in Blitz.'],pl:['Maratończyk','50 rozwiązanych kart łącznie w Blitz.'],ko:['마라토너','Blitz 누적 50장 해결.'],zh:['马拉松选手','Blitz累计解出50张卡牌。'],ja:['マラソンランナー','Blitz累計50枚解決。'], check:s=>(s.blitzTotalSolved||0)>=50 },
+  { id:'bz_sessions20', icon:'🎖️', fr:['Vétéran du Blitz','20 sessions Blitz jouées.'], en:['Blitz Veteran','20 Blitz sessions played.'],es:['Veterano de Blitz','20 sesiones de Blitz jugadas.'],de:['Blitz-Veteran','20 gespielte Blitz-Sitzungen.'],pt:['Veterano do Blitz','20 sessões de Blitz jogadas.'],it:['Veterano di Blitz','20 sessioni di Blitz giocate.'],pl:['Weteran Blitz','20 rozegranych sesji Blitz.'],ko:['Blitz 베테랑','Blitz 20세션 플레이.'],zh:['Blitz老手','游玩20场Blitz。'],ja:['Blitzベテラン','Blitzを20セッションプレイ。'], check:s=>(s.blitzSessions||0)>=20 },
+  // --- Endless ---
+  { id:'en_10', icon:'📇', fr:['Ça Commence','10 cartes résolues en Endless.'], en:['Just Getting Started','Solve 10 Endless cards.'],es:['Empezando','10 cartas resueltas en Endless.'],de:['Erste Schritte','10 gelöste Karten in Endless.'],pt:['Começando','10 cartas resolvidas em Endless.'],it:['Si Comincia','10 carte risolte in Endless.'],pl:['Dopiero Zaczynasz','10 rozwiązanych kart w Endless.'],ko:['이제 시작','Endless 10장 해결.'],zh:['刚刚起步','Endless模式解出10张卡牌。'],ja:['始まったばかり','Endlessで10枚解決。'], check:s=>(s.endlessSolved||0)>=10 },
+  { id:'en_50', icon:'🗃️', fr:['Plongeur de Deck','50 cartes résolues en Endless.'], en:['Deck Diver','Solve 50 Endless cards.'],es:['Buceador de Mazo','50 cartas resueltas en Endless.'],de:['Deck-Taucher','50 gelöste Karten in Endless.'],pt:['Mergulhador de Deck','50 cartas resolvidas em Endless.'],it:['Esploratore di Mazzo','50 carte risolte in Endless.'],pl:['Nurek w Talii','50 rozwiązanych kart w Endless.'],ko:['덱 다이버','Endless 50장 해결.'],zh:['卡组潜水员','Endless模式解出50张卡牌。'],ja:['デッキダイバー','Endlessで50枚解決。'], check:s=>(s.endlessSolved||0)>=50 },
+  { id:'en_100', icon:'📚', fr:['Complétiste','100 cartes résolues en Endless.'], en:['Completionist','Solve 100 Endless cards.'],es:['Completista','100 cartas resueltas en Endless.'],de:['Komplettist','100 gelöste Karten in Endless.'],pt:['Completista','100 cartas resolvidas em Endless.'],it:['Completista','100 carte risolte in Endless.'],pl:['Kolekcjoner','100 rozwiązanych kart w Endless.'],ko:['컴플리셔니스트','Endless 100장 해결.'],zh:['完美主义者','Endless模式解出100张卡牌。'],ja:['コンプリーター','Endlessで100枚解決。'], check:s=>(s.endlessSolved||0)>=100 },
+  { id:'en_250', icon:'🧠', fr:['Encyclopédie Vivante','250 cartes résolues en Endless.'], en:['Encyclopedia','Solve 250 Endless cards.'],es:['Enciclopedia Viviente','250 cartas resueltas en Endless.'],de:['Lebende Enzyklopädie','250 gelöste Karten in Endless.'],pt:['Enciclopédia Viva','250 cartas resolvidas em Endless.'],it:['Enciclopedia Vivente','250 carte risolte in Endless.'],pl:['Żywa Encyklopedia','250 rozwiązanych kart w Endless.'],ko:['살아있는 백과사전','Endless 250장 해결.'],zh:['活百科全书','Endless模式解出250张卡牌。'],ja:['生きる百科事典','Endlessで250枚解決。'], check:s=>(s.endlessSolved||0)>=250 },
+  // --- Ability ---
+  { id:'ab_10', icon:'📜', fr:['Juriste de Comptoir','10 puzzles Ability résolus.'], en:['Rules Lawyer','Solve 10 Ability puzzles.'],es:['Abogado de Barra','10 puzzles de Ability resueltos.'],de:['Regelfuchs','10 gelöste Ability-Rätsel.'],pt:['Advogado de Boteco','10 puzzles de Ability resolvidos.'],it:['Azzeccagarbugli','10 puzzle di Ability risolti.'],pl:['Krzykacz Paragrafów','10 rozwiązanych zagadek Ability.'],ko:['조문 변호사','Ability 10문제 해결.'],zh:['条文律师','解出10道Ability谜题。'],ja:['ルール弁護士','Abilityを10問解決。'], check:s=>(s.abilitySolved||0)>=10 },
+  { id:'ab_25', icon:'🔍', fr:['Petites Lignes','25 puzzles Ability résolus.'], en:['Fine Print','Solve 25 Ability puzzles.'],es:['Letra Pequeña','25 puzzles de Ability resueltos.'],de:['Kleingedrucktes','25 gelöste Ability-Rätsel.'],pt:['Letras Miúdas','25 puzzles de Ability resolvidos.'],it:['Clausole Nascoste','25 puzzle di Ability risolti.'],pl:['Drobny Druk','25 rozwiązanych zagadek Ability.'],ko:['작은 글씨','Ability 25문제 해결.'],zh:['细则专家','解出25道Ability谜题。'],ja:['細則マニア','Abilityを25問解決。'], check:s=>(s.abilitySolved||0)>=25 },
+  { id:'ab_50', icon:'🖥️', fr:['Analyste NetWatch','50 puzzles Ability résolus.'], en:['NetWatch Analyst','Solve 50 Ability puzzles.'],es:['Analista de NetWatch','50 puzzles de Ability resueltos.'],de:['NetWatch-Analyst','50 gelöste Ability-Rätsel.'],pt:['Analista da NetWatch','50 puzzles de Ability resolvidos.'],it:['Analista NetWatch','50 puzzle di Ability risolti.'],pl:['Analityk NetWatch','50 rozwiązanych zagadek Ability.'],ko:['넷워치 분석가','Ability 50문제 해결.'],zh:['网络观察分析师','解出50道Ability谜题。'],ja:['ネットウォッチ分析官','Abilityを50問解決。'], check:s=>(s.abilitySolved||0)>=50 },
+  { id:'ab_100', icon:'🏆', fr:["As de l'Ability",'100 puzzles Ability résolus.'], en:['Ability Ace','Solve 100 Ability puzzles.'],es:['As de Ability','100 puzzles de Ability resueltos.'],de:['Ability-Ass','100 gelöste Ability-Rätsel.'],pt:['Ás do Ability','100 puzzles de Ability resolvidos.'],it:['Asso di Ability','100 puzzle di Ability risolti.'],pl:['As Ability','100 rozwiązanych zagadek Ability.'],ko:['Ability의 에이스','Ability 100문제 해결.'],zh:['Ability王牌','解出100道Ability谜题。'],ja:['Abilityのエース','Abilityを100問解決。'], check:s=>(s.abilitySolved||0)>=100 },
+  // --- Art ---
+  { id:'art_first', icon:'🖼️', fr:["Critique d'Art",'Première victoire en Art.'], en:['Art Critic','First Art win.'],es:['Crítico de Arte','Primera victoria en Art.'],de:['Kunstkritiker','Erster Art-Sieg.'],pt:['Crítico de Arte','Primeira vitória em Art.'],it:['Critico d\'Arte','Prima vittoria in Art.'],pl:['Krytyk Sztuki','Pierwsze zwycięstwo w Art.'],ko:['미술 평론가','Art 첫 승리.'],zh:['艺术评论家','Art模式首胜。'],ja:['アートクリティック','Art初勝利。'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=1 },
+  { id:'art_sharp', icon:'👁️', fr:["L'Œil Vif",'Devine une carte au 1er essai en Art.'], en:['Sharp Eye','Guess a card on your first attempt in Art.'],es:['Ojo Agudo','Adivina una carta en el primer intento en Art.'],de:['Scharfer Blick','Errate eine Karte im ersten Versuch in Art.'],pt:['Olho Afiado','Acerte uma carta na primeira tentativa em Art.'],it:['Occhio di Falco','Indovina una carta al primo tentativo in Art.'],pl:['Bystre Oko','Odgadnij kartę za pierwszym razem w Art.'],ko:['날카로운 눈','Art에서 첫 시도에 카드 맞히기.'],zh:['锐利之眼','在Art模式中第一次尝试就猜中卡牌。'],ja:['鋭い眼','Artで1回目の試行で正解。'], check:s=>(s.lastArtReward||0)===125 },
+  { id:'art_10', icon:'🎨', fr:['Habitué de la Galerie','10 victoires en Art.'], en:['Gallery Regular','10 Art wins.'],es:['Visitante Habitual','10 victorias en Art.'],de:['Galerie-Stammgast','10 Art-Siege.'],pt:['Frequentador da Galeria','10 vitórias em Art.'],it:['Habitué della Galleria','10 vittorie in Art.'],pl:['Stały Bywalec Galerii','10 zwycięstw w Art.'],ko:['갤러리 단골','Art 10승.'],zh:['画廊常客','Art模式10场胜利。'],ja:['ギャラリーの常連','Artで10勝。'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=10 },
+  { id:'art_25', icon:'🖌️', fr:['Conservateur','25 victoires en Art.'], en:['Master Curator','25 Art wins.'],es:['Maestro Curador','25 victorias en Art.'],de:['Meisterkurator','25 Art-Siege.'],pt:['Curador Mestre','25 vitórias em Art.'],it:['Curatore Esperto','25 vittorie in Art.'],pl:['Mistrz Kurator','25 zwycięstw w Art.'],ko:['마스터 큐레이터','Art 25승.'],zh:['策展大师','Art模式25场胜利。'],ja:['マスターキュレーター','Artで25勝。'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=25 },
+  { id:'art_noloss10', icon:'😎', fr:['Ne Cligne Jamais','10 parties Art sans aucune défaite.'], en:['Never Blink','10 Art games played without a single loss.'],es:['Nunca Parpadea','10 partidas de Art sin ninguna derrota.'],de:['Niemals Blinzeln','10 Art-Runden ohne eine einzige Niederlage.'],pt:['Nunca Pisca','10 partidas de Art sem nenhuma derrota.'],it:['Occhio di Ghiaccio','10 partite di Art senza nemmeno una sconfitta.'],pl:['Nigdy Nie Mruga','10 gier w Art bez ani jednej porażki.'],ko:['절대 눈 깜빡이지 않음','Art 10게임 무패.'],zh:['从不眨眼','10场Art无一失败。'],ja:['決して瞬きしない','Artを10回無敗でプレイ。'], check:s=>(s.artPlayed||0)>=10 && (s.artLostCount||0)===0 },
+  // --- Alt Art (remplace Chrome Check) ---
+  { id:'alt_first', icon:'🎭', fr:["Première Variante", "Joue ta première partie Alt Art."], en:["First Variant", "Play your first Alt Art."], es:["Primera Variante", "Juega tu primera partida de Alt Art."], de:["Erste Variante", "Spiele deine erste Alt-Art-Runde."], pt:["Primeira Variante", "Jogue sua primeira partida de Alt Art."], it:["Prima Variante", "Gioca la tua prima partita di Alt Art."], pl:["Pierwszy Wariant", "Zagraj swoją pierwszą rundę Alt Art."], ko:["첫 번째 변형", "첫 Alt Art 게임을 플레이하세요."], zh:["首个变体", "游玩你的第一场Alt Art。"], ja:["最初のバリアント", "初めてのAlt Artをプレイ。"], check:s=>(((s.altArt&&s.altArt.played)||0)>=1) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeSessions||0)>=1)(s)) },
+  { id:'alt_win1', icon:'🖼️', fr:["Œil de Collectionneur", "Première victoire en Alt Art."], en:["Collector's Eye", "Win your first Alt Art."], es:["Ojo de Coleccionista", "Primera victoria en Alt Art."], de:["Sammlerblick", "Erster Sieg in Alt Art."], pt:["Olho de Colecionador", "Primeira vitória em Alt Art."], it:["Occhio da Collezionista", "Prima vittoria in Alt Art."], pl:["Oko Kolekcjonera", "Pierwsze zwycięstwo w Alt Art."], ko:["수집가의 눈", "Alt Art 첫 승리."], zh:["收藏家之眼", "Alt Art 首次获胜。"], ja:["コレクターの目", "Alt Art 初勝利。"], check:s=>(((s.altArt&&s.altArt.solved)||0)>=1) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeBestScore||0)>=10)(s)) },
+  { id:'alt_sharp', icon:'👁️', fr:["Vision Alternative", "Devine une illustration alternative au 1er essai."], en:["Alternate Vision", "Guess an alternate artwork on the first try."], es:["Visión Alternativa", "Adivina una ilustración alternativa al primer intento."], de:["Alternative Sicht", "Errate eine alternative Illustration im ersten Versuch."], pt:["Visão Alternativa", "Adivinhe uma ilustração alternativa na primeira tentativa."], it:["Visione Alternativa", "Indovina un'illustrazione alternativa al primo tentativo."], pl:["Alternatywne Spojrzenie", "Odgadnij alternatywną ilustrację za pierwszą próbą."], ko:["대체 시야", "첫 시도에 대체 일러스트를 맞히세요."], zh:["另类视觉", "第一次尝试就猜中一张备用插画。"], ja:["もう一つの視点", "1回目の試行で別イラストを当てる。"], check:s=>(((s.altArt&&s.altArt.firstTry)||0)>=1) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeBestScore||0)>=20)(s)) },
+  { id:'alt_10', icon:'💯', fr:["Chasseur de Variantes", "10 victoires en Alt Art."], en:["Variant Hunter", "10 Alt Art wins."], es:["Cazador de Variantes", "10 victorias en Alt Art."], de:["Variantenjäger", "10 Siege in Alt Art."], pt:["Caçador de Variantes", "10 vitórias em Alt Art."], it:["Cacciatore di Varianti", "10 vittorie in Alt Art."], pl:["Łowca Wariantów", "10 zwycięstw w Alt Art."], ko:["변형 사냥꾼", "Alt Art 10승."], zh:["变体猎人", "Alt Art 10 次获胜。"], ja:["バリアントハンター", "Alt Art 10勝。"], check:s=>(((s.altArt&&s.altArt.solved)||0)>=10) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeTotalCorrect||0)>=100)(s)) },
+  { id:'alt_collect10', icon:'🗂️', fr:["Petit Album", "Débloque 10 alt arts dans la Collection."], en:["Small Album", "Unlock 10 alt arts in the Collection."], es:["Pequeño Álbum", "Desbloquea 10 alt arts en la Colección."], de:["Kleines Album", "Schalte 10 Alt Arts in der Sammlung frei."], pt:["Pequeno Álbum", "Desbloqueie 10 alt arts na Coleção."], it:["Piccolo Album", "Sblocca 10 alt art nella Collezione."], pl:["Mały Album", "Odblokuj 10 alt artów w Kolekcji."], ko:["작은 앨범", "컬렉션에서 Alt Art 10개를 잠금 해제하세요."], zh:["小相册", "在收藏中解锁10张Alt Art。"], ja:["小さなアルバム", "コレクションでAlt Artを10枚解放。"], check:s=>((((s.altArt&&s.altArt.collection)||[]).length)>=10) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeSessions||0)>=20)(s)) },
+  // --- Cards Link ---
+  { id:'cd_first', icon:'🔗', fr:['Reconnaissance de Motif','Première victoire en Cards Link.'], en:['Pattern Recognition','First Cards Link win.'],es:['Reconocimiento de Patrones','Primera victoria en Cards Link.'],de:['Mustererkennung','Erster Cards-Link-Sieg.'],pt:['Reconhecimento de Padrões','Primeira vitória em Cards Link.'],it:['Riconoscimento di Schemi','Prima vittoria in Cards Link.'],pl:['Rozpoznawanie Wzorców','Pierwsze zwycięstwo w Cards Link.'],ko:['패턴 인식','Cards Link 첫 승리.'],zh:['模式识别','Cards Link首胜。'],ja:['パターン認識','Cards Link初勝利。'], check:s=>(s.cardsLinkWins||0)>=1 },
+  { id:'cd_flawless', icon:'✨', fr:['Sans Faute','Gagne Cards Link sans aucune erreur.'], en:['Flawless','Win Cards Link with 0 mistakes.'],es:['Sin Fallos','Gana Cards Link sin ningún error.'],de:['Fehlerfrei','Gewinne Cards Link ohne Fehler.'],pt:['Impecável','Vença Cards Link sem nenhum erro.'],it:['Impeccabile','Vinci Cards Link senza errori.'],pl:['Bez Skazy','Wygraj Cards Link bez błędów.'],ko:['완벽 승리','실수 없이 Cards Link 승리.'],zh:['完美无缺','零失误赢得Cards Link。'],ja:['ノーミス','ミスなしでCards Linkに勝利。'], check:s=>s.cardsLinkWon===true && (s.lastCardsLinkMistakes||0)===0 },
+  { id:'cd_10', icon:'🧩', fr:['Maître des Connexions','10 victoires en Cards Link.'], en:['Connections Master','10 Cards Link wins.'],es:['Maestro de Conexiones','10 victorias en Cards Link.'],de:['Meister der Verbindungen','10 Cards-Link-Siege.'],pt:['Mestre das Conexões','10 vitórias em Cards Link.'],it:['Maestro delle Connessioni','10 vittorie in Cards Link.'],pl:['Mistrz Połączeń','10 zwycięstw w Cards Link.'],ko:['커넥션 마스터','Cards Link 10승.'],zh:['连接大师','Cards Link10场胜利。'],ja:['コネクションマスター','Cards Linkで10勝。'], check:s=>(s.cardsLinkWins||0)>=10 },
+  { id:'cd_25', icon:'📐', fr:['Théorie des Catégories','25 victoires en Cards Link.'], en:['Category Theory','25 Cards Link wins.'],es:['Teoría de Categorías','25 victorias en Cards Link.'],de:['Kategorientheorie','25 Cards-Link-Siege.'],pt:['Teoria das Categorias','25 vitórias em Cards Link.'],it:['Teoria delle Categorie','25 vittorie in Cards Link.'],pl:['Teoria Kategorii','25 zwycięstw w Cards Link.'],ko:['범주론','Cards Link 25승.'],zh:['范畴论','Cards Link25场胜利。'],ja:['圏論','Cards Linkで25勝。'], check:s=>(s.cardsLinkWins||0)>=25 },
+  { id:'cd_50', icon:'🧠', fr:['Génie de la Grille','50 victoires en Cards Link.'], en:['Grid Genius','50 Cards Link wins.'],es:['Genio de la Cuadrícula','50 victorias en Cards Link.'],de:['Rastergenie','50 Cards-Link-Siege.'],pt:['Gênio da Grade','50 vitórias em Cards Link.'],it:['Genio della Griglia','50 vittorie in Cards Link.'],pl:['Geniusz Siatki','50 zwycięstw w Cards Link.'],ko:['그리드의 천재','Cards Link 50승.'],zh:['网格天才','Cards Link50场胜利。'],ja:['グリッドの天才','Cards Linkで50勝。'], check:s=>(s.cardsLinkWins||0)>=50 },
+  // --- Sequence ---
+  { id:'sq_first', icon:'🔢', fr:["Dans l'Ordre",'Première victoire en Sequence.'], en:['In Order','First Sequence win.'],es:['En Orden','Primera victoria en Sequence.'],de:['In Ordnung','Erster Sequence-Sieg.'],pt:['Em Ordem','Primeira vitória em Sequence.'],it:['In Ordine','Prima vittoria in Sequence.'],pl:['W Porządku','Pierwsze zwycięstwo w Sequence.'],ko:['순서대로','Sequence 첫 승리.'],zh:['井然有序','Sequence首胜。'],ja:['整然と','Sequence初勝利。'], check:s=>(s.sequenceWins||0)>=1 },
+  { id:'sq_10', icon:'📶', fr:['Bien Classé','10 victoires en Sequence.'], en:['Sorted','10 Sequence wins.'],es:['Bien Ordenado','10 victorias en Sequence.'],de:['Sortiert','10 Sequence-Siege.'],pt:['Bem Ordenado','10 vitórias em Sequence.'],it:['Ben Ordinato','10 vittorie in Sequence.'],pl:['Posortowany','10 zwycięstw w Sequence.'],ko:['정렬 완료','Sequence 10승.'],zh:['排序达人','Sequence10场胜利。'],ja:['ソート完了','Sequenceで10勝。'], check:s=>(s.sequenceWins||0)>=10 },
+  { id:'sq_25', icon:'🎯', fr:['Virtuose de la Séquence','25 victoires en Sequence.'], en:['Sequence Savant','25 Sequence wins.'],es:['Virtuoso de Secuencias','25 victorias en Sequence.'],de:['Sequenz-Virtuose','25 Sequence-Siege.'],pt:['Virtuose de Sequência','25 vitórias em Sequence.'],it:['Virtuoso della Sequenza','25 vittorie in Sequence.'],pl:['Wirtuoz Sekwencji','25 zwycięstw w Sequence.'],ko:['시퀀스의 대가','Sequence 25승.'],zh:['序列鬼才','Sequence25场胜利。'],ja:['シーケンスの達人','Sequenceで25勝。'], check:s=>(s.sequenceWins||0)>=25 },
+  // --- Eddies / Méta ---
+  { id:'ed_first', icon:'€$', fr:['Premiers Eddies','Gagne tes premiers eddies.'], en:['First Eddies','Earn your first eddies.'],es:['Primeros Eddies','Gana tus primeros eddies.'],de:['Erste Eddies','Verdiene deine ersten Eddies.'],pt:['Primeiros Eddies','Ganhe seus primeiros eddies.'],it:['Primi Eddies','Guadagna i tuoi primi eddies.'],pl:['Pierwsze Eddies','Zdobądź swoje pierwsze eddies.'],ko:['첫 에디','첫 eddies를 획득하세요.'],zh:['初获Eddies','赚取你的第一笔eddies。'],ja:['初めてのエディ','初めてeddiesを獲得。'], check:s=>eddiesTotal(s)>=1 },
+  { id:'ed_1000', icon:'💰', fr:['Portefeuille Corpo','1 000 eddies gagnés au total.'], en:['Corpo Wallet','1,000 total eddies earned.'],es:['Cartera Corpo','1.000 eddies ganados en total.'],de:['Corpo-Geldbeutel','1.000 Eddies insgesamt verdient.'],pt:['Carteira Corpo','1.000 eddies ganhos no total.'],it:['Portafoglio Corpo','1.000 eddies guadagnati in totale.'],pl:['Portfel Korpo','1000 eddies zdobytych łącznie.'],ko:['코포 지갑','누적 1,000 eddies 획득.'],zh:['公司钱包','累计赚取1000 eddies。'],ja:['コーポの財布','累計1,000eddies獲得。'], check:s=>eddiesTotal(s)>=1000 },
+  { id:'ed_5000', icon:'💎', fr:['Riche des Rues','5 000 eddies gagnés au total.'], en:['Street Rich','5,000 total eddies earned.'],es:['Rico de la Calle','5.000 eddies ganados en total.'],de:['Straßenreich','5.000 Eddies insgesamt verdient.'],pt:['Rico das Ruas','5.000 eddies ganhos no total.'],it:['Ricco di Strada','5.000 eddies guadagnati in totale.'],pl:['Bogacz z Ulicy','5000 eddies zdobytych łącznie.'],ko:['거리의 부자','누적 5,000 eddies 획득.'],zh:['街头富豪','累计赚取5000 eddies。'],ja:['ストリートの富豪','累計5,000eddies獲得。'], check:s=>eddiesTotal(s)>=5000 },
+  { id:'ed_10000', icon:'👑', fr:['Baron de Night City','10 000 eddies gagnés au total.'], en:['Night City Baron','10,000 total eddies earned.'],es:['Barón de Night City','10.000 eddies ganados en total.'],de:['Night-City-Baron','10.000 Eddies insgesamt verdient.'],pt:['Barão de Night City','10.000 eddies ganhos no total.'],it:['Barone di Night City','10.000 eddies guadagnati in totale.'],pl:['Baron Night City','10 000 eddies zdobytych łącznie.'],ko:['나이트 시티의 남작','누적 10,000 eddies 획득.'],zh:['夜之城男爵','累计赚取10000 eddies。'],ja:['ナイトシティの男爵','累計10,000eddies獲得。'], check:s=>eddiesTotal(s)>=10000 },
+  { id:'meta_jack', icon:'🃏', fr:['Bon à Tout Faire','Gagne au moins une fois à chaque mode de jeu.'], en:['Jack of All Trades','Win at least once in every game mode.'],es:['Todoterreno','Gana al menos una vez en cada modo de juego.'],de:['Alleskönner','Gewinne mindestens einmal in jedem Spielmodus.'],pt:['Faz-Tudo','Vença ao menos uma vez em cada modo de jogo.'],it:['Tuttofare','Vinci almeno una volta in ogni modalità.'],pl:['Wszechstronny','Wygraj przynajmniej raz w każdym trybie gry.'],ko:['만능 재주꾼','모든 게임 모드에서 최소 1승.'],zh:['全能选手','在每个游戏模式中至少获胜一次。'],ja:['何でも屋','全モードで少なくとも1勝。'],
+    check:s=>(s.wins||0)>=1 && (s.legendWins||0)>=1 && (s.blitzSessions||0)>=1 && (s.endlessSolved||0)>=1 && (s.abilitySolved||0)>=1 && ((s.artPlayed||0)-(s.artLostCount||0))>=1 && (((s.altArt&&s.altArt.solved)||0)>=1 || (s.chromeTotalCorrect||0)>=1) && (s.cardsLinkWins||0)>=1 && (s.sequenceWins||0)>=1 },
+  { id:'meta_publish', icon:'📡', fr:['Membre de la Communauté','Publie tes stats sur le classement communautaire.'], en:['Community Member','Publish your stats to the Community leaderboard.'],es:['Miembro de la Comunidad','Publica tus estadísticas en la clasificación comunitaria.'],de:['Community-Mitglied','Veröffentliche deine Statistiken in der Community-Bestenliste.'],pt:['Membro da Comunidade','Publique suas estatísticas no ranking da comunidade.'],it:['Membro della Community','Pubblica le tue statistiche nella classifica della community.'],pl:['Członek Społeczności','Opublikuj swoje statystyki w rankingu społeczności.'],ko:['커뮤니티 멤버','커뮤니티 순위표에 통계를 게시하세요.'],zh:['社区成员','将你的数据发布到社区排行榜。'],ja:['コミュニティメンバー','コミュニティランキングに統計を公開。'], check:s=>s.hasPublishedCommunity===true },
+  { id:'meta_regular', icon:'📅', fr:['Habitué de Choomdle','5 parties Classic jouées.'], en:['Choomdle Regular','5 Classic games played.'],es:['Habitual de Choomdle','5 partidas de Classic jugadas.'],de:['Choomdle-Stammgast','5 gespielte Classic-Runden.'],pt:['Frequentador do Choomdle','5 partidas de Classic jogadas.'],it:['Habitué di Choomdle','5 partite Classic giocate.'],pl:['Stały Bywalec Choomdle','5 rozegranych gier Classic.'],ko:['Choomdle 단골','Classic 5회 플레이.'],zh:['Choomdle常客','游玩5场Classic。'],ja:['Choomdleの常連','Classicを5回プレイ。'], check:s=>(s.gamesPlayed||0)>=5 },
+  // ===================================================================
+  // ---- Lot 2 : 50 succès supplémentaires ----
+  // ===================================================================
+  // --- Classic ---
+  { id:'cl_200', icon:'🏚️', fr:['Vétéran des Rues','200 victoires en Classic.'], en:['Veteran of the Streets','200 Classic wins.'],es:['Veterano de las Calles','200 victorias en Classic.'],de:['Straßenveteran','200 Classic-Siege.'],pt:['Veterano das Ruas','200 vitórias em Classic.'],it:['Veterano di Strada','200 vittorie in Classic.'],pl:['Weteran Ulic','200 zwycięstw w Classic.'],ko:['거리의 베테랑','Classic 200승.'],zh:['街头老手','Classic模式200场胜利。'],ja:['ストリートの古参','Classicで200勝。'], check:s=>(s.wins||0)>=200 },
+  { id:'cl_streak100', icon:'💯', fr:['Série Centenaire','Série de 100 jours.'], en:['Century Streak','100-day streak.'],es:['Racha Centenaria','Racha de 100 días.'],de:['Hundert-Tage-Serie','100-Tage-Serie.'],pt:['Sequência Centenária','Sequência de 100 dias.'],it:['Serie Centenaria','Serie di 100 giorni.'],pl:['Stuletnia Seria','Seria 100 dni.'],ko:['100일의 기록','100일 연속 기록.'],zh:['百日连胜','连续100天。'],ja:['100日連続','100日連続。'], check:s=>(s.streak||0)>=100 || (s.bestStreak||0)>=100 },
+  { id:'cl_streak180', icon:'🌗', fr:['Demi-Année Héroïque','Série de 180 jours.'], en:['Half-Year Hero','180-day streak.'],es:['Héroe del Semestre','Racha de 180 días.'],de:['Halbjahres-Held','180-Tage-Serie.'],pt:['Herói do Semestre','Sequência de 180 dias.'],it:['Eroe del Semestre','Serie di 180 giorni.'],pl:['Bohater Półrocza','Seria 180 dni.'],ko:['반년의 영웅','180일 연속 기록.'],zh:['半年英雄','连续180天。'],ja:['半年のヒーロー','180日連続。'], check:s=>(s.bestStreak||0)>=180 },
+  { id:'cl_clutch', icon:'😅', fr:['Sauvé de Justesse','Une victoire Classic en 8 essais ou plus.'], en:['Clutch Win','A Classic win in 8+ guesses.'],es:['Victoria en el Límite','Una victoria en Classic con 8+ intentos.'],de:['Knapper Sieg','Ein Classic-Sieg mit 8+ Versuchen.'],pt:['Vitória de Última Hora','Uma vitória em Classic com 8+ tentativas.'],it:['Vittoria all\'Ultimo','Una vittoria in Classic con 8+ tentativi.'],pl:['Zwycięstwo w Ostatniej Chwili','Zwycięstwo w Classic w 8+ próbach.'],ko:['아슬아슬한 승리','8회 이상 시도 끝에 Classic 승리.'],zh:['惊险取胜','用8次以上尝试赢得Classic。'],ja:['ギリギリの勝利','8回以上の推測でClassicに勝利。'], check:s=>{ const d=s.guessDistribution||{}; return Object.keys(d).some(k=>Number(k)>=8 && d[k]>0); } },
+  { id:'cl_perfectionist', icon:'🎯', fr:['Perfectionniste','5 victoires Classic au 1er essai.'], en:['Perfectionist','5 Classic wins on the first guess.'],es:['Perfeccionista','5 victorias en Classic al primer intento.'],de:['Perfektionist','5 Classic-Siege im ersten Versuch.'],pt:['Perfeccionista','5 vitórias em Classic na primeira tentativa.'],it:['Perfezionista','5 vittorie in Classic al primo tentativo.'],pl:['Perfekcjonista','5 zwycięstw w Classic za pierwszym razem.'],ko:['완벽주의자','Classic 첫 시도 승리 5회.'],zh:['完美主义者','5次Classic首次尝试即获胜。'],ja:['完璧主義者','Classicで1回目の推測での勝利5回。'], check:s=>((s.guessDistribution||{})[1]||0)>=5 },
+  // --- Legend ---
+  { id:'lg_100', icon:'🥷', fr:['Maître du Déguisement','100 victoires en Legend.'], en:['Master of Disguise','100 Legend wins.'],es:['Maestro del Disfraz','100 victorias en Legend.'],de:['Meister der Verkleidung','100 Legend-Siege.'],pt:['Mestre do Disfarce','100 vitórias em Legend.'],it:['Maestro del Travestimento','100 vittorie in Legend.'],pl:['Mistrz Przebrania','100 zwycięstw w Legend.'],ko:['위장의 달인','Legend 100승.'],zh:['伪装大师','Legend模式100场胜利。'],ja:['変装の達人','Legendで100勝。'], check:s=>(s.legendWins||0)>=100 },
+  { id:'lg_winrate90', icon:'🛡️', fr:['Couverture Parfaite','90%+ de victoires en Legend (20 parties min).'], en:['Flawless Cover','90%+ Legend win rate (20+ played).'],es:['Cobertura Perfecta','90%+ de victorias en Legend (mín. 20 partidas).'],de:['Perfekte Tarnung','90%+ Legend-Gewinnrate (min. 20 gespielt).'],pt:['Disfarce Perfeito','90%+ de vitórias em Legend (mín. 20 partidas).'],it:['Copertura Perfetta','90%+ di vittorie in Legend (min. 20 partite).'],pl:['Idealna Przykrywka','90%+ wygranych w Legend (min. 20 gier).'],ko:['완벽한 위장','Legend 승률 90%+ (20회 이상 플레이).'],zh:['完美掩护','Legend胜率90%以上（至少20局）。'],ja:['完璧なカバー','Legend勝率90%以上（20回以上プレイ）。'], check:s=>(s.legendPlayed||0)>=20 && (s.legendWins||0)/(s.legendPlayed||1)>=0.9 },
+  { id:'lg_75', icon:'🎭', fr:['Habitué Confirmé','75 victoires en Legend.'], en:['Seasoned Runner','75 Legend wins.'],es:['Veterano Consumado','75 victorias en Legend.'],de:['Erfahrener Läufer','75 Legend-Siege.'],pt:['Veterano Consumado','75 vitórias em Legend.'],it:['Veterano Navigato','75 vittorie in Legend.'],pl:['Doświadczony Weteran','75 zwycięstw w Legend.'],ko:['노련한 러너','Legend 75승.'],zh:['老练行者','Legend模式75场胜利。'],ja:['熟練ランナー','Legendで75勝。'], check:s=>(s.legendWins||0)>=75 },
+  { id:'lg_played100', icon:'📇', fr:['Vieux de la Vieille','100 parties jouées en Legend.'], en:['Old Hand','100 Legend games played.'],es:['Viejo Conocido','100 partidas jugadas en Legend.'],de:['Alter Hase','100 gespielte Legend-Runden.'],pt:['Veterano de Longa Data','100 partidas jogadas em Legend.'],it:['Vecchia Volpe','100 partite giocate in Legend.'],pl:['Stary Wyjadacz','100 rozegranych gier w Legend.'],ko:['노련한 손','Legend 100회 플레이.'],zh:['老手','游玩100场Legend。'],ja:['ベテラン','Legendを100回プレイ。'], check:s=>(s.legendPlayed||0)>=100 },
+  { id:'lg_played50', icon:'🗂️', fr:['Coureur Vétéran','50 parties jouées en Legend.'], en:['Veteran Runner','50 Legend games played.'],es:['Corredor Veterano','50 partidas jugadas en Legend.'],de:['Veteranenläufer','50 gespielte Legend-Runden.'],pt:['Corredor Veterano','50 partidas jogadas em Legend.'],it:['Corridore Veterano','50 partite giocate in Legend.'],pl:['Weteran Biegacz','50 rozegranych gier w Legend.'],ko:['베테랑 러너','Legend 50회 플레이.'],zh:['资深行者','游玩50场Legend。'],ja:['ベテランランナー','Legendを50回プレイ。'], check:s=>(s.legendPlayed||0)>=50 },
+  // --- Blitz ---
+  { id:'bz_score15', icon:'🚀', fr:['Surrégime','Score de 15+ en une partie Blitz.'], en:['Overdrive','Score 15+ in one Blitz run.'],es:['Sobrealimentado','Puntuación de 15+ en una partida Blitz.'],de:['Overdrive','15+ Punkte in einer Blitz-Runde.'],pt:['Superalimentado','Pontuação de 15+ em uma partida Blitz.'],it:['Overdrive','Punteggio di 15+ in una partita Blitz.'],pl:['Nadbieg','Wynik 15+ w jednej rundzie Blitz.'],ko:['오버드라이브','한 Blitz 게임에서 15점 이상.'],zh:['超速运转','单场Blitz得分15+。'],ja:['オーバードライブ','1回のBlitzで15点以上。'], check:s=>(s.blitzBestScore||0)>=15 },
+  { id:'bz_score20', icon:'🛑', fr:['Imparable','Score de 20+ en une partie Blitz.'], en:['Unstoppable','Score 20+ in one Blitz run.'],es:['Imparable','Puntuación de 20+ en una partida Blitz.'],de:['Unaufhaltsam','20+ Punkte in einer Blitz-Runde.'],pt:['Imparável','Pontuação de 20+ em uma partida Blitz.'],it:['Inarrestabile','Punteggio di 20+ in una partita Blitz.'],pl:['Niepowstrzymany','Wynik 20+ w jednej rundzie Blitz.'],ko:['멈출 수 없는','한 Blitz 게임에서 20점 이상.'],zh:['势不可挡','单场Blitz得分20+。'],ja:['止められない','1回のBlitzで20点以上。'], check:s=>(s.blitzBestScore||0)>=20 },
+  { id:'bz_sessions50', icon:'🏋️', fr:['Maître du Blitz','50 sessions Blitz jouées.'], en:['Blitz Master','50 Blitz sessions played.'],es:['Maestro de Blitz','50 sesiones de Blitz jugadas.'],de:['Blitz-Meister','50 gespielte Blitz-Sitzungen.'],pt:['Mestre do Blitz','50 sessões de Blitz jogadas.'],it:['Maestro di Blitz','50 sessioni di Blitz giocate.'],pl:['Mistrz Blitz','50 rozegranych sesji Blitz.'],ko:['Blitz 마스터','Blitz 50세션 플레이.'],zh:['Blitz大师','游玩50场Blitz。'],ja:['Blitzマスター','Blitzを50セッションプレイ。'], check:s=>(s.blitzSessions||0)>=50 },
+  { id:'bz_total100', icon:'💯', fr:['Centurion du Blitz','100 cartes résolues au total en Blitz.'], en:['Century of Cards','100 total cards solved in Blitz.'],es:['Centurión de Blitz','100 cartas resueltas en total en Blitz.'],de:['Blitz-Centurio','100 gelöste Karten insgesamt in Blitz.'],pt:['Centurião do Blitz','100 cartas resolvidas no total em Blitz.'],it:['Centurione di Blitz','100 carte risolte in totale in Blitz.'],pl:['Centurion Blitz','100 rozwiązanych kart łącznie w Blitz.'],ko:['Blitz의 백부장','Blitz 누적 100장 해결.'],zh:['Blitz百夫长','Blitz累计解出100张卡牌。'],ja:['Blitzのセンチュリオン','Blitz累計100枚解決。'], check:s=>(s.blitzTotalSolved||0)>=100 },
+  { id:'bz_total500', icon:'🏆', fr:['Club des 500','500 cartes résolues au total en Blitz.'], en:['Half-K Club','500 total cards solved in Blitz.'],es:['Club de los 500','500 cartas resueltas en total en Blitz.'],de:['500er-Club','500 gelöste Karten insgesamt in Blitz.'],pt:['Clube dos 500','500 cartas resolvidas no total em Blitz.'],it:['Club dei 500','500 carte risolte in totale in Blitz.'],pl:['Klub 500','500 rozwiązanych kart łącznie w Blitz.'],ko:['500 클럽','Blitz 누적 500장 해결.'],zh:['500人俱乐部','Blitz累计解出500张卡牌。'],ja:['500クラブ','Blitz累計500枚解決。'], check:s=>(s.blitzTotalSolved||0)>=500 },
+  // --- Endless ---
+  { id:'en_500', icon:'📦', fr:['Demi-Millier','500 cartes résolues en Endless.'], en:['Half a Thousand','500 Endless solved.'],es:['Medio Millar','500 cartas resueltas en Endless.'],de:['Fünfhundert','500 gelöste Karten in Endless.'],pt:['Meio Milhar','500 cartas resolvidas em Endless.'],it:['Mezzo Migliaio','500 carte risolte in Endless.'],pl:['Pół Tysiąca','500 rozwiązanych kart w Endless.'],ko:['오백 장','Endless 500장 해결.'],zh:['五百之数','Endless模式解出500张卡牌。'],ja:['500枚達成','Endlessで500枚解決。'], check:s=>(s.endlessSolved||0)>=500 },
+  { id:'en_750', icon:'🧙', fr:['Sage des Cartes','750 cartes résolues en Endless.'], en:['Card Sage','750 Endless solved.'],es:['Sabio de las Cartas','750 cartas resueltas en Endless.'],de:['Kartenweiser','750 gelöste Karten in Endless.'],pt:['Sábio das Cartas','750 cartas resolvidas em Endless.'],it:['Saggio delle Carte','750 carte risolte in Endless.'],pl:['Mędrzec Kart','750 rozwiązanych kart w Endless.'],ko:['카드의 현자','Endless 750장 해결.'],zh:['卡牌贤者','Endless模式解出750张卡牌。'],ja:['カードの賢者','Endlessで750枚解決。'], check:s=>(s.endlessSolved||0)>=750 },
+  { id:'en_1000', icon:'🗄️', fr:['Base de Données Vivante','1000 cartes résolues en Endless.'], en:['Living Database','1000 Endless solved.'],es:['Base de Datos Viviente','1000 cartas resueltas en Endless.'],de:['Lebende Datenbank','1000 gelöste Karten in Endless.'],pt:['Banco de Dados Vivo','1000 cartas resolvidas em Endless.'],it:['Database Vivente','1000 carte risolte in Endless.'],pl:['Żywa Baza Danych','1000 rozwiązanych kart w Endless.'],ko:['살아있는 데이터베이스','Endless 1000장 해결.'],zh:['活体数据库','Endless模式解出1000张卡牌。'],ja:['生きるデータベース','Endlessで1000枚解決。'], check:s=>(s.endlessSolved||0)>=1000 },
+  { id:'en_2000', icon:'♾️', fr:['Dévotion Sans Fin','2000 cartes résolues en Endless.'], en:['Endless Devotion','2000 Endless solved.'],es:['Devoción Infinita','2000 cartas resueltas en Endless.'],de:['Endlose Hingabe','2000 gelöste Karten in Endless.'],pt:['Devoção Infinita','2000 cartas resolvidas em Endless.'],it:['Devozione Infinita','2000 carte risolte in Endless.'],pl:['Niekończące się Oddanie','2000 rozwiązanych kart w Endless.'],ko:['끝없는 헌신','Endless 2000장 해결.'],zh:['无尽的奉献','Endless模式解出2000张卡牌。'],ja:['終わりなき献身','Endlessで2000枚解決。'], check:s=>(s.endlessSolved||0)>=2000 },
+  // --- Ability ---
+  { id:'ab_150', icon:'⚖️', fr:['Avocat de Contrat','150 puzzles Ability résolus.'], en:['Contract Lawyer','150 Ability puzzles solved.'],es:['Abogado de Contratos','150 puzzles de Ability resueltos.'],de:['Vertragsanwalt','150 gelöste Ability-Rätsel.'],pt:['Advogado de Contratos','150 puzzles de Ability resolvidos.'],it:['Avvocato dei Contratti','150 puzzle di Ability risolti.'],pl:['Prawnik od Umów','150 rozwiązanych zagadek Ability.'],ko:['계약 변호사','Ability 150문제 해결.'],zh:['合同律师','解出150道Ability谜题。'],ja:['契約弁護士','Abilityを150問解決。'], check:s=>(s.abilitySolved||0)>=150 },
+  { id:'ab_200', icon:'🔓', fr:['Casseur de Code','200 puzzles Ability résolus.'], en:['Codebreaker','200 Ability puzzles solved.'],es:['Descifrador de Código','200 puzzles de Ability resueltos.'],de:['Codeknacker','200 gelöste Ability-Rätsel.'],pt:['Decifrador de Código','200 puzzles de Ability resolvidos.'],it:['Decifratore di Codici','200 puzzle di Ability risolti.'],pl:['Łamacz Kodów','200 rozwiązanych zagadek Ability.'],ko:['코드 해독자','Ability 200문제 해결.'],zh:['破译者','解出200道Ability谜题。'],ja:['コードブレーカー','Abilityを200問解決。'], check:s=>(s.abilitySolved||0)>=200 },
+  { id:'ab_300', icon:'🧙‍♂️', fr:['Gourou des Règles','300 puzzles Ability résolus.'], en:['Rules Guru','300 Ability puzzles solved.'],es:['Gurú de las Reglas','300 puzzles de Ability resueltos.'],de:['Regel-Guru','300 gelöste Ability-Rätsel.'],pt:['Guru das Regras','300 puzzles de Ability resolvidos.'],it:['Guru delle Regole','300 puzzle di Ability risolti.'],pl:['Guru Zasad','300 rozwiązanych zagadek Ability.'],ko:['규칙의 구루','Ability 300문제 해결.'],zh:['规则大师','解出300道Ability谜题。'],ja:['ルールの導師','Abilityを300問解決。'], check:s=>(s.abilitySolved||0)>=300 },
+  { id:'ab_500', icon:'🏛️', fr:["Légende de l'Ability",'500 puzzles Ability résolus.'], en:['Ability Legend','500 Ability puzzles solved.'],es:['Leyenda de Ability','500 puzzles de Ability resueltos.'],de:['Ability-Legende','500 gelöste Ability-Rätsel.'],pt:['Lenda do Ability','500 puzzles de Ability resolvidos.'],it:['Leggenda di Ability','500 puzzle di Ability risolti.'],pl:['Legenda Ability','500 rozwiązanych zagadek Ability.'],ko:['Ability의 전설','Ability 500문제 해결.'],zh:['Ability传奇','解出500道Ability谜题。'],ja:['Abilityの伝説','Abilityを500問解決。'], check:s=>(s.abilitySolved||0)>=500 },
+  // --- Art ---
+  { id:'art_50', icon:'🏛️', fr:['Propriétaire de Galerie','50 victoires en Art.'], en:['Gallery Owner','50 Art wins.'],es:['Dueño de Galería','50 victorias en Art.'],de:['Galeriebesitzer','50 Art-Siege.'],pt:['Dono de Galeria','50 vitórias em Art.'],it:['Proprietario di Galleria','50 vittorie in Art.'],pl:['Właściciel Galerii','50 zwycięstw w Art.'],ko:['갤러리 소유주','Art 50승.'],zh:['画廊主人','Art模式50场胜利。'],ja:['ギャラリーオーナー','Artで50勝。'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=50 },
+  { id:'art_75', icon:'📖', fr:["Historien de l'Art",'75 victoires en Art.'], en:['Art Historian','75 Art wins.'],es:['Historiador del Arte','75 victorias en Art.'],de:['Kunsthistoriker','75 Art-Siege.'],pt:['Historiador da Arte','75 vitórias em Art.'],it:['Storico dell\'Arte','75 vittorie in Art.'],pl:['Historyk Sztuki','75 zwycięstw w Art.'],ko:['미술사학자','Art 75승.'],zh:['艺术史学家','Art模式75场胜利。'],ja:['美術史家','Artで75勝。'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=75 },
+  { id:'art_firsttry5', icon:'👁️‍🗨️', fr:['Vision Parfaite','5 victoires Art au tout premier essai.'], en:['Perfect Vision','5 Art wins on the very first attempt.'],es:['Visión Perfecta','5 victorias en Art en el primerísimo intento.'],de:['Perfekte Sicht','5 Art-Siege im allerersten Versuch.'],pt:['Visão Perfeita','5 vitórias em Art na primeiríssima tentativa.'],it:['Visione Perfetta','5 vittorie in Art al primissimo tentativo.'],pl:['Doskonały Wzrok','5 zwycięstw w Art za pierwszym razem.'],ko:['완벽한 시야','Art에서 아주 첫 시도로 5승.'],zh:['完美视觉','在Art模式中第一次尝试就获胜5次。'],ja:['パーフェクトビジョン','Artで最初の試行での勝利5回。'], check:s=>(s.artFirstTryWins||0)>=5 },
+  { id:'art_noloss25', icon:'🕶️', fr:['Série Sans Faille','25 parties Art sans aucune défaite.'], en:['Flawless Streak','25 Art games without a single loss.'],es:['Racha Impecable','25 partidas de Art sin ninguna derrota.'],de:['Makellose Serie','25 Art-Runden ohne eine einzige Niederlage.'],pt:['Sequência Impecável','25 partidas de Art sem nenhuma derrota.'],it:['Serie Impeccabile','25 partite di Art senza nemmeno una sconfitta.'],pl:['Bezbłędna Seria','25 gier w Art bez ani jednej porażki.'],ko:['흠 없는 연승','Art 25게임 무패.'],zh:['完美连胜','25场Art无一失败。'],ja:['無傷の連続','Artを25回無敗でプレイ。'], check:s=>(s.artPlayed||0)>=25 && (s.artLostCount||0)===0 },
+  { id:'art_noloss50', icon:'😎', fr:['Œil Intouchable','50 parties Art sans aucune défaite.'], en:['Untouchable Eye','50 Art games without a single loss.'],es:['Ojo Intocable','50 partidas de Art sin ninguna derrota.'],de:['Unantastbares Auge','50 Art-Runden ohne eine einzige Niederlage.'],pt:['Olho Intocável','50 partidas de Art sem nenhuma derrota.'],it:['Occhio Intoccabile','50 partite di Art senza nemmeno una sconfitta.'],pl:['Nietykalne Oko','50 gier w Art bez ani jednej porażki.'],ko:['범접할 수 없는 눈','Art 50게임 무패.'],zh:['无懈可击之眼','50场Art无一失败。'],ja:['無敵の眼','Artを50回無敗でプレイ。'], check:s=>(s.artPlayed||0)>=50 && (s.artLostCount||0)===0 },
+  // --- Alt Art (remplace Chrome Check) ---
+  { id:'alt_25', icon:'🎨', fr:["Galeriste des Variantes", "25 victoires en Alt Art."], en:["Variant Curator", "25 Alt Art wins."], es:["Curador de Variantes", "25 victorias en Alt Art."], de:["Varianten-Kurator", "25 Siege in Alt Art."], pt:["Curador de Variantes", "25 vitórias em Alt Art."], it:["Curatore di Varianti", "25 vittorie in Alt Art."], pl:["Kurator Wariantów", "25 zwycięstw w Alt Art."], ko:["변형 큐레이터", "Alt Art 25승."], zh:["变体策展人", "Alt Art 25 次获胜。"], ja:["バリアントキュレーター", "Alt Art 25勝。"], check:s=>(((s.altArt&&s.altArt.solved)||0)>=25) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeBestScore||0)>=30)(s)) },
+  { id:'alt_firsttry5', icon:'🎯', fr:["Regard de Lynx", "5 victoires Alt Art au tout premier essai."], en:["Lynx Gaze", "5 Alt Art wins on the very first try."], es:["Mirada de Lince", "5 victorias en Alt Art al primer intento."], de:["Luchsblick", "5 Alt-Art-Siege im allerersten Versuch."], pt:["Olhar de Lince", "5 vitórias em Alt Art na primeira tentativa."], it:["Sguardo di Lince", "5 vittorie in Alt Art al primo tentativo."], pl:["Wzrok Rysia", "5 zwycięstw w Alt Art za pierwszą próbą."], ko:["스라소니의 눈", "Alt Art를 첫 시도에 5번 맞히세요."], zh:["猞猁之眼", "Alt Art 5 次一次猜中。"], ja:["オオヤマネコの眼", "Alt Artを1回目の試行で5回正解。"], check:s=>(((s.altArt&&s.altArt.firstTry)||0)>=5) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeBestScore||0)>=40)(s)) },
+  { id:'alt_collect40', icon:'📚', fr:["Demi-Collection", "Débloque 40 alt arts dans la Collection."], en:["Half the Collection", "Unlock 40 alt arts in the Collection."], es:["Media Colección", "Desbloquea 40 alt arts en la Colección."], de:["Halbe Sammlung", "Schalte 40 Alt Arts in der Sammlung frei."], pt:["Meia Coleção", "Desbloqueie 40 alt arts na Coleção."], it:["Mezza Collezione", "Sblocca 40 alt art nella Collezione."], pl:["Pół Kolekcji", "Odblokuj 40 alt artów w Kolekcji."], ko:["컬렉션 절반", "컬렉션에서 Alt Art 40개를 잠금 해제하세요."], zh:["半套收藏", "在收藏中解锁40张Alt Art。"], ja:["コレクション半分", "コレクションでAlt Artを40枚解放。"], check:s=>((((s.altArt&&s.altArt.collection)||[]).length)>=40) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeSessions||0)>=50)(s)) },
+  { id:'alt_50', icon:'🏆', fr:["Conservateur Alternatif", "50 victoires en Alt Art."], en:["Alternate Curator", "50 Alt Art wins."], es:["Conservador Alternativo", "50 victorias en Alt Art."], de:["Alternativer Kurator", "50 Siege in Alt Art."], pt:["Conservador Alternativo", "50 vitórias em Alt Art."], it:["Conservatore Alternativo", "50 vittorie in Alt Art."], pl:["Alternatywny Kustosz", "50 zwycięstw w Alt Art."], ko:["대체 큐레이터", "Alt Art 50승."], zh:["备用策展人", "Alt Art 50 次获胜。"], ja:["オルタナティブ学芸員", "Alt Art 50勝。"], check:s=>(((s.altArt&&s.altArt.solved)||0)>=50) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeTotalCorrect||0)>=500)(s)) },
+  { id:'alt_noloss25', icon:'🛡️', fr:["Œil Infaillible", "25 parties Alt Art sans aucune défaite."], en:["Unfailing Eye", "25 Alt Art games without a single loss."], es:["Ojo Infalible", "25 partidas de Alt Art sin ninguna derrota."], de:["Unfehlbares Auge", "25 Alt-Art-Runden ohne eine einzige Niederlage."], pt:["Olho Infalível", "25 partidas de Alt Art sem nenhuma derrota."], it:["Occhio Infallibile", "25 partite di Alt Art senza alcuna sconfitta."], pl:["Nieomylne Oko", "25 rund Alt Art bez ani jednej porażki."], ko:["틀림없는 눈", "패배 없이 Alt Art 25판."], zh:["明察秋毫", "25 场 Alt Art 无一失败。"], ja:["見抜く目", "敗北なしでAlt Artを25戦。"], check:s=>(((s.altArt&&s.altArt.played)||0)>=25 && ((s.altArt&&s.altArt.lostCount)||0)===0) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeTotalCorrect||0)>=1000)(s)) },
+  // --- Cards Link ---
+  { id:'cd_75', icon:'🧵', fr:['Maître des Puzzles','75 victoires en Cards Link.'], en:['Puzzle Master','75 Cards Link wins.'],es:['Maestro de Puzzles','75 victorias en Cards Link.'],de:['Rätselmeister','75 Cards-Link-Siege.'],pt:['Mestre dos Puzzles','75 vitórias em Cards Link.'],it:['Maestro dei Puzzle','75 vittorie in Cards Link.'],pl:['Mistrz Zagadek','75 zwycięstw w Cards Link.'],ko:['퍼즐 마스터','Cards Link 75승.'],zh:['解谜大师','Cards Link75场胜利。'],ja:['パズルマスター','Cards Linkで75勝。'], check:s=>(s.cardsLinkWins||0)>=75 },
+  { id:'cd_100', icon:'🕸️', fr:['Grand Maître de la Grille','100 victoires en Cards Link.'], en:['Grandmaster of Grids','100 Cards Link wins.'],es:['Gran Maestro de Cuadrículas','100 victorias en Cards Link.'],de:['Großmeister der Raster','100 Cards-Link-Siege.'],pt:['Grão-Mestre das Grades','100 vitórias em Cards Link.'],it:['Grande Maestro delle Griglie','100 vittorie in Cards Link.'],pl:['Arcymistrz Siatek','100 zwycięstw w Cards Link.'],ko:['그리드의 그랜드마스터','Cards Link 100승.'],zh:['网格宗师','Cards Link100场胜利。'],ja:['グリッドのグランドマスター','Cards Linkで100勝。'], check:s=>(s.cardsLinkWins||0)>=100 },
+  { id:'cd_flawless5', icon:'⭐', fr:['Solveur 5 Étoiles','5 victoires sans aucune erreur en Cards Link.'], en:['Five-Star Solver','5 flawless Cards Link wins.'],es:['Solucionador Cinco Estrellas','5 victorias sin ningún error en Cards Link.'],de:['Fünf-Sterne-Löser','5 fehlerfreie Cards-Link-Siege.'],pt:['Solucionador Cinco Estrelas','5 vitórias sem nenhum erro em Cards Link.'],it:['Risolutore a Cinque Stelle','5 vittorie senza errori in Cards Link.'],pl:['Rozwiązujący na 5 Gwiazdek','5 bezbłędnych zwycięstw w Cards Link.'],ko:['별 다섯 개 솔버','Cards Link 완벽 승리 5회.'],zh:['五星解题者','5次零失误赢得Cards Link。'],ja:['五つ星ソルバー','Cards Linkでノーミス勝利5回。'], check:s=>(s.cardsLinkFlawlessCount||0)>=5 },
+  { id:'cd_flawless10', icon:'🌟', fr:['Perfection x10','10 victoires sans aucune erreur en Cards Link.'], en:['Perfect Ten','10 flawless Cards Link wins.'],es:['Perfección x10','10 victorias sin ningún error en Cards Link.'],de:['Perfektion x10','10 fehlerfreie Cards-Link-Siege.'],pt:['Perfeição x10','10 vitórias sem nenhum erro em Cards Link.'],it:['Perfezione x10','10 vittorie senza errori in Cards Link.'],pl:['Perfekcja x10','10 bezbłędnych zwycięstw w Cards Link.'],ko:['완벽 x10','Cards Link 완벽 승리 10회.'],zh:['完美x10','10次零失误赢得Cards Link。'],ja:['パーフェクトx10','Cards Linkでノーミス勝利10回。'], check:s=>(s.cardsLinkFlawlessCount||0)>=10 },
+  { id:'cd_150', icon:'🔮', fr:['Prophète des Motifs','150 victoires en Cards Link.'], en:['Pattern Prophet','150 Cards Link wins.'],es:['Profeta de Patrones','150 victorias en Cards Link.'],de:['Musterprophet','150 Cards-Link-Siege.'],pt:['Profeta dos Padrões','150 vitórias em Cards Link.'],it:['Profeta degli Schemi','150 vittorie in Cards Link.'],pl:['Prorok Wzorców','150 zwycięstw w Cards Link.'],ko:['패턴의 예언자','Cards Link 150승.'],zh:['模式先知','Cards Link150场胜利。'],ja:['パターンの預言者','Cards Linkで150勝。'], check:s=>(s.cardsLinkWins||0)>=150 },
+  // --- Sequence ---
+  { id:'sq_50', icon:'📶', fr:['Trieur Rapide','50 victoires en Sequence.'], en:['Speed Sorter','50 Sequence wins.'],es:['Clasificador Veloz','50 victorias en Sequence.'],de:['Schnellsortierer','50 Sequence-Siege.'],pt:['Classificador Veloz','50 vitórias em Sequence.'],it:['Ordinatore Veloce','50 vittorie in Sequence.'],pl:['Szybki Sortownik','50 zwycięstw w Sequence.'],ko:['스피드 소터','Sequence 50승.'],zh:['速排高手','Sequence50场胜利。'],ja:['スピードソーター','Sequenceで50勝。'], check:s=>(s.sequenceWins||0)>=50 },
+  { id:'sq_100', icon:'🧮', fr:["Maître de l'Ordre",'100 victoires en Sequence.'], en:['Order Master','100 Sequence wins.'],es:['Maestro del Orden','100 victorias en Sequence.'],de:['Ordnungsmeister','100 Sequence-Siege.'],pt:['Mestre da Ordem','100 vitórias em Sequence.'],it:['Maestro dell\'Ordine','100 vittorie in Sequence.'],pl:['Mistrz Porządku','100 zwycięstw w Sequence.'],ko:['질서의 마스터','Sequence 100승.'],zh:['秩序大师','Sequence100场胜利。'],ja:['秩序のマスター','Sequenceで100勝。'], check:s=>(s.sequenceWins||0)>=100 },
+  { id:'sq_firsttry5', icon:'🎓', fr:['Génie du 1er Coup','5 victoires Sequence dès la 1ère tentative.'], en:['First-Try Genius','5 Sequence wins on the first attempt.'],es:['Genio del Primer Intento','5 victorias en Sequence en el primer intento.'],de:['Erstversuch-Genie','5 Sequence-Siege im ersten Versuch.'],pt:['Gênio da Primeira Tentativa','5 vitórias em Sequence na primeira tentativa.'],it:['Genio al Primo Colpo','5 vittorie in Sequence al primo tentativo.'],pl:['Geniusz Pierwszej Próby','5 zwycięstw w Sequence za pierwszym razem.'],ko:['첫 시도의 천재','Sequence 첫 시도 승리 5회.'],zh:['首试天才','5次Sequence首次尝试即获胜。'],ja:['一発天才','Sequenceで1回目の試行での勝利5回。'], check:s=>(s.sequenceFirstTryWins||0)>=5 },
+  { id:'sq_firsttry10', icon:'🏅', fr:['Tri Sans Faille','10 victoires Sequence dès la 1ère tentative.'], en:['Flawless Sorting','10 Sequence wins on the first attempt.'],es:['Clasificación Sin Fallos','10 victorias en Sequence en el primer intento.'],de:['Fehlerfreies Sortieren','10 Sequence-Siege im ersten Versuch.'],pt:['Classificação Impecável','10 vitórias em Sequence na primeira tentativa.'],it:['Ordinamento Impeccabile','10 vittorie in Sequence al primo tentativo.'],pl:['Bezbłędne Sortowanie','10 zwycięstw w Sequence za pierwszym razem.'],ko:['완벽한 정렬','Sequence 첫 시도 승리 10회.'],zh:['完美排序','10次Sequence首次尝试即获胜。'],ja:['完璧なソート','Sequenceで1回目の試行での勝利10回。'], check:s=>(s.sequenceFirstTryWins||0)>=10 },
+  { id:'sq_200', icon:'📜', fr:['Sage de la Séquence','200 victoires en Sequence.'], en:['Sequence Sage','200 Sequence wins.'],es:['Sabio de Secuencias','200 victorias en Sequence.'],de:['Sequenzweiser','200 Sequence-Siege.'],pt:['Sábio de Sequência','200 vitórias em Sequence.'],it:['Saggio della Sequenza','200 vittorie in Sequence.'],pl:['Mędrzec Sekwencji','200 zwycięstw w Sequence.'],ko:['시퀀스의 현자','Sequence 200승.'],zh:['序列贤者','Sequence200场胜利。'],ja:['シーケンスの賢者','Sequenceで200勝。'], check:s=>(s.sequenceWins||0)>=200 },
+  // --- Eddies / Méta ---
+  { id:'ed_25000', icon:'💵', fr:["Élite Corpo",'25 000 eddies gagnés au total.'], en:['Corpo Elite','25,000 total eddies earned.'],es:['Élite Corpo','25.000 eddies ganados en total.'],de:['Corpo-Elite','25.000 Eddies insgesamt verdient.'],pt:['Elite Corpo','25.000 eddies ganhos no total.'],it:['Elite Corpo','25.000 eddies guadagnati in totale.'],pl:['Elita Korpo','25 000 eddies zdobytych łącznie.'],ko:['코포 엘리트','누적 25,000 eddies 획득.'],zh:['公司精英','累计赚取25000 eddies。'],ja:['コーポエリート','累計25,000eddies獲得。'], check:s=>eddiesTotal(s)>=25000 },
+  { id:'ed_50000', icon:'🏦', fr:['Légende de Night City','50 000 eddies gagnés au total.'], en:['Night City Legend','50,000 total eddies earned.'],es:['Leyenda de Night City','50.000 eddies ganados en total.'],de:['Night-City-Legende','50.000 Eddies insgesamt verdient.'],pt:['Lenda de Night City','50.000 eddies ganhos no total.'],it:['Leggenda di Night City','50.000 eddies guadagnati in totale.'],pl:['Legenda Night City','50 000 eddies zdobytych łącznie.'],ko:['나이트 시티의 전설','누적 50,000 eddies 획득.'],zh:['夜之城传奇','累计赚取50000 eddies。'],ja:['ナイトシティの伝説','累計50,000eddies獲得。'], check:s=>eddiesTotal(s)>=50000 },
+  { id:'ed_100000', icon:'🏯', fr:["Actionnaire d'Arasaka",'100 000 eddies gagnés au total.'], en:['Arasaka Shareholder','100,000 total eddies earned.'],es:['Accionista de Arasaka','100.000 eddies ganados en total.'],de:['Arasaka-Aktionär','100.000 Eddies insgesamt verdient.'],pt:['Acionista da Arasaka','100.000 eddies ganhos no total.'],it:['Azionista Arasaka','100.000 eddies guadagnati in totale.'],pl:['Akcjonariusz Arasaki','100 000 eddies zdobytych łącznie.'],ko:['아라사카 주주','누적 100,000 eddies 획득.'],zh:['荒坂股东','累计赚取100000 eddies。'],ja:['アラサカ株主','累計100,000eddies獲得。'], check:s=>eddiesTotal(s)>=100000 },
+  { id:'meta_archive', icon:'🗓️', fr:['Voyageur Temporel','Utilise le mode Archive au moins une fois.'], en:['Time Traveler','Use the Archive mode at least once.'],es:['Viajero en el Tiempo','Usa el modo Archivo al menos una vez.'],de:['Zeitreisender','Nutze den Archiv-Modus mindestens einmal.'],pt:['Viajante do Tempo','Use o modo Arquivo pelo menos uma vez.'],it:['Viaggiatore nel Tempo','Usa la modalità Archivio almeno una volta.'],pl:['Podróżnik w Czasie','Skorzystaj z trybu Archiwum przynajmniej raz.'],ko:['시간 여행자','아카이브 모드를 최소 1회 사용하세요.'],zh:['时间旅者','至少使用一次存档模式。'],ja:['タイムトラベラー','アーカイブモードを1回以上使用。'], check:s=>s.hasUsedArchive===true },
+  { id:'meta_share', icon:'📣', fr:['Le Partage, Ça Compte','Partage un résultat au moins une fois.'], en:['Sharing is Caring','Share a result at least once.'],es:['Compartir Es Cuidar','Comparte un resultado al menos una vez.'],de:['Teilen Ist Fürsorge','Teile mindestens einmal ein Ergebnis.'],pt:['Compartilhar é Cuidar','Compartilhe um resultado pelo menos uma vez.'],it:['Condividere è un Bene','Condividi un risultato almeno una volta.'],pl:['Dzielenie Się Ma Znaczenie','Udostępnij wynik przynajmniej raz.'],ko:['나눔의 미덕','결과를 최소 1회 공유하세요.'],zh:['分享是关怀','至少分享一次结果。'],ja:['シェアは思いやり','結果を1回以上共有。'], check:s=>s.hasShared===true },
+  { id:'meta_pseudo', icon:'🪞', fr:["Changement d'Identité",'Change ton pseudo au moins une fois.'], en:['Identity Change','Change your handle at least once.'],es:['Cambio de Identidad','Cambia tu apodo al menos una vez.'],de:['Identitätswechsel','Ändere deinen Nickname mindestens einmal.'],pt:['Mudança de Identidade','Mude seu apelido pelo menos uma vez.'],it:['Cambio d\'Identità','Cambia il tuo nickname almeno una volta.'],pl:['Zmiana Tożsamości','Zmień swój nick przynajmniej raz.'],ko:['신원 변경','닉네임을 최소 1회 변경하세요.'],zh:['身份变更','至少更改一次昵称。'],ja:['アイデンティティ変更','ニックネームを1回以上変更。'], check:s=>s.hasChangedPseudo===true },
+  { id:'meta_hunter', icon:'🏹', fr:['Chasseur de Succès','Débloque au moins 40 des 50 premiers succès.'], en:['Achievement Hunter','Unlock at least 40 of the first 50 achievements.'],es:['Cazador de Logros','Desbloquea al menos 40 de los primeros 50 logros.'],de:['Erfolgsjäger','Schalte mindestens 40 der ersten 50 Erfolge frei.'],pt:['Caçador de Conquistas','Desbloqueie ao menos 40 das primeiras 50 conquistas.'],it:['Cacciatore di Obiettivi','Sblocca almeno 40 dei primi 50 obiettivi.'],pl:['Łowca Osiągnięć','Odblokuj co najmniej 40 z pierwszych 50 osiągnięć.'],ko:['업적 사냥꾼','첫 50개 업적 중 40개 이상 달성하세요.'],zh:['成就猎人','解锁前50个成就中的至少40个。'],ja:['実績ハンター','最初の50個の実績のうち40個以上を解除。'],
+    check:s=>ACHIEVEMENTS.slice(0,50).filter(a=>achOwned(a,s)).length>=40 },
+  // ===================================================================
+  // ---- Lot 3 : 50 succès supplémentaires (total 150, pour Nova Rare) ----
+  // NOTE : traduits en FR/EN pour l'instant, les 8 autres langues à suivre.
+  // ===================================================================
+  // --- Série d'activité quotidienne (tous jeux confondus) ---
+  { id:'act_3', icon:'📆', fr:['Trois Jours de Suite',"Connecté et actif 3 jours d'affilée."], en:['Three in a Row','Active on Choomdle 3 days in a row.'],es:['Tres Días Seguidos','Activo en Choomdle 3 días seguidos.'],de:['Drei Tage in Folge','3 Tage in Folge aktiv auf Choomdle.'],pt:['Três Dias Seguidos','Ativo no Choomdle por 3 dias seguidos.'],it:['Tre Giorni di Fila','Attivo su Choomdle per 3 giorni di fila.'],pl:['Trzy Dni z Rzędu','Aktywny na Choomdle 3 dni z rzędu.'],ko:['3일 연속','Choomdle에서 3일 연속 활동.'],zh:['连续三天','连续3天在Choomdle活跃。'],ja:['3日連続','Choomdleで3日連続活動。'], check:s=>(s.activityStreak||0)>=3 || (s.bestActivityStreak||0)>=3 },
+  { id:'act_7', icon:'📆', fr:['Une Semaine Choom','7 jours d\'affilée.'], en:['A Choom Week','7 days in a row.'],es:['Una Semana Choom','7 días seguidos.'],de:['Eine Choom-Woche','7 Tage in Folge.'],pt:['Uma Semana Choom','7 dias seguidos.'],it:['Una Settimana Choom','7 giorni di fila.'],pl:['Tydzień Chooma','7 dni z rzędu.'],ko:['Choom의 일주일','7일 연속.'],zh:['Choom的一周','连续7天。'],ja:['チュームの一週間','7日連続。'], check:s=>(s.bestActivityStreak||0)>=7 },
+  { id:'act_14', icon:'📆', fr:['Deux Semaines Non-Stop','14 jours d\'affilée.'], en:['Two Weeks Straight','14 days in a row.'],es:['Dos Semanas Sin Parar','14 días seguidos.'],de:['Zwei Wochen Ohne Pause','14 Tage in Folge.'],pt:['Duas Semanas Sem Parar','14 dias seguidos.'],it:['Due Settimane di Fila','14 giorni di fila.'],pl:['Dwa Tygodnie bez Przerwy','14 dni z rzędu.'],ko:['2주 연속','14일 연속.'],zh:['连续两周','连续14天。'],ja:['2週間連続','14日連続。'], check:s=>(s.bestActivityStreak||0)>=14 },
+  { id:'act_30', icon:'📆', fr:['Un Mois Entier','30 jours d\'affilée.'], en:['A Full Month','30 days in a row.'],es:['Un Mes Completo','30 días seguidos.'],de:['Ein Ganzer Monat','30 Tage in Folge.'],pt:['Um Mês Inteiro','30 dias seguidos.'],it:['Un Mese Intero','30 giorni di fila.'],pl:['Cały Miesiąc','30 dni z rzędu.'],ko:['한 달 내내','30일 연속.'],zh:['整整一个月','连续30天。'],ja:['まる一ヶ月','30日連続。'], check:s=>(s.bestActivityStreak||0)>=30 },
+  { id:'act_60', icon:'📆', fr:['Deux Mois de Rigueur','60 jours d\'affilée.'], en:['Two Months Strong','60 days in a row.'],es:['Dos Meses Firmes','60 días seguidos.'],de:['Zwei Starke Monate','60 Tage in Folge.'],pt:['Dois Meses Firmes','60 dias seguidos.'],it:['Due Mesi Solidi','60 giorni di fila.'],pl:['Dwa Solidne Miesiące','60 dni z rzędu.'],ko:['두 달간 꾸준히','60일 연속.'],zh:['坚持两个月','连续60天。'],ja:['2ヶ月間の継続','60日連続。'], check:s=>(s.bestActivityStreak||0)>=60 },
+  { id:'act_100', icon:'📆', fr:['Cent Jours de Fidélité','100 jours d\'affilée.'], en:['Hundred Days Loyal','100 days in a row.'],es:['Cien Días de Fidelidad','100 días seguidos.'],de:['Hundert Treue Tage','100 Tage in Folge.'],pt:['Cem Dias de Fidelidade','100 dias seguidos.'],it:['Cento Giorni di Fedeltà','100 giorni di fila.'],pl:['Sto Dni Wierności','100 dni z rzędu.'],ko:['100일간의 충성','100일 연속.'],zh:['百日忠诚','连续100天。'],ja:['100日間の忠誠','100日連続。'], check:s=>(s.bestActivityStreak||0)>=100 },
+  { id:'act_200', icon:'📆', fr:['Deux Cents Jours','200 jours d\'affilée.'], en:['Two Hundred Days','200 days in a row.'],es:['Doscientos Días','200 días seguidos.'],de:['Zweihundert Tage','200 Tage in Folge.'],pt:['Duzentos Dias','200 dias seguidos.'],it:['Duecento Giorni','200 giorni di fila.'],pl:['Dwieście Dni','200 dni z rzędu.'],ko:['200일','200일 연속.'],zh:['两百天','连续200天。'],ja:['200日間','200日連続。'], check:s=>(s.bestActivityStreak||0)>=200 },
+  { id:'act_365', icon:'📆', fr:['Une Année Entière','365 jours d\'affilée.'], en:['A Full Year','365 days in a row.'],es:['Un Año Completo','365 días seguidos.'],de:['Ein Ganzes Jahr','365 Tage in Folge.'],pt:['Um Ano Inteiro','365 dias seguidos.'],it:['Un Anno Intero','365 giorni di fila.'],pl:['Cały Rok','365 dni z rzędu.'],ko:['꼬박 1년','365일 연속.'],zh:['整整一年','连续365天。'],ja:['まる一年','365日連続。'], check:s=>(s.bestActivityStreak||0)>=365 },
+  // --- Eddies, palier propre par tranche de 10 000 ---
+  { id:'ed10_10', icon:'€$', fr:['Premiers 10K','10 000 eddies gagnés au total.'], en:['First 10K','10,000 total eddies earned.'],es:['Primeros 10K','10.000 eddies ganados en total.'],de:['Erste 10K','10.000 Eddies insgesamt verdient.'],pt:['Primeiros 10K','10.000 eddies ganhos no total.'],it:['Primi 10K','10.000 eddies guadagnati in totale.'],pl:['Pierwsze 10K','10 000 eddies zdobytych łącznie.'],ko:['첫 10K','누적 10,000 eddies 획득.'],zh:['首个10K','累计赚取10000 eddies。'],ja:['最初の10K','累計10,000eddies獲得。'], check:s=>eddiesTotal(s)>=10000 },
+  { id:'ed10_20', icon:'€$', fr:['20K au Compteur','20 000 eddies gagnés au total.'], en:['20K on the Clock','20,000 total eddies earned.'],es:['20K en el Marcador','20.000 eddies ganados en total.'],de:['20K auf der Uhr','20.000 Eddies insgesamt verdient.'],pt:['20K no Placar','20.000 eddies ganhos no total.'],it:['20K sul Groppone','20.000 eddies guadagnati in totale.'],pl:['20K na Liczniku','20 000 eddies zdobytych łącznie.'],ko:['20K 달성','누적 20,000 eddies 획득.'],zh:['20K在手','累计赚取20000 eddies。'],ja:['20K達成','累計20,000eddies獲得。'], check:s=>eddiesTotal(s)>=20000 },
+  { id:'ed10_30', icon:'€$', fr:['30K de Réputation','30 000 eddies gagnés au total.'], en:['30K Reputation','30,000 total eddies earned.'],es:['30K de Reputación','30.000 eddies ganados en total.'],de:['30K Ansehen','30.000 Eddies insgesamt verdient.'],pt:['30K de Reputação','30.000 eddies ganhos no total.'],it:['30K di Reputazione','30.000 eddies guadagnati in totale.'],pl:['30K Reputacji','30 000 eddies zdobytych łącznie.'],ko:['평판 30K','누적 30,000 eddies 획득.'],zh:['30K声望','累计赚取30000 eddies。'],ja:['30Kの評判','累計30,000eddies獲得。'], check:s=>eddiesTotal(s)>=30000 },
+  { id:'ed10_40', icon:'€$', fr:['40K de Contrats','40 000 eddies gagnés au total.'], en:['40K in Contracts','40,000 total eddies earned.'],es:['40K en Contratos','40.000 eddies ganados en total.'],de:['40K in Aufträgen','40.000 Eddies insgesamt verdient.'],pt:['40K em Contratos','40.000 eddies ganhos no total.'],it:['40K in Contratti','40.000 eddies guadagnati in totale.'],pl:['40K w Kontraktach','40 000 eddies zdobytych łącznie.'],ko:['계약금 40K','누적 40,000 eddies 획득.'],zh:['40K合约酬劳','累计赚取40000 eddies。'],ja:['契約で40K','累計40,000eddies獲得。'], check:s=>eddiesTotal(s)>=40000 },
+  { id:'ed10_50', icon:'€$', fr:['Demi-Cent-Mille','50 000 eddies gagnés au total.'], en:['Halfway to 100K','50,000 total eddies earned.'],es:['A Mitad de Camino a 100K','50.000 eddies ganados en total.'],de:['Auf Halbem Weg zu 100K','50.000 Eddies insgesamt verdient.'],pt:['Na Metade do Caminho para 100K','50.000 eddies ganhos no total.'],it:['A Metà Strada per i 100K','50.000 eddies guadagnati in totale.'],pl:['W Połowie Drogi do 100K','50 000 eddies zdobytych łącznie.'],ko:['100K의 절반','누적 50,000 eddies 획득.'],zh:['迈向10万的一半','累计赚取50000 eddies。'],ja:['100Kへの折り返し','累計50,000eddies獲得。'], check:s=>eddiesTotal(s)>=50000 },
+  { id:'ed10_60', icon:'€$', fr:['60K Bien Gagnés','60 000 eddies gagnés au total.'], en:['60K Well Earned','60,000 total eddies earned.'],es:['60K Bien Ganados','60.000 eddies ganados en total.'],de:['60K Wohlverdient','60.000 Eddies insgesamt verdient.'],pt:['60K Bem Merecidos','60.000 eddies ganhos no total.'],it:['60K Ben Meritati','60.000 eddies guadagnati in totale.'],pl:['60K Solidnie Zarobionych','60 000 eddies zdobytych łącznie.'],ko:['잘 벌어들인 60K','누적 60,000 eddies 획득.'],zh:['稳赚的60K','累计赚取60000 eddies。'],ja:['稼ぎ出した60K','累計60,000eddies獲得。'], check:s=>eddiesTotal(s)>=60000 },
+  { id:'ed10_70', icon:'€$', fr:['70K de Butin','70 000 eddies gagnés au total.'], en:['70K in Loot','70,000 total eddies earned.'],es:['70K en Botín','70.000 eddies ganados en total.'],de:['70K an Beute','70.000 Eddies insgesamt verdient.'],pt:['70K em Espólio','70.000 eddies ganhos no total.'],it:['70K di Bottino','70.000 eddies guadagnati in totale.'],pl:['70K Łupu','70 000 eddies zdobytych łącznie.'],ko:['전리품 70K','누적 70,000 eddies 획득.'],zh:['70K战利品','累计赚取70000 eddies。'],ja:['戦利品70K','累計70,000eddies獲得。'], check:s=>eddiesTotal(s)>=70000 },
+  { id:'ed10_80', icon:'€$', fr:['80K Solides','80 000 eddies gagnés au total.'], en:['80K Solid','80,000 total eddies earned.'],es:['80K Sólidos','80.000 eddies ganados en total.'],de:['80K Stabil','80.000 Eddies insgesamt verdient.'],pt:['80K Sólidos','80.000 eddies ganhos no total.'],it:['80K Solidi','80.000 eddies guadagnati in totale.'],pl:['Solidne 80K','80 000 eddies zdobytych łącznie.'],ko:['탄탄한 80K','누적 80,000 eddies 획득.'],zh:['稳固的80K','累计赚取80000 eddies。'],ja:['盤石の80K','累計80,000eddies獲得。'], check:s=>eddiesTotal(s)>=80000 },
+  { id:'ed10_90', icon:'€$', fr:['90K, Presque Là','90 000 eddies gagnés au total.'], en:['90K, Almost There','90,000 total eddies earned.'],es:['90K, Casi Ahí','90.000 eddies ganados en total.'],de:['90K, Fast Geschafft','90.000 Eddies insgesamt verdient.'],pt:['90K, Quase Lá','90.000 eddies ganhos no total.'],it:['90K, Quasi Fatta','90.000 eddies guadagnati in totale.'],pl:['90K, Prawie Tam','90 000 eddies zdobytych łącznie.'],ko:['90K, 거의 다 왔다','누적 90,000 eddies 획득.'],zh:['90K，快到了','累计赚取90000 eddies。'],ja:['90K、もうすぐ','累計90,000eddies獲得。'], check:s=>eddiesTotal(s)>=90000 },
+  { id:'ed10_100', icon:'€$', fr:['Cent Mille Eddies','100 000 eddies gagnés au total.'], en:['One Hundred K','100,000 total eddies earned.'],es:['Cien Mil Eddies','100.000 eddies ganados en total.'],de:['Hunderttausend Eddies','100.000 Eddies insgesamt verdient.'],pt:['Cem Mil Eddies','100.000 eddies ganhos no total.'],it:['Centomila Eddies','100.000 eddies guadagnati in totale.'],pl:['Sto Tysięcy Eddies','100 000 eddies zdobytych łącznie.'],ko:['십만 eddies','누적 100,000 eddies 획득.'],zh:['十万Eddies','累计赚取100000 eddies。'],ja:['10万eddies','累計100,000eddies獲得。'], check:s=>eddiesTotal(s)>=100000 },
+  // --- Collection de cartes découvertes (Classic/Endless/Ability/Art) ---
+  { id:'col_25', icon:'🗂️', fr:['Collectionneur Débutant','Devine 25 cartes différentes.'], en:['Budding Collector','Correctly guess 25 different cards.'],es:['Coleccionista Novato','Adivina 25 cartas diferentes.'],de:['Angehender Sammler','Errate 25 verschiedene Karten.'],pt:['Colecionador Iniciante','Acerte 25 cartas diferentes.'],it:['Collezionista in Erba','Indovina 25 carte diverse.'],pl:['Początkujący Kolekcjoner','Odgadnij 25 różnych kart.'],ko:['새싹 수집가','25장의 서로 다른 카드 맞히기.'],zh:['新晋收藏家','猜中25张不同的卡牌。'],ja:['駆け出しコレクター','25枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=25 },
+  { id:'col_50', icon:'🗂️', fr:['Bon Œil pour les Cartes','Devine 50 cartes différentes.'], en:['Good Eye for Cards','Correctly guess 50 different cards.'],es:['Buen Ojo para las Cartas','Adivina 50 cartas diferentes.'],de:['Gutes Auge für Karten','Errate 50 verschiedene Karten.'],pt:['Bom Olho para Cartas','Acerte 50 cartas diferentes.'],it:['Buon Occhio per le Carte','Indovina 50 carte diverse.'],pl:['Dobre Oko do Kart','Odgadnij 50 różnych kart.'],ko:['카드 보는 눈','50장의 서로 다른 카드 맞히기.'],zh:['识卡慧眼','猜中50张不同的卡牌。'],ja:['カードを見る目','50枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=50 },
+  { id:'col_75', icon:'🗂️', fr:['Archiviste','Devine 75 cartes différentes.'], en:['Archivist','Correctly guess 75 different cards.'],es:['Archivista','Adivina 75 cartas diferentes.'],de:['Archivar','Errate 75 verschiedene Karten.'],pt:['Arquivista','Acerte 75 cartas diferentes.'],it:['Archivista','Indovina 75 carte diverse.'],pl:['Archiwista','Odgadnij 75 różnych kart.'],ko:['기록 보관자','75장의 서로 다른 카드 맞히기.'],zh:['档案管理员','猜中75张不同的卡牌。'],ja:['アーキビスト','75枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=75 },
+  { id:'col_100', icon:'🗂️', fr:['Encyclopédie sur Pattes','Devine 100 cartes différentes.'], en:['Walking Encyclopedia','Correctly guess 100 different cards.'],es:['Enciclopedia Andante','Adivina 100 cartas diferentes.'],de:['Wandelnde Enzyklopädie','Errate 100 verschiedene Karten.'],pt:['Enciclopédia Ambulante','Acerte 100 cartas diferentes.'],it:['Enciclopedia Ambulante','Indovina 100 carte diverse.'],pl:['Chodząca Encyklopedia','Odgadnij 100 różnych kart.'],ko:['걸어다니는 백과사전','100장의 서로 다른 카드 맞히기.'],zh:['行走的百科全书','猜中100张不同的卡牌。'],ja:['歩く百科事典','100枚の異なるカードを正解。'], check:s=>(s.cardsDiscovered||[]).length>=100 },
+  { id:'col_all', icon:'📖', fr:['Toutes les Cartes','Devine chaque carte du jeu au moins une fois.'], en:['Every Single Card','Correctly guess every card in the game at least once.'],es:['Todas las Cartas','Adivina cada carta del juego al menos una vez.'],de:['Jede Einzelne Karte','Errate jede Karte im Spiel mindestens einmal.'],pt:['Todas as Cartas','Acerte cada carta do jogo pelo menos uma vez.'],it:['Tutte le Carte','Indovina ogni carta del gioco almeno una volta.'],pl:['Każda Karta','Odgadnij każdą kartę w grze przynajmniej raz.'],ko:['모든 카드','게임의 모든 카드를 한 번씩 맞히기.'],zh:['集齐所有卡牌','猜中游戏中的每一张卡牌至少一次。'],ja:['全カード制覇','ゲーム内の全カードを1回以上正解。'], check:s=>(s.cardsDiscovered||[]).length>=CARDS.length },
+  // --- Total de parties jouées, tous jeux confondus ---
+  { id:'tot_50', icon:'🎮', fr:['50 Parties au Total','50 parties jouées, tous jeux confondus.'], en:['50 Games Total','50 games played across every mode.'],es:['50 Partidas en Total','50 partidas jugadas en todos los modos.'],de:['50 Runden Insgesamt','50 gespielte Runden über alle Modi.'],pt:['50 Partidas no Total','50 partidas jogadas em todos os modos.'],it:['50 Partite in Totale','50 partite giocate in tutte le modalità.'],pl:['50 Gier Łącznie','50 rozegranych gier we wszystkich trybach.'],ko:['총 50게임','모든 모드에서 50게임 플레이.'],zh:['总计50局','所有模式累计游玩50局。'],ja:['合計50ゲーム','全モードで50ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=50 },
+  { id:'tot_100', icon:'🎮', fr:['100 Parties au Total','100 parties jouées, tous jeux confondus.'], en:['100 Games Total','100 games played across every mode.'],es:['100 Partidas en Total','100 partidas jugadas en todos los modos.'],de:['100 Runden Insgesamt','100 gespielte Runden über alle Modi.'],pt:['100 Partidas no Total','100 partidas jogadas em todos os modos.'],it:['100 Partite in Totale','100 partite giocate in tutte le modalità.'],pl:['100 Gier Łącznie','100 rozegranych gier we wszystkich trybach.'],ko:['총 100게임','모든 모드에서 100게임 플레이.'],zh:['总计100局','所有模式累计游玩100局。'],ja:['合計100ゲーム','全モードで100ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=100 },
+  { id:'tot_250', icon:'🎮', fr:['250 Parties au Total','250 parties jouées, tous jeux confondus.'], en:['250 Games Total','250 games played across every mode.'],es:['250 Partidas en Total','250 partidas jugadas en todos los modos.'],de:['250 Runden Insgesamt','250 gespielte Runden über alle Modi.'],pt:['250 Partidas no Total','250 partidas jogadas em todos os modos.'],it:['250 Partite in Totale','250 partite giocate in tutte le modalità.'],pl:['250 Gier Łącznie','250 rozegranych gier we wszystkich trybach.'],ko:['총 250게임','모든 모드에서 250게임 플레이.'],zh:['总计250局','所有模式累计游玩250局。'],ja:['合計250ゲーム','全モードで250ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=250 },
+  { id:'tot_500', icon:'🎮', fr:['500 Parties au Total','500 parties jouées, tous jeux confondus.'], en:['500 Games Total','500 games played across every mode.'],es:['500 Partidas en Total','500 partidas jugadas en todos los modos.'],de:['500 Runden Insgesamt','500 gespielte Runden über alle Modi.'],pt:['500 Partidas no Total','500 partidas jogadas em todos os modos.'],it:['500 Partite in Totale','500 partite giocate in tutte le modalità.'],pl:['500 Gier Łącznie','500 rozegranych gier we wszystkich trybach.'],ko:['총 500게임','모든 모드에서 500게임 플레이.'],zh:['总计500局','所有模式累计游玩500局。'],ja:['合計500ゲーム','全モードで500ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=500 },
+  { id:'tot_1000', icon:'🎮', fr:['Mille Parties','1000 parties jouées, tous jeux confondus.'], en:['One Thousand Games','1000 games played across every mode.'],es:['Mil Partidas','1000 partidas jugadas en todos los modos.'],de:['Tausend Runden','1000 gespielte Runden über alle Modi.'],pt:['Mil Partidas','1000 partidas jogadas em todos os modos.'],it:['Mille Partite','1000 partite giocate in tutte le modalità.'],pl:['Tysiąc Gier','1000 rozegranych gier we wszystkich trybach.'],ko:['천 게임','모든 모드에서 1000게임 플레이.'],zh:['千局达成','所有模式累计游玩1000局。'],ja:['1000ゲーム達成','全モードで1000ゲームプレイ。'], check:s=>totalGamesPlayed(s)>=1000 },
+  // --- Langues utilisées ---
+  { id:'lang_3', icon:'🌐', fr:['Un Peu Polyglotte','Joue dans 3 langues différentes.'], en:['A Bit Polyglot','Play in 3 different languages.'],es:['Un Poco Políglota','Juega en 3 idiomas diferentes.'],de:['Etwas Mehrsprachig','Spiele in 3 verschiedenen Sprachen.'],pt:['Um Pouco Poliglota','Jogue em 3 idiomas diferentes.'],it:['Un Po\' Poliglotta','Gioca in 3 lingue diverse.'],pl:['Trochę Poliglota','Zagraj w 3 różnych językach.'],ko:['조금은 다국어','3개 언어로 플레이.'],zh:['小小语言通','使用3种不同语言游玩。'],ja:['ちょっとポリグロット','3つの異なる言語でプレイ。'], check:s=>(s.languagesUsed||[]).length>=3 },
+  { id:'lang_5', icon:'🌐', fr:['Globe-Trotter','Joue dans 5 langues différentes.'], en:['World Traveler','Play in 5 different languages.'],es:['Viajero Mundial','Juega en 5 idiomas diferentes.'],de:['Weltenbummler','Spiele in 5 verschiedenen Sprachen.'],pt:['Viajante do Mundo','Jogue em 5 idiomas diferentes.'],it:['Giramondo','Gioca in 5 lingue diverse.'],pl:['Podróżnik po Świecie','Zagraj w 5 różnych językach.'],ko:['세계 여행자','5개 언어로 플레이.'],zh:['环球旅行者','使用5种不同语言游玩。'],ja:['世界の旅人','5つの異なる言語でプレイ。'], check:s=>(s.languagesUsed||[]).length>=5 },
+  { id:'lang_all', icon:'🌍', fr:['Vrai Polyglotte','Joue dans les 10 langues disponibles.'], en:['True Polyglot','Play in all 10 available languages.'],es:['Verdadero Políglota','Juega en los 10 idiomas disponibles.'],de:['Echter Vielsprachler','Spiele in allen 10 verfügbaren Sprachen.'],pt:['Verdadeiro Poliglota','Jogue nos 10 idiomas disponíveis.'],it:['Vero Poliglotta','Gioca in tutte le 10 lingue disponibili.'],pl:['Prawdziwy Poliglota','Zagraj we wszystkich 10 dostępnych językach.'],ko:['진정한 다국어 사용자','제공되는 10개 언어 모두로 플레이.'],zh:['真正的语言通','使用全部10种可用语言游玩。'],ja:['真のポリグロット','利用可能な全10言語でプレイ。'], check:s=>(s.languagesUsed||[]).length>=10 },
+  // --- Moment de la journée ---
+  { id:'early_bird', icon:'🌅', fr:['Lève-Tôt','Actif entre 4h et 7h UTC.'], en:['Early Bird','Active between 4am and 7am UTC.'],es:['Madrugador','Activo entre las 4h y las 7h UTC.'],de:['Frühaufsteher','Aktiv zwischen 4 und 7 Uhr UTC.'],pt:['Madrugador','Ativo entre 4h e 7h UTC.'],it:['Mattiniero','Attivo tra le 4 e le 7 UTC.'],pl:['Ranny Ptaszek','Aktywny między 4:00 a 7:00 UTC.'],ko:['얼리버드','UTC 기준 오전 4시~7시 사이 활동.'],zh:['早起鸟','在UTC 4点至7点之间活跃。'],ja:['早起き鳥','UTC 4時〜7時の間に活動。'], check:s=>s.earlyBirdWin===true },
+  { id:'night_owl', icon:'🌙', fr:['Oiseau de Nuit','Actif entre minuit et 3h UTC.'], en:['Night Owl','Active between midnight and 3am UTC.'],es:['Búho Nocturno','Activo entre medianoche y las 3h UTC.'],de:['Nachteule','Aktiv zwischen Mitternacht und 3 Uhr UTC.'],pt:['Coruja Noturna','Ativo entre meia-noite e 3h UTC.'],it:['Nottambulo','Attivo tra mezzanotte e le 3 UTC.'],pl:['Nocna Sowa','Aktywny między północą a 3:00 UTC.'],ko:['올빼미족','UTC 기준 자정~오전 3시 사이 활동.'],zh:['夜猫子','在UTC午夜至3点之间活跃。'],ja:['夜型人間','UTC 深夜0時〜3時の間に活動。'], check:s=>s.nightOwlWin===true },
+  // --- Engagement méta ---
+  { id:'meta_community', icon:'👥', fr:['Curieux du Classement',"Consulte l'onglet Communauté."], en:['Curious Observer','Check out the Community tab.'],es:['Observador Curioso','Consulta la pestaña Comunidad.'],de:['Neugieriger Beobachter','Schau dir den Community-Tab an.'],pt:['Observador Curioso','Confira a aba Comunidade.'],it:['Osservatore Curioso','Dai un\'occhiata alla scheda Community.'],pl:['Ciekawski Obserwator','Sprawdź zakładkę Społeczność.'],ko:['호기심 많은 관찰자','커뮤니티 탭을 확인하세요.'],zh:['好奇的观察者','查看社区标签页。'],ja:['好奇心旺盛な観察者','コミュニティタブをチェック。'], check:s=>s.communityVisited===true },
+  { id:'meta_feedback3', icon:'💬', fr:['Voix Persistante','Envoie 3 retours via Feedback.'], en:['Persistent Voice','Send feedback 3 times.'],es:['Voz Persistente','Envía comentarios 3 veces.'],de:['Beharrliche Stimme','Sende 3 Mal Feedback.'],pt:['Voz Persistente','Envie feedback 3 vezes.'],it:['Voce Persistente','Invia feedback 3 volte.'],pl:['Wytrwały Głos','Wyślij opinię 3 razy.'],ko:['끈질긴 목소리','피드백을 3번 보내세요.'],zh:['坚持发声','发送3次反馈。'],ja:['粘り強い声','フィードバックを3回送信。'], check:s=>(s.feedbackCount||0)>=3 },
+  { id:'meta_hunter2', icon:'🎯', fr:['Maître des Succès','Débloque au moins 90 des 100 premiers succès.'], en:['Achievement Master','Unlock at least 90 of the first 100 achievements.'],es:['Maestro de Logros','Desbloquea al menos 90 de los primeros 100 logros.'],de:['Erfolgsmeister','Schalte mindestens 90 der ersten 100 Erfolge frei.'],pt:['Mestre das Conquistas','Desbloqueie ao menos 90 das primeiras 100 conquistas.'],it:['Maestro degli Obiettivi','Sblocca almeno 90 dei primi 100 obiettivi.'],pl:['Mistrz Osiągnięć','Odblokuj co najmniej 90 z pierwszych 100 osiągnięć.'],ko:['업적의 달인','첫 100개 업적 중 90개 이상 달성하세요.'],zh:['成就大师','解锁前100个成就中的至少90个。'],ja:['実績マスター','最初の100個の実績のうち90個以上を解除。'],
+    check:s=>ACHIEVEMENTS.slice(0,100).filter(a=>achOwned(a,s)).length>=90 },
+  // --- Paliers plus profonds sur les jeux existants ---
+  { id:'cl_500', icon:'🏙️', fr:['Icône Vivante','500 victoires en Classic.'], en:['Living Icon','500 Classic wins.'],es:['Ícono Viviente','500 victorias en Classic.'],de:['Lebende Ikone','500 Classic-Siege.'],pt:['Ícone Vivo','500 vitórias em Classic.'],it:['Icona Vivente','500 vittorie in Classic.'],pl:['Żywa Ikona','500 zwycięstw w Classic.'],ko:['살아있는 아이콘','Classic 500승.'],zh:['活标志','Classic模式500场胜利。'],ja:['生ける象徴','Classicで500勝。'], check:s=>(s.wins||0)>=500 },
+  { id:'cl_beststreak365', icon:'🔥', fr:['Résilience Absolue','Meilleure série de 365 jours en Classic.'], en:['Absolute Resilience','365-day best streak in Classic.'],es:['Resiliencia Absoluta','Mejor racha de 365 días en Classic.'],de:['Absolute Widerstandskraft','365-Tage-Bestserie in Classic.'],pt:['Resiliência Absoluta','Melhor sequência de 365 dias em Classic.'],it:['Resilienza Assoluta','Migliore serie di 365 giorni in Classic.'],pl:['Absolutna Wytrzymałość','Najlepsza 365-dniowa seria w Classic.'],ko:['절대적인 회복력','Classic 최고 기록 365일 연속.'],zh:['绝对韧性','Classic模式最佳连续记录365天。'],ja:['絶対的な回復力','Classicでの最高連続記録365日。'], check:s=>(s.bestStreak||0)>=365 },
+  { id:'lg_150', icon:'🥷', fr:['Ombre Éternelle','150 victoires en Legend.'], en:['Eternal Shadow','150 Legend wins.'],es:['Sombra Eterna','150 victorias en Legend.'],de:['Ewiger Schatten','150 Legend-Siege.'],pt:['Sombra Eterna','150 vitórias em Legend.'],it:['Ombra Eterna','150 vittorie in Legend.'],pl:['Wieczny Cień','150 zwycięstw w Legend.'],ko:['영원한 그림자','Legend 150승.'],zh:['永恒之影','Legend模式150场胜利。'],ja:['永遠の影','Legendで150勝。'], check:s=>(s.legendWins||0)>=150 },
+  { id:'lg_played200', icon:'🗂️', fr:['Toujours en Mission','200 parties jouées en Legend.'], en:['Always on the Job','200 Legend games played.'],es:['Siempre en Misión','200 partidas jugadas en Legend.'],de:['Immer im Einsatz','200 gespielte Legend-Runden.'],pt:['Sempre em Missão','200 partidas jogadas em Legend.'],it:['Sempre in Missione','200 partite giocate in Legend.'],pl:['Zawsze w Akcji','200 rozegranych gier w Legend.'],ko:['항상 임무 중','Legend 200회 플레이.'],zh:['始终在任务中','游玩200场Legend。'],ja:['常に任務遂行中','Legendを200回プレイ。'], check:s=>(s.legendPlayed||0)>=200 },
+  { id:'bz_score25', icon:'⚡', fr:['Vitesse Lumière','Score de 25+ en une partie Blitz.'], en:['Lightspeed','Score 25+ in one Blitz run.'],es:['Velocidad de la Luz','Puntuación de 25+ en una partida Blitz.'],de:['Lichtgeschwindigkeit','25+ Punkte in einer Blitz-Runde.'],pt:['Velocidade da Luz','Pontuação de 25+ em uma partida Blitz.'],it:['Velocità della Luce','Punteggio di 25+ in una partita Blitz.'],pl:['Prędkość Światła','Wynik 25+ w jednej rundzie Blitz.'],ko:['광속','한 Blitz 게임에서 25점 이상.'],zh:['光速','单场Blitz得分25+。'],ja:['光速','1回のBlitzで25点以上。'], check:s=>(s.blitzBestScore||0)>=25 },
+  { id:'bz_sessions100', icon:'🏋️', fr:['Cent Sessions Blitz','100 sessions Blitz jouées.'], en:['A Hundred Blitz Runs','100 Blitz sessions played.'],es:['Cien Sesiones Blitz','100 sesiones de Blitz jugadas.'],de:['Hundert Blitz-Läufe','100 gespielte Blitz-Sitzungen.'],pt:['Cem Sessões de Blitz','100 sessões de Blitz jogadas.'],it:['Cento Sessioni di Blitz','100 sessioni di Blitz giocate.'],pl:['Sto Sesji Blitz','100 rozegranych sesji Blitz.'],ko:['100번의 Blitz','Blitz 100세션 플레이.'],zh:['百场Blitz','游玩100场Blitz。'],ja:['100回のBlitz','Blitzを100セッションプレイ。'], check:s=>(s.blitzSessions||0)>=100 },
+  { id:'bz_total1000', icon:'🏆', fr:['Millier de Cartes Blitz','1000 cartes résolues au total en Blitz.'], en:['A Thousand in Blitz','1000 total cards solved in Blitz.'],es:['Millar de Blitz','1000 cartas resueltas en total en Blitz.'],de:['Tausend in Blitz','1000 gelöste Karten insgesamt in Blitz.'],pt:['Milhar no Blitz','1000 cartas resolvidas no total em Blitz.'],it:['Migliaio in Blitz','1000 carte risolte in totale in Blitz.'],pl:['Tysiąc w Blitz','1000 rozwiązanych kart łącznie w Blitz.'],ko:['Blitz 천 장','Blitz 누적 1000장 해결.'],zh:['Blitz千张','Blitz累计解出1000张卡牌。'],ja:['Blitzで1000枚','Blitz累計1000枚解決。'], check:s=>(s.blitzTotalSolved||0)>=1000 },
+  { id:'en_3000', icon:'♾️', fr:['Puits sans Fond','3000 cartes résolues en Endless.'], en:['Bottomless Well','3000 Endless solved.'],es:['Pozo sin Fondo','3000 cartas resueltas en Endless.'],de:['Bodenloser Brunnen','3000 gelöste Karten in Endless.'],pt:['Poço sem Fundo','3000 cartas resolvidas em Endless.'],it:['Pozzo Senza Fondo','3000 carte risolte in Endless.'],pl:['Bezdenna Studnia','3000 rozwiązanych kart w Endless.'],ko:['바닥없는 우물','Endless 3000장 해결.'],zh:['无底之井','Endless模式解出3000张卡牌。'],ja:['底なしの井戸','Endlessで3000枚解決。'], check:s=>(s.endlessSolved||0)>=3000 },
+  { id:'ab_750', icon:'⚖️', fr:['Juriste en Chef','750 puzzles Ability résolus.'], en:['Chief Counsel','750 Ability puzzles solved.'],es:['Consejero Principal','750 puzzles de Ability resueltos.'],de:['Chefberater','750 gelöste Ability-Rätsel.'],pt:['Conselheiro-Chefe','750 puzzles de Ability resolvidos.'],it:['Consigliere Capo','750 puzzle di Ability risolti.'],pl:['Główny Doradca','750 rozwiązanych zagadek Ability.'],ko:['수석 고문','Ability 750문제 해결.'],zh:['首席顾问','解出750道Ability谜题。'],ja:['首席顧問','Abilityを750問解決。'], check:s=>(s.abilitySolved||0)>=750 },
+  { id:'ab_1000', icon:'🏛️', fr:['Mille Puzzles Ability','1000 puzzles Ability résolus.'], en:['A Thousand Ability Puzzles','1000 Ability puzzles solved.'],es:['Mil Puzzles de Ability','1000 puzzles de Ability resueltos.'],de:['Tausend Ability-Rätsel','1000 gelöste Ability-Rätsel.'],pt:['Mil Puzzles de Ability','1000 puzzles de Ability resolvidos.'],it:['Mille Puzzle di Ability','1000 puzzle di Ability risolti.'],pl:['Tysiąc Zagadek Ability','1000 rozwiązanych zagadek Ability.'],ko:['Ability 천 문제','Ability 1000문제 해결.'],zh:['千道Ability谜题','解出1000道Ability谜题。'],ja:['Ability1000問','Abilityを1000問解決。'], check:s=>(s.abilitySolved||0)>=1000 },
+  { id:'art_100', icon:'🏛️', fr:['Conservateur en Chef','100 victoires en Art.'], en:['Chief Curator','100 Art wins.'],es:['Curador en Jefe','100 victorias en Art.'],de:['Chefkurator','100 Art-Siege.'],pt:['Curador-Chefe','100 vitórias em Art.'],it:['Curatore Capo','100 vittorie in Art.'],pl:['Główny Kurator','100 zwycięstw w Art.'],ko:['수석 큐레이터','Art 100승.'],zh:['首席策展人','Art模式100场胜利。'],ja:['チーフキュレーター','Artで100勝。'], check:s=>((s.artPlayed||0)-(s.artLostCount||0))>=100 },
+  { id:'art_noloss100', icon:'😎', fr:['Vision Absolue','100 parties Art sans aucune défaite.'], en:['Absolute Vision','100 Art games without a single loss.'],es:['Visión Absoluta','100 partidas de Art sin ninguna derrota.'],de:['Absolute Sicht','100 Art-Runden ohne eine einzige Niederlage.'],pt:['Visão Absoluta','100 partidas de Art sem nenhuma derrota.'],it:['Visione Assoluta','100 partite di Art senza nemmeno una sconfitta.'],pl:['Absolutna Wizja','100 gier w Art bez ani jednej porażki.'],ko:['절대적인 시야','Art 100게임 무패.'],zh:['绝对视觉','100场Art无一失败。'],ja:['絶対的な視力','Artを100回無敗でプレイ。'], check:s=>(s.artPlayed||0)>=100 && (s.artLostCount||0)===0 },
+  { id:'alt_collect80', icon:'👑', fr:["Collection Complète", "Débloque toutes les alt arts de la Collection."], en:["Complete Collection", "Unlock every alt art in the Collection."], es:["Colección Completa", "Desbloquea todas las alt arts de la Colección."], de:["Komplette Sammlung", "Schalte alle Alt Arts in der Sammlung frei."], pt:["Coleção Completa", "Desbloqueie todas as alt arts da Coleção."], it:["Collezione Completa", "Sblocca tutte le alt art della Collezione."], pl:["Pełna Kolekcja", "Odblokuj wszystkie alt arty w Kolekcji."], ko:["완전한 컬렉션", "컬렉션의 모든 Alt Art를 잠금 해제하세요."], zh:["完整收藏", "解锁收藏中的所有Alt Art。"], ja:["コンプリートコレクション", "コレクションの全Alt Artを解放。"], check:s=>((((s.altArt&&s.altArt.collection)||[]).length)>=(typeof WNC_ALT!=='undefined'?WNC_ALT.length:80)) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeBestScore||0)>=50)(s)) },
+  { id:'alt_100', icon:'🌟', fr:["Maître des Variantes", "100 victoires en Alt Art."], en:["Variant Master", "100 Alt Art wins."], es:["Maestro de las Variantes", "100 victorias en Alt Art."], de:["Variantenmeister", "100 Siege in Alt Art."], pt:["Mestre das Variantes", "100 vitórias em Alt Art."], it:["Maestro delle Varianti", "100 vittorie in Alt Art."], pl:["Mistrz Wariantów", "100 zwycięstw w Alt Art."], ko:["변형의 달인", "Alt Art 100승."], zh:["变体大师", "Alt Art 100 次获胜。"], ja:["バリアントマスター", "Alt Art 100勝。"], check:s=>(((s.altArt&&s.altArt.solved)||0)>=100) || (GRANDFATHER_CHROME_ACHIEVEMENTS && (s=>(s.chromeTotalCorrect||0)>=2000)(s)) },
+];
+function totalGamesPlayed(s){
+  return (s.gamesPlayed||0)+(s.legendPlayed||0)+(s.blitzSessions||0)+(s.endlessSolved||0)+(s.abilitySolved||0)+(s.artPlayed||0)+((s.altArt&&s.altArt.played)||0)+(s.chromeSessions||0)+(s.cardsLinkPlayed||0)+(s.sequencePlayed||0);
+}
+// ======================= COLLECTION DE CARTES (Classic/Legend/Ability/Art) =======================
+const COLLECTION_EDITIONS = [
+  { id: 'wnc', label: 'WNC', cards: WNC_CARDS.filter(c=>!c.edition) },
+  { id: 'wnc-alt', label: 'WNC Alt', alt: true, cards: WNC_ALT },
+  { id: 'sd01-hei', label: 'SD01-HEI', cards: WNC_CARDS.filter(c=>c.edition==='SD01-HEI') },
+  { id: 'sd02-ebp', label: 'SD02-EBP', cards: WNC_CARDS.filter(c=>c.edition==='SD02-EBP') },
+  { id: 'prm01', label: 'PRM01', cards: WNC_CARDS.filter(c=>c.edition==='PRM01') },
+];
+let currentCollectionEdition = 'wnc';
+function renderCollectionTabs(){
+  const wrap = document.getElementById('collectionEditionTabs');
+  wrap.innerHTML = COLLECTION_EDITIONS.map(ed=>
+    '<button class="tab'+(ed.id===currentCollectionEdition?' active':'')+'" data-edition="'+ed.id+'">'+ed.label+'</button>'
+  ).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      currentCollectionEdition = btn.dataset.edition;
+      renderCollection();
+    });
+  });
+}
+async function renderCollection(){
+  renderCollectionTabs();
+  const edition = COLLECTION_EDITIONS.find(e=>e.id===currentCollectionEdition) || COLLECTION_EDITIONS[0];
+  const grid = document.getElementById('collectionGrid');
+  const s = await loadStats();
+  const baseHint = document.getElementById('collectionBaseHint'), altHint = document.getElementById('collectionAltHint');
+  if(baseHint) baseHint.style.display = edition.alt ? 'none' : '';
+  if(altHint){ altHint.style.display = edition.alt ? '' : 'none'; altHint.textContent = ALTART_COLLECTION_HINT[currentLang] || ALTART_COLLECTION_HINT.en; }
+  if(edition.alt){
+    // Onglet "WNC Alt" : une entrée = une illustration alternative (clé = id), débloquée dans le jeu Alt Art.
+    const foundAlt = new Set((s.altArt && s.altArt.collection) || []);
+    document.getElementById('collectionTotalCount').textContent = edition.cards.length;
+    document.getElementById('collectionFoundCount').textContent = edition.cards.filter(a=>foundAlt.has(a.id)).length;
+    grid.innerHTML = edition.cards.map(a=>{
+      const has = foundAlt.has(a.id);
+      const label = a.n+' — '+a.series+' '+String(a.num).padStart(3,'0')+(a.beta?' (β)':'');
+      return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+altImgUrl(a,true)+'" title="'+label.replace(/"/g,'&quot;')+'" loading="lazy">';
+    }).join('');
+    return;
+  }
+  const found = new Set(s.collectionCards || []);
+  // Triées par numéro de collection croissant (les cartes sans numéro connu vont à la fin).
+  const cards = edition.cards.slice().sort((a,b)=>(a.num??9999)-(b.num??9999));
+  document.getElementById('collectionTotalCount').textContent = cards.length;
+  document.getElementById('collectionFoundCount').textContent = cards.filter(c=>found.has(c.n)).length;
+  if(!cards.length){ grid.innerHTML = '<div class="hint">—</div>'; return; }
+  grid.innerHTML = cards.map(c=>{
+    const has = found.has(c.n);
+    return '<img class="collection-card'+(has?'':' collection-card-locked')+'" src="'+cardThumbUrl(c)+'" title="'+c.n.replace(/"/g,'&quot;')+'" loading="lazy">';
+  }).join('');
+}
+async function renderAchievements(){
+  const grid = document.getElementById('achievementsGrid');
+  const shareBtns = document.querySelectorAll('.panel#panel-achievements .share-btn');
+  const lang = ACHIEVEMENTS[0][currentLang] ? currentLang : 'en';
+  if(!supabaseReady || !currentSession){
+    document.getElementById('rarityTiersLine').innerHTML = '<strong class="hl">'+t('achievements_guest_notice')+'</strong>';
+    // On affiche quand même les 150 succès (tous verrouillés) pour donner envie de créer un compte.
+    grid.innerHTML = ACHIEVEMENTS.map(a=>{
+      const [title, desc] = a[lang];
+      return '<div class="achievement-card">'+
+        '<span class="achievement-icon">'+a.icon+'</span>'+
+        '<div><div class="achievement-title">'+title+'</div><div class="achievement-desc">'+desc+'</div></div>'+
+        '</div>';
+    }).join('');
+    document.getElementById('achievementsUnlockedCount').textContent = '—';
+    document.getElementById('achievementsTotalCount').textContent = ACHIEVEMENTS.length;
+    shareBtns.forEach(b=>b.style.display = 'none');
+    return;
+  }
+  shareBtns.forEach(b=>b.style.display = '');
+  const s = await loadStats();
+  const tiers = [
+    ['rarity_common',0], ['rarity_uncommon',25], ['rarity_rare',50], ['rarity_epic',77],
+    ['rarity_secret',95], ['rarity_iconic',120], ['rarity_nova',150]
+  ];
+  document.getElementById('rarityTiersLine').innerHTML =
+    t('rarity_tiers_intro')+'<br>'+tiers.map(([key,n])=>t(key)+' ('+n+')').join(' · ');
+  let unlockedCount = 0;
+  grid.innerHTML = ACHIEVEMENTS.map(a=>{
+    const unlocked = achOwned(a, s);
+    if(unlocked) unlockedCount++;
+    const [title, desc] = a[lang];
+    return '<div class="achievement-card'+(unlocked?' unlocked':'')+'">'+
+      '<span class="achievement-icon">'+a.icon+'</span>'+
+      '<div><div class="achievement-title">'+title+'</div><div class="achievement-desc">'+desc+'</div></div>'+
+      '</div>';
+  }).join('');
+  document.getElementById('achievementsUnlockedCount').textContent = unlockedCount;
+  document.getElementById('achievementsTotalCount').textContent = ACHIEVEMENTS.length;
+  // Mémorise les succès tout juste constatés (ex. série atteinte avant d'être cassée).
+  try{ if(unlockedCount !== (s.unlockedAch||[]).length){ s.unlockedAch = achUnionIds(s); await saveStats(s); } }catch(e){}
+}
+
+async function renderStatsPanel(){
+  const s = await loadStats();
+  const container = document.getElementById('statsPerGame');
+
+  function statBlock(title, stats, distribution){
+    let html = '<div class="stats-game-block">';
+    html += '<h4 class="stats-game-title">'+title+'</h4>';
+    html += '<div class="stats-numbers">';
+    stats.forEach(([label,val])=>{
+      html += '<div><div class="stats-num">'+val+'</div><div class="stats-label">'+label+'</div></div>';
+    });
+    html += '</div>';
+    if(distribution) html += distribution;
+    html += '</div>';
+    return html;
+  }
+
+  function distBars(dist, max){
+    const maxCount = Math.max(1, ...Object.values(dist));
+    let bars = '<div class="hint" style="margin:10px 0 6px;">'+t('stats_dist')+'</div>';
+    for(let i=1;i<=max;i++){
+      const count = dist[i]||0;
+      const widthPct = Math.max(4, Math.round((count/maxCount)*100));
+      bars += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px;"><span style="width:14px;color:var(--muted)">'+i+'</span><div style="background:var(--cyan);height:16px;width:'+widthPct+'%;min-width:2px;"></div><span style="color:var(--muted)">'+count+'</span></div>';
+    }
+    return bars;
+  }
+
+  const classicPlayed = s.gamesPlayed||0, classicWins = s.wins||0;
+  const classicPct = classicPlayed ? Math.round((classicWins/classicPlayed)*100) : 0;
+  const legendPlayed = s.legendPlayed||0, legendWins = s.legendWins||0;
+  const legendPct = legendPlayed ? Math.round((legendWins/legendPlayed)*100) : 0;
+  const artPlayed = s.artPlayed||0, artWins = (s.artPlayed||0) - (s.artLostCount||0);
+  const artPct = artPlayed ? Math.round((artWins/artPlayed)*100) : 0;
+
+  container.innerHTML =
+    statBlock(t('tab_classic'), [
+      [t('stats_games'), classicPlayed], [t('stats_wins'), classicWins], [t('stats_winpct'), classicPct+'%'],
+      [t('stats_streak'), s.streak||0], [t('stats_best'), s.bestStreak||0]
+    ], distBars(s.guessDistribution||{}, 8)) +
+    statBlock(t('tab_legend'), [
+      [t('stats_games'), legendPlayed], [t('stats_wins'), legendWins], [t('stats_winpct'), legendPct+'%']
+    ]) +
+    statBlock(t('tab_blitz'), [
+      [t('stats_sessions'), s.blitzSessions||0], [t('stats_best_score'), s.blitzBestScore||0], [t('stats_total_solved'), s.blitzTotalSolved||0]
+    ]) +
+    statBlock(t('tab_endless'), [
+      [t('stats_total_solved'), s.endlessSolved||0]
+    ]) +
+    statBlock(t('tab_ability'), [
+      [t('stats_total_solved'), s.abilitySolved||0]
+    ]) +
+    statBlock(t('tab_art'), [
+      [t('stats_games'), artPlayed], [t('stats_wins'), artWins], [t('stats_winpct'), artPct+'%']
+    ]) +
+    statBlock('Alt Art', [
+      [t('stats_games'), (s.altArt&&s.altArt.played)||0], [t('stats_wins'), (s.altArt&&s.altArt.solved)||0],
+      [t('stats_winpct'), (((s.altArt&&s.altArt.played)||0) ? Math.round((((s.altArt&&s.altArt.solved)||0)/s.altArt.played)*100) : 0)+'%']
+    ]) +
+    (FEATURES.chromeCheck ? statBlock(t('tab_chrome'), [
+      [t('stats_sessions'), s.chromeSessions||0], [t('stats_best_score'), s.chromeBestScore||0], [t('stats_total_correct'), s.chromeTotalCorrect||0]
+    ]) : '') +
+    statBlock(t('tab_cardslink'), [
+      [t('stats_games'), s.cardsLinkPlayed||0], [t('stats_wins'), s.cardsLinkWins||0],
+      [t('stats_winpct'), (s.cardsLinkPlayed? Math.round((s.cardsLinkWins||0)/s.cardsLinkPlayed*100):0)+'%']
+    ]) +
+    statBlock(t('tab_sequence'), [
+      [t('stats_games'), s.sequencePlayed||0], [t('stats_wins'), s.sequenceWins||0],
+      [t('stats_winpct'), (s.sequencePlayed? Math.round((s.sequenceWins||0)/s.sequencePlayed*100):0)+'%']
+    ]);
+}
+
+// ======================= FEEDBACK =======================
+// ADMIN_UID : ton UUID Supabase (Authentication -> Users -> ton compte -> copier le UID).
+// Seul ce compte voit la liste des retours reçus dans l'onglet Feedback.
+const ADMIN_UID = "REMPLACE-MOI-PAR-TON-UUID-SUPABASE";
+async function checkAdminFeedbackView(){
+  if(!supabaseReady || !currentSession || currentSession.user.id !== ADMIN_UID) return;
+  const box = document.getElementById('feedbackAdminView');
+  box.style.display = 'block';
+  try{
+    const { data, error } = await supabaseClient.from('feedback').select('*').order('created_at', { ascending: false }).limit(200);
+    if(error) throw error;
+    document.getElementById('feedbackAdminList').innerHTML = (data||[]).map(row=>
+      '<div class="feedback-row"><div class="meta">'+(row.pseudo||'Anonyme')+' — '+new Date(row.created_at).toLocaleString()+'</div><div class="text">'+
+      String(row.text||'').replace(/</g,'&lt;')+'</div></div>'
+    ).join('') || '<div class="hint">—</div>';
+  }catch(e){
+    document.getElementById('feedbackAdminList').innerHTML = '<div class="hint">—</div>';
+  }
+}
+function initFeedback(){
+  document.getElementById('sendFeedbackBtn').addEventListener('click', async ()=>{
+    const text = document.getElementById('feedbackText').value.trim();
+    const confirmEl = document.getElementById('feedbackConfirm');
+    confirmEl.textContent = "";
+    if(!text) return;
+    const pseudo = await getPseudo();
+    if(supabaseReady){
+      // Limite : 1 feedback / 24h, vérifiée seulement pour les utilisateurs connectés
+      // (un visiteur non connecté n'a pas d'identité fiable pour appliquer la limite).
+      if(currentSession){
+        try{
+          const { data: last } = await supabaseClient.from('feedback')
+            .select('created_at').eq('user_id', currentSession.user.id)
+            .order('created_at', { ascending: false }).limit(1).maybeSingle();
+          if(last && last.created_at){
+            const nextAllowed = new Date(new Date(last.created_at).getTime() + 24*60*60*1000);
+            if(nextAllowed > new Date()){
+              confirmEl.textContent = t('feedback_cooldown').replace('{time}', nextAllowed.toLocaleString());
+              return;
+            }
+          }
+        }catch(e){}
+      }
+      try{
+        await supabaseClient.from('feedback').insert({ user_id: currentSession ? currentSession.user.id : null, pseudo, text });
+        confirmEl.textContent = t('feedback_ok');
+        document.getElementById('feedbackText').value = "";
+        loadStats().then(s=>{ s.feedbackCount = (s.feedbackCount||0)+1; saveStats(s); });
+      }catch(e){ confirmEl.textContent = "…"; }
+      return;
+    }
+    try{
+      await window.storage.set('feedback:'+Date.now()+'-'+Math.random().toString(36).slice(2), JSON.stringify({pseudo, text, date: new Date().toISOString()}), true);
+      confirmEl.textContent = t('feedback_ok');
+      document.getElementById('feedbackText').value = "";
+    }catch(e){ confirmEl.textContent = "…"; }
+  });
+}
+
+// ======================= CLASSIC =======================
+let classicSecret, classicGuesses = [], classicSolved = false;
+const classicBody = document.getElementById('classicBody');
+const classicInput = document.getElementById('guessInput');
+const classicSugg = document.getElementById('suggestions');
+const classicBanner = document.getElementById('classicBanner');
+
+// Essais/état en cours du jour (tous jeux à essais multiples) : sauvegardés dans le navigateur
+// ET, si connecté, dans le compte (Supabase) — pour que déconnexion/reconnexion sur le MÊME
+// compte retrouve exactement les mêmes essais. Un simple invité (ou un autre compte) repart
+// logiquement du cache local du navigateur, propre à cette session.
+function saveInProgress(gameKey, dateStr, data){
+  try{ localStorage.setItem('choomdle:progress:'+gameKey, JSON.stringify({date:dateStr, data})); }catch(e){}
+  if(supabaseReady && currentSession){
+    loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress[gameKey] = {date:dateStr, data};
+      saveStats(s);
+    });
+  }
+}
+async function loadInProgress(gameKey, dateStr){
+  let fromLocal = null;
+  try{
+    const raw = localStorage.getItem('choomdle:progress:'+gameKey);
+    if(raw){
+      const obj = JSON.parse(raw);
+      if(obj.date === dateStr) fromLocal = obj.data;
+    }
+  }catch(e){}
+  // La sauvegarde de l'essai gagnant/perdant est fusionnée directement dans les stats (pour
+  // éviter une course entre deux écritures concurrentes) — on vérifie donc aussi là, que l'on
+  // soit connecté (Supabase) ou invité (loadStats lit alors le bon endroit du navigateur).
+  const s = await loadStats();
+  let fromStats = null;
+  if(s.inProgress && s.inProgress[gameKey] && s.inProgress[gameKey].date === dateStr){
+    fromStats = s.inProgress[gameKey].data;
+  }
+  // On garde la source la plus complète (le plus d'essais), peu importe laquelle des deux
+  // l'a — évite tout souci si l'une des deux arrive en retard ou n'est pas encore à jour.
+  const countOf = d => (d && d.guesses) ? d.guesses.length : 0;
+  return countOf(fromStats) >= countOf(fromLocal) ? fromStats : fromLocal;
+}
+function initClassic(){
+  const today = todayUTCString();
+  document.getElementById('dailyDate').textContent = today + " UTC";
+  classicSecret = dailyCardFor('classic', today);
+  classicGuesses = []; classicSolved = false;
+  classicBody.innerHTML = ""; classicBanner.className = "banner"; classicBanner.innerHTML = "";
+  classicInput.disabled = false;
+  // Restaure les essais déjà faits aujourd'hui (compte si connecté, sinon cache navigateur).
+  loadInProgress('classic', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = CARDS.find(c=>c.n===name);
+      if(card){
+        const {row} = renderRow(card, classicSecret);
+        classicBody.insertAdjacentHTML('beforeend', row);
+        classicGuesses.push(name);
+      }
+    });
+  });
+  loadStats().then(s=>{
+    document.getElementById('streakVal').textContent = s.streak;
+    document.getElementById('bestStreakVal').textContent = s.bestStreak;
+    if(s.lastWin === today){
+      classicSolved = true; classicInput.disabled = true;
+      classicBanner.className = "banner win";
+      classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastClassicReward||0)+'</span></span>'+revealCardHTML(classicSecret)+shareButtonHTML('shareClassic');
+    }
+  });
+}
+function refreshStreakUI(){
+  loadStats().then(s=>{
+    document.getElementById('streakVal').textContent = s.streak;
+    document.getElementById('bestStreakVal').textContent = s.bestStreak;
+  });
+}
+setupAutocomplete(classicInput, classicSugg, (card)=>{
+  if(classicSolved) return;
+  const {row, win} = renderRow(card, classicSecret);
+  classicBody.insertAdjacentHTML('beforeend', row);
+  classicGuesses.push(card.n);
+  if(win){
+    classicSolved = true; classicInput.disabled = true;
+    const reward = computeReward(classicGuesses.length);
+    classicBanner.className = "banner win";
+    classicBanner.innerHTML = t('win_prefix')+' '+classicSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', classicGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(classicSecret)+shareButtonHTML('shareClassic');
+    loadStats().then(s=>{
+      const today = todayUTCString();
+      // Fusionnée dans la MÊME écriture que la mise à jour des stats, pour éviter que deux
+      // sauvegardes concurrentes (celle-ci + celle des essais en cours) ne s'écrasent l'une
+      // l'autre et perdent l'essai gagnant.
+      s.inProgress = s.inProgress || {};
+      s.inProgress.classic = {date: today, data: {guesses: classicGuesses}};
+      if(s.lastWin !== today){
+        s.streak = (s.lastWin === yesterdayUTCString()) ? s.streak+1 : 1;
+        s.bestStreak = Math.max(s.bestStreak, s.streak);
+        s.lastWin = today;
+        s.gamesPlayed = (s.gamesPlayed||0)+1;
+        s.wins = (s.wins||0)+1;
+        s.guessDistribution = s.guessDistribution || {};
+        s.guessDistribution[classicGuesses.length] = (s.guessDistribution[classicGuesses.length]||0)+1;
+        addDiscoveredCard(s, classicSecret.n);
+        addCollectionCard(s, classicSecret.n);
+        s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
+        s.eddies.classic += reward;
+        s.lastClassicReward = reward;
+        saveStats(s).then(()=>{ refreshStreakUI(); refreshEddiesUI(); });
+      } else {
+        saveStats(s);
+      }
+    });
+  } else {
+    saveInProgress('classic', todayUTCString(), {guesses: classicGuesses});
+  }
+}, ()=>classicGuesses);
+
+// ======================= LEGEND (défi quotidien, une seule tentative) =======================
+// On exclut les Legends sans sous-titre (ex: "Lucyna Kushinada") : pas de texte à afficher.
+const LEGEND_CARDS = CARDS.filter(c=>c.t==="Legend" && c.n.includes(" — "));
+function splitLegend(card){ const idx = card.n.indexOf(" — "); return { main: card.n.slice(0, idx), sub: card.n.slice(idx+3) }; }
+function rewardText(n){ return (n>=0?'+':'') + n + ' eddies'; }
+let legendSecret, legendDone = false;
+function initLegend(){
+  const today = todayUTCString();
+  document.getElementById('legendDate').textContent = today + " UTC";
+  legendSecret = dailyCardFor('legend', today);
+  const parts = splitLegend(legendSecret);
+  document.getElementById('legendQuote').textContent = '« ' + parts.sub + ' »';
+  legendDone = false;
+  const input = document.getElementById('guessInputLegend'), btn = document.getElementById('submitLegendBtn'), banner = document.getElementById('legendBanner');
+  input.value = ""; input.disabled = false; btn.disabled = false;
+  banner.className = "banner"; banner.innerHTML = "";
+  loadStats().then(s=>{
+    if(s.lastLegendPlayed === today){
+      legendDone = true; input.disabled = true; btn.disabled = true;
+      if(s.legendResult === 'win'){
+        banner.className = "banner win";
+        banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret)+shareButtonHTML('shareLegend');
+      } else {
+        banner.className = "banner fail";
+        banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>'+revealCardHTML(legendSecret);
+      }
+    }
+  });
+}
+function submitLegend(){
+  if(legendDone) return;
+  const input = document.getElementById('guessInputLegend'), btn = document.getElementById('submitLegendBtn'), banner = document.getElementById('legendBanner');
+  const guess = input.value.trim();
+  if(!guess) return;
+  const parts = splitLegend(legendSecret);
+  const correct = stripAccents(guess.toLowerCase()) === stripAccents(parts.main.trim().toLowerCase());
+  legendDone = true; input.disabled = true; btn.disabled = true;
+  const today = todayUTCString();
+  loadStats().then(s=>{
+    s.lastLegendPlayed = today;
+    s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0,legend:0};
+    s.legendPlayed = (s.legendPlayed||0)+1;
+    if(correct){
+      s.legendResult = 'win';
+      s.legendWins = (s.legendWins||0)+1;
+      addCollectionCard(s, legendSecret.n);
+      s.eddies.legend = (s.eddies.legend||0) + 50;
+      banner.className = "banner win";
+      banner.innerHTML = t('legend_win_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(50)+'</span>'+revealCardHTML(legendSecret)+shareButtonHTML('shareLegend');
+    } else {
+      s.legendResult = 'lose';
+      s.eddies.legend = (s.eddies.legend||0) - 25;
+      banner.className = "banner fail";
+      banner.innerHTML = t('legend_lose_prefix')+' '+parts.main+'<span class="sub rw">'+rewardText(-25)+'</span>'+revealCardHTML(legendSecret);
+    }
+    saveStats(s).then(refreshEddiesUI);
+  });
+}
+document.getElementById('submitLegendBtn').addEventListener('click', submitLegend);
+document.getElementById('guessInputLegend').addEventListener('keydown', e=>{ if(e.key==='Enter') submitLegend(); });
+
+// ======================= BLITZ =======================
+let blitzSecret, blitzTimeLeft = 77, blitzTimer = null, blitzScore = 0, blitzGuesses = [], blitzActive=false, blitzEddiesEarned = 0;
+const blitzBody = document.getElementById('blitzBody');
+const blitzInput = document.getElementById('guessInputBlitz');
+const blitzSugg = document.getElementById('suggestionsBlitz');
+const blitzBanner = document.getElementById('blitzBanner');
+function newBlitzCard(){ blitzSecret = randCard(); blitzGuesses = []; }
+function startBlitz(){
+  blitzScore = 0; blitzTimeLeft = 77; blitzActive = true; blitzEddiesEarned = 0;
+  blitzBody.innerHTML=""; blitzBanner.className="banner"; blitzBanner.innerHTML="";
+  document.getElementById('blitzScore').textContent = blitzScore;
+  document.getElementById('blitzTimer').textContent = blitzTimeLeft+"s";
+  blitzInput.disabled = false; blitzInput.value=""; blitzInput.focus();
+  newBlitzCard();
+  clearInterval(blitzTimer);
+  blitzTimer = setInterval(()=>{
+    blitzTimeLeft--;
+    document.getElementById('blitzTimer').textContent = blitzTimeLeft+"s";
+    if(blitzTimeLeft<=0){
+      clearInterval(blitzTimer); blitzActive = false; blitzInput.disabled = true;
+      blitzBanner.className = "banner win";
+      blitzBanner.innerHTML = t('blitz_timeup')+' '+blitzScore+'<span class="sub">'+t('blitz_answer')+' '+blitzSecret.n+'. <span class="rw">'+t('reward_earn').replace('{n}', blitzEddiesEarned)+'</span></span>'+shareButtonHTML('shareBlitz');
+      loadStats().then(s=>{
+        s.blitzSessions = (s.blitzSessions||0)+1;
+        s.blitzBestScore = Math.max(s.blitzBestScore||0, blitzScore);
+        s.blitzTotalSolved = (s.blitzTotalSolved||0) + blitzScore;
+        saveStats(s);
+      });
+    }
+  },1000);
+}
+document.getElementById('startBlitzBtn').addEventListener('click', startBlitz);
+setupAutocomplete(blitzInput, blitzSugg, (card)=>{
+  if(!blitzActive) return;
+  const {row, win} = renderRow(card, blitzSecret);
+  blitzBody.insertAdjacentHTML('beforeend', row); // récap cumulé : jamais vidé entre les cartes, seulement au lancement
+  blitzGuesses.push(card.n);
+  if(win){
+    const reward = computeReward(blitzGuesses.length);
+    blitzScore++; blitzEddiesEarned += reward;
+    document.getElementById('blitzScore').textContent = blitzScore;
+    addEddies('blitz', reward);
+    newBlitzCard();
+  }
+}, ()=>blitzGuesses);
+
+// ======================= ENDLESS =======================
+let endlessSecret, endlessGuesses = [];
+const endlessBody = document.getElementById('endlessBody');
+const endlessInput = document.getElementById('guessInputEndless');
+const endlessSugg = document.getElementById('suggestionsEndless');
+const endlessBanner = document.getElementById('endlessBanner');
+function newEndlessCard(){
+  endlessSecret = randCard(); endlessGuesses = [];
+  endlessBody.innerHTML = ""; endlessBanner.className = "banner"; endlessBanner.innerHTML = "";
+}
+newEndlessCard();
+setupAutocomplete(endlessInput, endlessSugg, (card)=>{
+  const {row, win} = renderRow(card, endlessSecret);
+  endlessBody.insertAdjacentHTML('beforeend', row);
+  endlessGuesses.push(card.n);
+  if(win){
+    const reward = endlessReward(endlessGuesses.length);
+    endlessBanner.className = "banner win";
+    endlessBanner.innerHTML = t('endless_found')+' '+endlessSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', endlessGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(endlessSecret)+' <button class="bigbtn" id="playAgain" style="margin-top:10px">'+t('endless_next')+'</button>';
+    loadStats().then(s=>{
+      s.endlessSolved = (s.endlessSolved||0)+1;
+      addDiscoveredCard(s, endlessSecret.n);
+      s.eddies = s.eddies || {classic:0,blitz:0,endless:0,chrome:0,breach:0};
+      s.eddies.endless += reward;
+      saveStats(s).then(()=>{
+        document.getElementById('endlessSolved').textContent = s.endlessSolved;
+        refreshEddiesUI();
+      });
+    });
+    setTimeout(()=>{ const btn = document.getElementById('playAgain'); if(btn) btn.addEventListener('click', newEndlessCard); },0);
+  }
+}, ()=>endlessGuesses);
+
+// ======================= SLUGIFY (pour les futurs fichiers d'images) =======================
+function stripAccents(str){
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function slugify(name){
+  return name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // enlève les accents
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'');
+}
+function cardImgUrl(card){ return 'https://img.choomdle.com/cards/' + slugify(card.n) + '.jpg'; }
+// Miniature légère (300px, qualité 70) pour Cards Link et Sequence — pas besoin de la pleine résolution
+// dans ces jeux, contrairement à Art où l'image est le cœur du défi.
+function cardThumbUrl(card){ return 'https://img.choomdle.com/cards-thumb/' + slugify(card.n) + '.jpg'; }
+function revealCardHTML(card){
+  return '<img class="win-card-img" src="'+cardImgUrl(card)+'" alt="'+card.n.replace(/"/g,'&quot;')+'" data-hide-on-error="1">';
+}
+
+// ======================= ABILITY (défi quotidien, texte de règle réel avec l'accord de WeirdCo) =======================
+const ABILITY_CARDS = CARDS.filter(c=>c.text && c.text.trim().length>0);
+let abilitySecret, abilityGuesses = [], abilitySolved = false;
+const abilityBody = document.getElementById('abilityBody');
+const abilityInput = document.getElementById('guessInputAbility');
+const abilitySugg = document.getElementById('suggestionsAbility');
+const abilityBanner = document.getElementById('abilityBanner');
+function initAbility(){
+  const today = todayUTCString();
+  abilitySecret = dailyCardFor('ability', today);
+  document.getElementById('abilityQuote').textContent = '« ' + abilitySecret.text + ' »';
+  abilityGuesses = []; abilitySolved = false;
+  abilityBody.innerHTML = ""; abilityBanner.className = "banner"; abilityBanner.innerHTML = "";
+  abilityInput.disabled = false;
+  loadInProgress('ability', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = CARDS.find(c=>c.n===name);
+      if(card){
+        const {row} = renderRow(card, abilitySecret);
+        abilityBody.insertAdjacentHTML('beforeend', row);
+        abilityGuesses.push(name);
+      }
+    });
+  });
+  loadStats().then(s=>{
+    if(s.lastAbilityPlayed === today && s.abilityWon){
+      abilitySolved = true; abilityInput.disabled = true;
+      abilityBanner.className = "banner win";
+      abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastAbilityReward||0)+'</span></span>'+revealCardHTML(abilitySecret)+shareButtonHTML('shareAbility');
+    }
+  });
+}
+setupAutocomplete(abilityInput, abilitySugg, (card)=>{
+  if(abilitySolved) return;
+  const {row, win} = renderRow(card, abilitySecret);
+  abilityBody.insertAdjacentHTML('beforeend', row);
+  abilityGuesses.push(card.n);
+  if(win){
+    abilitySolved = true; abilityInput.disabled = true;
+    const reward = computeReward(abilityGuesses.length);
+    abilityBanner.className = "banner win";
+    abilityBanner.innerHTML = t('endless_found')+' '+abilitySecret.n+'<span class="sub">'+t('win_tries').replace('{n}', abilityGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(abilitySecret)+shareButtonHTML('shareAbility');
+    const today = todayUTCString();
+    loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress.ability = {date: today, data: {guesses: abilityGuesses}};
+      if(s.lastAbilityPlayed !== today || !s.abilityWon){
+        s.lastAbilityPlayed = today; s.abilityWon = true;
+        s.abilitySolved = (s.abilitySolved||0)+1;
+        addDiscoveredCard(s, abilitySecret.n);
+        addCollectionCard(s, abilitySecret.n);
+        s.eddies = s.eddies || {};
+        s.eddies.ability = (s.eddies.ability||0) + reward;
+        s.lastAbilityReward = reward;
+        saveStats(s).then(()=>{
+          document.getElementById('abilitySolved').textContent = s.abilitySolved;
+          refreshEddiesUI();
+        });
+      } else {
+        saveStats(s);
+      }
+    });
+  } else {
+    saveInProgress('ability', todayUTCString(), {guesses: abilityGuesses});
+  }
+}, ()=>abilityGuesses);
+
+// ======================= ART (défi quotidien, flou progressif sur 5 essais) =======================
+// Si le placeholder "visuel bientôt disponible" s'affiche, vérifie que les fichiers sont bien
+// uploadés dans /images/cards/ sur le domaine (Cloudflare R2 ou dossier statique).
+const ART_CARDS = CARDS;
+const ART_REWARD_TABLE = [125,100,75,50,25]; // récompense selon l'essai (1er au 5e) ; 6e = perdu, 0
+const ART_FILTER_STEPS = [
+  { blur:20, gray:1 }, // essai 1 : très flou, gris
+  { blur:14, gray:1 }, // essai 2 : un peu moins flou, toujours gris
+  { blur:9,  gray:0 }, // essai 3 : couleur d'origine visible
+  { blur:5,  gray:0 }, // essai 4
+  { blur:2,  gray:0 }, // essai 5
+  { blur:0,  gray:0 }, // essai 6 : révélation totale (perdu, pas de nouvel essai)
+];
+let artSecret, artGuesses = [], artSolved = false, artAttempt = 1;
+const artBody = document.getElementById('artBody');
+const artInput = document.getElementById('guessInputArt');
+const artSugg = document.getElementById('suggestionsArt');
+const artBanner = document.getElementById('artBanner');
+function applyArtBlur(attempt){
+  const step = ART_FILTER_STEPS[Math.min(attempt, ART_FILTER_STEPS.length) - 1];
+  const canvas = document.getElementById('artCanvas');
+  canvas.style.filter = 'blur('+step.blur+'px) grayscale('+step.gray+')';
+}
+function showArtImage(card, revealed){
+  const canvas = document.getElementById('artCanvas');
+  const placeholder = document.getElementById('artPlaceholder');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = ()=>{
+    canvas.style.display = 'block'; placeholder.style.display = 'none';
+    const cw = canvas.width, ch = canvas.height;
+    const scale = Math.max(cw/img.width, ch/img.height);
+    const dw = img.width*scale, dh = img.height*scale;
+    ctx.clearRect(0,0,cw,ch);
+    ctx.drawImage(img, (cw-dw)/2, (ch-dh)/2, dw, dh);
+    if(!revealed){
+      // Bande noire sur la zone du nom de la carte (juste sous l'illustration, dans le gabarit
+      // standard WNC) — dessinée par-dessus, donc masquée à TOUS les niveaux de flou pendant les
+      // essais. Retirée uniquement au récapitulatif final (gagné ou perdu).
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, ch*0.58+4, cw, ch*0.18-8);
+    }
+  };
+  img.onerror = ()=>{ canvas.style.display='none'; placeholder.style.display='flex'; };
+  img.src = cardImgUrl(card);
+}
+function initArt(){
+  const today = todayUTCString();
+  artSecret = dailyCardFor('art', today);
+  artGuesses = []; artSolved = false; artAttempt = 1;
+  artBody.innerHTML = ""; artBanner.className = "banner"; artBanner.innerHTML = "";
+  artInput.disabled = false;
+  document.querySelector('.art-frame').style.display = '';
+  showArtImage(artSecret);
+  applyArtBlur(1);
+  // Restaure les essais déjà faits aujourd'hui (compte si connecté, sinon cache navigateur) —
+  // indépendamment du résultat gagné/perdu, vérifié séparément juste après.
+  loadInProgress('art', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = CARDS.find(c=>c.n===name);
+      if(card){
+        const {row} = renderRow(card, artSecret);
+        artBody.insertAdjacentHTML('beforeend', row);
+        artGuesses.push(name);
+      }
+    });
+    if(data.attempt) artAttempt = data.attempt;
+    if(!artSolved) applyArtBlur(Math.min(artAttempt,6));
+  });
+  loadStats().then(s=>{
+    if(s.lastArtPlayed === today && (s.artWon || s.artLost)){
+      artSolved = true; artInput.disabled = true;
+      applyArtBlur(6);
+      document.getElementById('artCanvas').style.display = 'none';
+    document.getElementById('artPlaceholder').style.display = 'none';
+    document.querySelector('.art-frame').style.display = 'none';
+      if(s.artWon){
+        artBanner.className = "banner win";
+        artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', s.lastArtReward||0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
+      } else {
+        artBanner.className = "banner fail";
+        artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
+      }
+    }
+  });
+}
+setupAutocomplete(artInput, artSugg, (card)=>{
+  if(artSolved) return;
+  const {row, win} = renderRow(card, artSecret);
+  artBody.insertAdjacentHTML('beforeend', row);
+  artGuesses.push(card.n);
+  const today = todayUTCString();
+  if(win){
+    artSolved = true; artInput.disabled = true;
+    applyArtBlur(6);
+    document.getElementById('artCanvas').style.display = 'none';
+    document.getElementById('artPlaceholder').style.display = 'none';
+    document.querySelector('.art-frame').style.display = 'none';
+    const reward = ART_REWARD_TABLE[artAttempt-1];
+    artBanner.className = "banner win";
+    artBanner.innerHTML = t('endless_found')+' '+artSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', artAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
+    loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress.art = {date: today, data: {guesses: artGuesses, attempt: artAttempt}};
+      if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
+        s.lastArtPlayed = today; s.artWon = true; s.artLost = false;
+        s.artPlayed = (s.artPlayed||0)+1;
+        s.artSolved = (s.artSolved||0)+1;
+        addDiscoveredCard(s, artSecret.n);
+        addCollectionCard(s, artSecret.n);
+        if(artAttempt===1) s.artFirstTryWins = (s.artFirstTryWins||0)+1;
+        s.eddies = s.eddies || {};
+        s.eddies.art = (s.eddies.art||0) + reward;
+        s.lastArtReward = reward;
+        saveStats(s).then(()=>{
+          document.getElementById('artSolved').textContent = s.artSolved;
+          refreshEddiesUI();
+        });
+      } else {
+        saveStats(s);
+      }
+    });
+  } else {
+    artAttempt++;
+    if(artAttempt > 5){
+      artSolved = true; artInput.disabled = true;
+      applyArtBlur(6);
+      document.getElementById('artCanvas').style.display = 'none';
+    document.getElementById('artPlaceholder').style.display = 'none';
+    document.querySelector('.art-frame').style.display = 'none';
+      artBanner.className = "banner fail";
+      artBanner.innerHTML = t('art_failed')+' '+artSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealCardHTML(artSecret)+shareButtonHTML('shareArt');
+      loadStats().then(s=>{
+        s.inProgress = s.inProgress || {};
+        s.inProgress.art = {date: today, data: {guesses: artGuesses, attempt: artAttempt}};
+        if(s.lastArtPlayed !== today || (!s.artWon && !s.artLost)){
+          s.lastArtPlayed = today; s.artWon = false; s.artLost = true;
+          s.artPlayed = (s.artPlayed||0)+1; s.artLostCount = (s.artLostCount||0)+1;
+          saveStats(s);
+        } else {
+          saveStats(s);
+        }
+      });
+    } else {
+      applyArtBlur(artAttempt);
+      saveInProgress('art', today, {guesses: artGuesses, attempt: artAttempt});
+    }
+  }
+}, ()=>artGuesses);
+
+// ======================= ALT ART (illustrations alternatives — même principe qu'Art) =======================
+// Chaque jour, UNE des illustrations alternatives de WNC_ALT (sets/wnc-alt.js) s'affiche floutée,
+// avec une barre noire (propre à chaque image, voir "bar") qui cache le nom de la carte. Il faut
+// deviner la carte de base. Récompenses, flou et nombre d'essais identiques à Art.
+// Toutes les données du jeu sont rangées dans s.altArt (last/won/lost/reward/played/lostCount/
+// solved/firstTry/collection) pour ne pas multiplier les champs dans les stats.
+const ALT_EXTRA_CARDS = (typeof WNC_ALT_EXTRA !== 'undefined' ? WNC_ALT_EXTRA : []);
+const ALT_GUESS_POOL = CARDS.concat(ALT_EXTRA_CARDS);
+function altBaseCard(name){ return ALT_GUESS_POOL.find(c=>c.n===name) || null; }
+function altImgUrl(entry, thumb){ return 'https://img.choomdle.com/'+(thumb?'cards-thumb/':'cards/')+entry.img+'.jpg'; }
+const ALTART_LABEL = {
+  fr:"Devine la carte à partir de son illustration alternative — le flou s'estompe un peu à chaque essai raté, et la couleur apparaît à partir du 3e essai. Une barre noire cache volontairement le nom et le texte de la carte.",
+  en:"Guess the card from its alternate artwork — the blur fades a bit with each wrong guess, and color appears from your 3rd try. A black bar deliberately hides the card's name and text.",
+  es:"Adivina la carta a partir de su ilustración alternativa — el desenfoque se reduce un poco con cada intento fallido, y el color aparece a partir del 3.º intento. Una barra negra oculta a propósito el nombre y el texto de la carta.",
+  de:"Errate die Karte anhand ihrer alternativen Illustration — die Unschärfe nimmt mit jedem falschen Versuch etwas ab, und ab dem 3. Versuch erscheint die Farbe. Ein schwarzer Balken verdeckt absichtlich den Namen und Text der Karte.",
+  pt:"Adivinhe a carta pela sua ilustração alternativa — o desfoque diminui um pouco a cada tentativa errada, e a cor aparece a partir da 3ª tentativa. Uma barra preta esconde propositalmente o nome e o texto da carta.",
+  it:"Indovina la carta dalla sua illustrazione alternativa — la sfocatura si riduce un po' a ogni tentativo sbagliato, e il colore appare dal 3° tentativo. Una barra nera nasconde volutamente il nome e il testo della carta.",
+  pl:"Odgadnij kartę na podstawie alternatywnej ilustracji — rozmycie zmniejsza się nieco po każdej błędnej próbie, a kolor pojawia się od 3. próby. Czarny pasek celowo zakrywa nazwę i tekst karty.",
+  ko:"대체 일러스트로 카드를 맞혀보세요 — 오답을 낼 때마다 흐림 효과가 조금씩 옅어지고, 3번째 시도부터 색상이 나타납니다. 검은 막대는 카드의 이름과 텍스트를 의도적으로 가립니다.",
+  zh:"根据备用插画猜卡牌——每次猜错，模糊程度都会减弱一些，从第3次尝试起会显示颜色。黑色条是特意用来遮挡卡牌名称和文字的。",
+  ja:"別バージョンのイラストからカードを当てよう — 間違えるたびにぼかしが少しずつ薄れ、3回目の試行から色が表示されます。黒いバーはカードの名前とテキストを意図的に隠しています。",
+};
+const ALTART_COLLECTION_HINT = {
+  fr:"Devine une illustration alternative dans Alt Art pour la débloquer ici en couleur.",
+  en:"Correctly guess an alternate artwork in Alt Art to unlock it here in color.",
+  es:"Adivina una ilustración alternativa en Alt Art para desbloquearla aquí a color.",
+  de:"Errate eine alternative Illustration in Alt Art, um sie hier in Farbe freizuschalten.",
+  pt:"Acerte uma ilustração alternativa em Alt Art para desbloqueá-la aqui em cores.",
+  it:"Indovina un'illustrazione alternativa in Alt Art per sbloccarla qui a colori.",
+  pl:"Odgadnij alternatywną ilustrację w Alt Art, aby odblokować ją tutaj w kolorze.",
+  ko:"Alt Art에서 대체 일러스트를 맞히면 여기서 컬러로 잠금 해제됩니다.",
+  zh:"在 Alt Art 中猜中一张备用插画，即可在此以彩色解锁。",
+  ja:"Alt Artで別バージョンのイラストを正解すると、ここでカラーで解放されます。",
+};
+function refreshAltTexts(){
+  const lab = document.getElementById('altArtLabel');
+  if(lab) lab.textContent = ALTART_LABEL[currentLang] || ALTART_LABEL.en;
+  const hint = document.getElementById('collectionAltHint');
+  if(hint && hint.style.display !== 'none') hint.textContent = ALTART_COLLECTION_HINT[currentLang] || ALTART_COLLECTION_HINT.en;
+}
+let altEntry, altSecret, altGuesses = [], altSolved = false, altAttempt = 1;
+const altBody = document.getElementById('altArtBody');
+const altInput = document.getElementById('guessInputAltArt');
+const altSugg = document.getElementById('suggestionsAltArt');
+const altBanner = document.getElementById('altArtBanner');
+function altFrame(){ return document.querySelector('#panel-altart .art-frame'); }
+function applyAltBlur(attempt){
+  const step = ART_FILTER_STEPS[Math.min(attempt, ART_FILTER_STEPS.length) - 1];
+  document.getElementById('altArtCanvas').style.filter = 'blur('+step.blur+'px) grayscale('+step.gray+')';
+}
+function hideAltImage(){
+  document.getElementById('altArtCanvas').style.display = 'none';
+  document.getElementById('altArtPlaceholder').style.display = 'none';
+  altFrame().style.display = 'none';
+}
+function showAltImage(entry){
+  const canvas = document.getElementById('altArtCanvas');
+  const placeholder = document.getElementById('altArtPlaceholder');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = ()=>{
+    canvas.style.display = 'block'; placeholder.style.display = 'none';
+    const cw = canvas.width, ch = canvas.height;
+    const scale = Math.max(cw/img.width, ch/img.height);
+    const dw = img.width*scale, dh = img.height*scale;
+    ctx.clearRect(0,0,cw,ch);
+    ctx.drawImage(img, (cw-dw)/2, (ch-dh)/2, dw, dh);
+    // Barre noire propre à chaque alt art : le nom de la carte n'est pas toujours à la même
+    // hauteur (Legends : en haut ; autres cartes : selon la longueur du texte).
+    const b = entry.bar || [0.586, 0.754];
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, ch*b[0], cw, ch*(b[1]-b[0]));
+  };
+  img.onerror = ()=>{ canvas.style.display='none'; placeholder.style.display='flex'; };
+  img.src = altImgUrl(entry);
+}
+function revealAltHTML(entry){
+  return '<img class="win-card-img" src="'+altImgUrl(entry)+'" alt="'+entry.n.replace(/"/g,'&quot;')+'" data-hide-on-error="1">';
+}
+function initAltArt(){
+  const today = todayUTCString();
+  altEntry = dailyAltFor(today);
+  altSecret = altBaseCard(altEntry.n);
+  altGuesses = []; altSolved = false; altAttempt = 1;
+  altBody.innerHTML = ""; altBanner.className = "banner"; altBanner.innerHTML = "";
+  altInput.disabled = false;
+  altFrame().style.display = '';
+  showAltImage(altEntry);
+  applyAltBlur(1);
+  refreshAltTexts();
+  loadInProgress('altart', today).then(data=>{
+    if(!data || !data.guesses) return;
+    data.guesses.forEach(name=>{
+      const card = altBaseCard(name);
+      if(card){
+        const {row} = renderRow(card, altSecret);
+        altBody.insertAdjacentHTML('beforeend', row);
+        altGuesses.push(name);
+      }
+    });
+    if(data.attempt) altAttempt = data.attempt;
+    if(!altSolved) applyAltBlur(Math.min(altAttempt,6));
+  });
+  loadStats().then(s=>{
+    const a = s.altArt || {};
+    document.getElementById('altArtSolved').textContent = a.solved || 0;
+    if(a.last === today && (a.won || a.lost)){
+      altSolved = true; altInput.disabled = true;
+      applyAltBlur(6); hideAltImage();
+      if(a.won){
+        altBanner.className = "banner win";
+        altBanner.innerHTML = t('endless_found')+' '+altSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', a.reward||0)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+      } else {
+        altBanner.className = "banner fail";
+        altBanner.innerHTML = t('art_failed')+' '+altSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+      }
+    }
+  });
+}
+setupAutocomplete(altInput, altSugg, (card)=>{
+  if(altSolved) return;
+  const {row, win} = renderRow(card, altSecret);
+  altBody.insertAdjacentHTML('beforeend', row);
+  altGuesses.push(card.n);
+  const today = todayUTCString();
+  if(win){
+    altSolved = true; altInput.disabled = true;
+    applyAltBlur(6); hideAltImage();
+    const reward = ART_REWARD_TABLE[altAttempt-1];
+    altBanner.className = "banner win";
+    altBanner.innerHTML = t('endless_found')+' '+altSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', altAttempt)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+    loadStats().then(s=>{
+      s.inProgress = s.inProgress || {};
+      s.inProgress.altart = {date: today, data: {guesses: altGuesses, attempt: altAttempt}};
+      s.altArt = s.altArt || {};
+      const a = s.altArt;
+      if(a.last !== today || (!a.won && !a.lost)){
+        a.last = today; a.won = true; a.lost = false;
+        a.played = (a.played||0)+1; a.solved = (a.solved||0)+1;
+        if(altAttempt===1) a.firstTry = (a.firstTry||0)+1;
+        a.collection = a.collection || [];
+        if(!a.collection.includes(altEntry.id)) a.collection.push(altEntry.id);
+        s.eddies = s.eddies || {};
+        s.eddies.altart = (s.eddies.altart||0) + reward;
+        a.reward = reward;
+        saveStats(s).then(()=>{
+          document.getElementById('altArtSolved').textContent = a.solved;
+          refreshEddiesUI();
+        });
+      } else {
+        saveStats(s);
+      }
+    });
+  } else {
+    altAttempt++;
+    if(altAttempt > 5){
+      altSolved = true; altInput.disabled = true;
+      applyAltBlur(6); hideAltImage();
+      altBanner.className = "banner fail";
+      altBanner.innerHTML = t('art_failed')+' '+altSecret.n+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+revealAltHTML(altEntry)+shareButtonHTML('shareAltArt');
+      loadStats().then(s=>{
+        s.inProgress = s.inProgress || {};
+        s.inProgress.altart = {date: today, data: {guesses: altGuesses, attempt: altAttempt}};
+        s.altArt = s.altArt || {};
+        const a = s.altArt;
+        if(a.last !== today || (!a.won && !a.lost)){
+          a.last = today; a.won = false; a.lost = true;
+          a.played = (a.played||0)+1; a.lostCount = (a.lostCount||0)+1;
+        }
+        saveStats(s);
+      });
+    } else {
+      applyAltBlur(altAttempt);
+      saveInProgress('altart', today, {guesses: altGuesses, attempt: altAttempt});
+    }
+  }
+}, ()=>altGuesses, ()=>ALT_GUESS_POOL);
+
+// ======================= CHROME CHECK (Vrai/Faux, 40s, -5s si erreur, ">" ou "=") =======================
+let chromeTimeLeft=40, chromeTimer=null, chromeScore=0, chromeActive=false, chromeCurrent=null, chromeHistory=[], chromeEddiesEarned=0;
+function chromeNewQuestion(){
+  const attrs = ["c","p","r"];
+  let a, b, attr, av, bv, tries=0;
+  do{
+    a = randCard(); b = randCard(); attr = attrs[Math.floor(Math.random()*attrs.length)];
+    av = a[attr]; bv = b[attr]; tries++;
+  } while((a.n===b.n || av===null || bv===null) && tries<50);
+  const op = Math.random() < 0.5 ? '>' : '=';
+  const truth = op === '>' ? (av > bv) : (av === bv);
+  chromeCurrent = { a, b, attr, av, bv, op, truth };
+  const labelMap = {c:t('col_cost'), p:t('col_pwr'), r:t('col_ram')};
+  document.getElementById('chromeCardA').textContent = a.n;
+  document.getElementById('chromeCardB').textContent = b.n;
+  document.getElementById('chromeOp').innerHTML = op+'&nbsp;<div class="duelattr">'+labelMap[attr]+'</div>';
+}
+function startChrome(){
+  chromeScore=0; chromeTimeLeft=40; chromeActive=true; chromeHistory=[]; chromeEddiesEarned=0;
+  document.getElementById('chromeScore').textContent = chromeScore;
+  document.getElementById('chromeTimer').textContent = chromeTimeLeft+"s";
+  document.getElementById('chromeDuel').style.display='flex';
+  document.getElementById('chromeAnswers').style.display='flex';
+  document.getElementById('chromeBanner').className='banner'; document.getElementById('chromeBanner').innerHTML='';
+  chromeNewQuestion();
+  clearInterval(chromeTimer);
+  chromeTimer = setInterval(()=>{
+    chromeTimeLeft--;
+    document.getElementById('chromeTimer').textContent = Math.max(0,chromeTimeLeft)+"s";
+    if(chromeTimeLeft<=0) endChrome();
+  },1000);
+}
+function endChrome(){
+  clearInterval(chromeTimer); chromeActive=false;
+  document.getElementById('chromeDuel').style.display='none';
+  document.getElementById('chromeAnswers').style.display='none';
+  document.getElementById('chromeBanner').className='banner win';
+  loadStats().then(s=>{
+    s.chromeSessions = (s.chromeSessions||0)+1;
+    s.chromeBestScore = Math.max(s.chromeBestScore||0, chromeScore);
+    s.chromeTotalCorrect = (s.chromeTotalCorrect||0) + chromeScore;
+    saveStats(s);
+  });
+  const labelMap = {c:t('col_cost'), p:t('col_pwr'), r:t('col_ram')};
+  const recap = chromeHistory.map(h=>{
+    const icon = h.correct ? '✓' : '✗';
+    const cls = h.correct ? 'match' : 'miss';
+    return '<div class="chrome-recap-row '+cls+'">'+
+      '<span class="recap-label">['+labelMap[h.attr]+']</span>'+
+      '<span class="recap-icon">'+icon+'</span>'+
+      '<span class="recap-detail">'+h.a.n+' <span class="recap-val">['+h.av+']</span> <span class="recap-op">'+h.op+'</span> <span class="recap-val">['+h.bv+']</span> '+h.b.n+'</span>'+
+      '<span class="recap-reward">+'+h.reward+'</span>'+
+      '</div>';
+  }).join('');
+  document.getElementById('chromeBanner').innerHTML = t('chrome_timeup')+' '+chromeScore+'<div class="chrome-recap">'+recap+'<div class="chrome-recap-total">'+t('reward_earn').replace('{n}', chromeEddiesEarned)+'</div></div>'+shareButtonHTML('shareChrome');
+}
+function chromeAnswer(userSaysTrue){
+  if(!chromeActive) return;
+  const correct = userSaysTrue === chromeCurrent.truth;
+  let rowReward = 0;
+  const duel = document.getElementById('chromeDuel');
+  if(correct){
+    chromeScore++; document.getElementById('chromeScore').textContent = chromeScore;
+    // Les eddies ne rapportent qu'à partir de la 10e bonne réponse (5 eddies chacune avant ça, 0).
+    if(chromeScore >= 10){
+      rowReward = 5;
+      chromeEddiesEarned += rowReward;
+      addEddies('chrome', rowReward);
+    }
+    duel.classList.remove('flash-wrong'); duel.classList.add('flash-correct');
+  }else{
+    chromeTimeLeft = Math.max(0, chromeTimeLeft-5);
+    document.getElementById('chromeTimer').textContent = chromeTimeLeft+"s";
+    duel.classList.remove('flash-correct'); duel.classList.add('flash-wrong');
+  }
+  chromeHistory.push({ a:chromeCurrent.a, b:chromeCurrent.b, attr:chromeCurrent.attr, av:chromeCurrent.av, bv:chromeCurrent.bv, op:chromeCurrent.op, userSaysTrue, correct, reward:rowReward });
+  setTimeout(()=>duel.classList.remove('flash-correct','flash-wrong'),300);
+  if(chromeTimeLeft<=0){ endChrome(); return; }
+  chromeNewQuestion();
+}
+document.getElementById('startChromeBtn').addEventListener('click', startChrome);
+document.getElementById('chromeTrue').addEventListener('click', ()=>chromeAnswer(true));
+document.getElementById('chromeFalse').addEventListener('click', ()=>chromeAnswer(false));
+
+// ======================= NETRUNNER BREACH (6 tentatives, glitch, prime dégressive) =======================
+let breachSecret, breachGuesses=[], breachActive=false, breachAttemptsLeft=6;
+const breachBody = document.getElementById('breachBody');
+const breachInput = document.getElementById('guessInputBreach');
+const breachSugg = document.getElementById('suggestionsBreach');
+const breachBanner = document.getElementById('breachBanner');
+function startBreach(){
+  breachSecret = randCard(); breachGuesses = []; breachAttemptsLeft = 6; breachActive = true;
+  breachBody.innerHTML=""; breachBanner.className="banner"; breachBanner.innerHTML="";
+  document.getElementById('breachAttempts').textContent = breachAttemptsLeft;
+  breachInput.disabled = false; breachInput.value=""; breachInput.focus();
+}
+document.getElementById('startBreachBtn').addEventListener('click', startBreach);
+setupAutocomplete(breachInput, breachSugg, (card)=>{
+  if(!breachActive) return;
+  const {row, win} = renderRow(card, breachSecret);
+  breachBody.insertAdjacentHTML('beforeend', row);
+  breachGuesses.push(card.n);
+  if(win){
+    breachActive = false; breachInput.disabled = true;
+    const reward = computeReward(breachGuesses.length);
+    breachBanner.className = "banner win";
+    breachBanner.innerHTML = t('breach_success')+' '+breachSecret.n+'<span class="sub">'+t('win_tries').replace('{n}', breachGuesses.length)+' <span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>';
+    addEddies('breach', reward);
+  } else {
+    breachAttemptsLeft--;
+    document.getElementById('breachAttempts').textContent = breachAttemptsLeft;
+    document.querySelector('#panel-breach .gridwrap').classList.add('glitchflash');
+    setTimeout(()=>document.querySelector('#panel-breach .gridwrap').classList.remove('glitchflash'),250);
+    if(breachAttemptsLeft<=0){
+      breachActive = false; breachInput.disabled = true;
+      breachBanner.className = "banner fail";
+      breachBanner.innerHTML = t('breach_failed')+' '+breachSecret.n;
+    }
+  }
+}, ()=>breachGuesses);
+
+// ======================= SEQUENCE (classer 5 cartes par ordre croissant, défi quotidien) =======================
+let sequenceCards = [], sequenceDisplayOrder = [], sequenceAttr = 'c', sequenceSolved = false, sequenceTries = 0, sequenceAttemptHistory = [];
+const SEQUENCE_REWARD_TABLE = [100,80,60,40,20]; // récompense selon la tentative (1re à 5e) en cas de victoire
+function buildSequencePuzzle(seedStr){
+  const rng = seededRng(seedStr);
+  const attrs = ['c','p','r'];
+  const attr = attrs[Math.floor(rng()*attrs.length)];
+  const byValue = {};
+  CARDS.forEach(c=>{ const v=c[attr]; if(v!==null && v!==undefined){ (byValue[v]=byValue[v]||[]).push(c); } });
+  const values = Object.keys(byValue).map(Number).filter(v=>byValue[v].length>0);
+  if(values.length < 5) return null;
+  const chosenValues = seededShuffle(values, rng).slice(0,5).sort((a,b)=>a-b);
+  const cards = chosenValues.map(v=>{
+    const pool = byValue[v];
+    return pool[Math.floor(rng()*pool.length)];
+  });
+  return { attr, cards };
+}
+function sequenceAttrLabel(attr){
+  return attr==='c' ? t('attr_cost_full') : attr==='p' ? t('attr_pwr_full') : t('attr_ram_full');
+}
+function initSequence(){
+  const today = todayUTCString();
+  document.getElementById('sequenceDate').textContent = today + " UTC";
+  let seedTry=0, puzzle=null;
+  while(!puzzle && seedTry<5){ puzzle = buildSequencePuzzle(today+"-sequence-"+seedTry); seedTry++; }
+  sequenceCards = puzzle ? puzzle.cards : [];
+  sequenceAttr = puzzle ? puzzle.attr : 'c';
+  document.getElementById('sequenceInstruction').innerHTML = t('sequence_instruction').replace('{attr}', '<span class="hl">'+sequenceAttrLabel(sequenceAttr)+'</span>');
+  const rng = seededRng(today+"-sequence-order");
+  sequenceDisplayOrder = seededShuffle(sequenceCards.map((c,i)=>i), rng);
+  sequenceSolved = false; sequenceTries = 0; sequenceAttemptHistory = [];
+  document.getElementById('sequenceBanner').className = 'banner'; document.getElementById('sequenceBanner').innerHTML = '';
+  renderSequence();
+  loadStats().then(s=>{
+    if(s.lastSequencePlayed === today && (s.sequenceWon || s.sequenceLost)){
+      sequenceSolved = true;
+      if(s.sequenceWon) showSequenceEndBanner(true, s.lastSequenceReward||0);
+      else showSequenceLossBanner();
+      renderSequence();
+    } else {
+      loadInProgress('sequence', today).then(data=>{
+        if(!data || sequenceSolved) return;
+        if(Array.isArray(data.order) && data.order.length === sequenceDisplayOrder.length){
+          sequenceDisplayOrder = data.order;
+        }
+        sequenceTries = data.tries || 0;
+        renderSequence();
+      });
+    }
+  });
+}
+function renderSequence(){
+  const list = document.getElementById('sequenceList');
+  list.innerHTML = '';
+  sequenceDisplayOrder.forEach((cardIdx, pos)=>{
+    const card = sequenceCards[cardIdx];
+    const row = document.createElement('div');
+    row.className = 'sequence-row';
+    row.innerHTML =
+      '<div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div>'+
+      '<div class="sequence-name">'+card.n+'</div>'+
+      '<div class="sequence-hint" id="sequenceHint-'+pos+'"></div>'+
+      '<div class="sequence-arrows">'+
+        '<button data-dir="-1" '+(pos===0||sequenceSolved?'disabled':'')+'>▲</button>'+
+        '<button data-dir="1" '+(pos===sequenceDisplayOrder.length-1||sequenceSolved?'disabled':'')+'>▼</button>'+
+      '</div>';
+    row.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>sequenceMove(pos, parseInt(btn.dataset.dir,10)));
+    });
+    list.appendChild(row);
+  });
+  document.getElementById('sequenceSubmitBtn').disabled = sequenceSolved;
+}
+function sequenceMove(pos, dir){
+  if(sequenceSolved) return;
+  const target = pos+dir;
+  if(target<0 || target>=sequenceDisplayOrder.length) return;
+  [sequenceDisplayOrder[pos], sequenceDisplayOrder[target]] = [sequenceDisplayOrder[target], sequenceDisplayOrder[pos]];
+  renderSequence();
+  saveInProgress('sequence', todayUTCString(), {order: sequenceDisplayOrder, tries: sequenceTries});
+}
+function showSequenceEndBanner(won, reward){
+  const banner = document.getElementById('sequenceBanner');
+  banner.className = 'banner win';
+  const rows = sequenceCards.map(card=>
+    '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'
+  ).join('');
+  banner.innerHTML = t('sequence_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+
+    '<div class="seq-compare seq-compare-single">'+rows+'</div>'+shareButtonHTML('shareSequence');
+}
+function showSequenceLossBanner(){
+  const banner = document.getElementById('sequenceBanner');
+  banner.className = 'banner fail';
+  const playerCol = sequenceDisplayOrder.map(idx=>sequenceCards[idx]);
+  const correctCol = sequenceCards; // déjà trié par ordre croissant à la construction du puzzle
+  const rows = playerCol.map((card, i)=>{
+    const correctCard = correctCol[i];
+    return '<div class="seq-compare-row">'+
+      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
+      '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
+      '</div>';
+  }).join('');
+  banner.innerHTML = t('sequence_lose')+
+    '<div class="seq-compare"><div class="seq-compare-header"><span>'+t('sequence_your_order')+'</span><span>'+t('sequence_correct_order')+'</span></div>'+rows+'</div>'+
+    '<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareSequence');
+}
+document.getElementById('sequenceSubmitBtn').addEventListener('click', ()=>{
+  if(sequenceSolved) return;
+  sequenceTries++;
+  saveInProgress('sequence', todayUTCString(), {order: sequenceDisplayOrder, tries: sequenceTries});
+  const rows = document.querySelectorAll('#sequenceList .sequence-row');
+  let allCorrect = true;
+  let correctCount = 0;
+  sequenceDisplayOrder.forEach((cardIdx, pos)=>{
+    const isCorrect = cardIdx === pos; // rangé par ordre croissant = l'index d'origine (déjà trié) doit correspondre à la position
+    rows[pos].classList.remove('correct-pos','wrong-pos');
+    rows[pos].classList.add(isCorrect ? 'correct-pos' : 'wrong-pos');
+    if(isCorrect) correctCount++; else allCorrect = false;
+    // Indice : + la carte doit monter, - elle doit descendre, = elle est bien placée.
+    const hint = document.getElementById('sequenceHint-'+pos);
+    if(hint) hint.textContent = isCorrect ? '=' : (cardIdx < pos ? '+' : '-');
+  });
+  sequenceAttemptHistory.push({correct: correctCount, wrong: sequenceDisplayOrder.length - correctCount});
+  if(allCorrect){
+    sequenceSolved = true;
+    const reward = SEQUENCE_REWARD_TABLE[sequenceTries-1] || 0;
+    showSequenceEndBanner(true, reward);
+    renderSequence();
+    const today = todayUTCString();
+    loadStats().then(s=>{
+      if(s.lastSequencePlayed !== today || (!s.sequenceWon && !s.sequenceLost)){
+        s.lastSequencePlayed = today; s.sequenceWon = true; s.sequenceLost = false; s.lastSequenceReward = reward;
+        s.sequencePlayed = (s.sequencePlayed||0)+1; s.sequenceWins = (s.sequenceWins||0)+1;
+        if(sequenceTries===1) s.sequenceFirstTryWins = (s.sequenceFirstTryWins||0)+1;
+        s.eddies = s.eddies || {};
+        s.eddies.sequence = (s.eddies.sequence||0) + reward;
+        saveStats(s).then(refreshEddiesUI);
+      }
+    });
+  } else if(sequenceTries>=5){
+    sequenceSolved = true;
+    showSequenceLossBanner();
+    renderSequence();
+    const today = todayUTCString();
+    loadStats().then(s=>{
+      if(s.lastSequencePlayed !== today || (!s.sequenceWon && !s.sequenceLost)){
+        s.lastSequencePlayed = today; s.sequenceWon = false; s.sequenceLost = true; s.lastSequenceReward = 0;
+        s.sequencePlayed = (s.sequencePlayed||0)+1;
+        saveStats(s);
+      }
+    });
+  }
+});
+
+
+// PRNG déterministe (mulberry32) pour que tout le monde ait le même puzzle le même jour.
+function seededRng(seedStr){
+  let h = 0; for(let i=0;i<seedStr.length;i++){ h = (h*31 + seedStr.charCodeAt(i))>>>0; }
+  let a = h || 1;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seededShuffle(arr, rng){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(rng()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+// ======================= ROULEMENT SANS RÉPÉTITION + ANTI-COLLISION (Classic/Legend/Ability/Art) =======================
+// À partir de CUTOVER_DATE (incluse) :
+//  - Chaque jeu voit tout son paquet de cartes une fois avant qu'aucune ne revienne (un "cycle"
+//    = un mélange complet du paquet, remélangé seulement une fois épuisé).
+//  - Les 4 jeux ne peuvent jamais proposer la même carte le même jour (priorité fixe :
+//    Classic > Legend > Ability > Art ; en cas de coïncidence, la carte du jour est échangée
+//    avec une autre carte du MÊME paquet mélangé, à un autre jour — aucune carte n'est donc
+//    jamais perdue ni comptée deux fois, juste réordonnée).
+// Avant CUTOVER_DATE : ancien système (seededIndex simple), conservé tel quel pour que l'Archive
+// continue d'afficher fidèlement ce qui a réellement été proposé ces jours-là.
+const CUTOVER_DATE = "2026-9-5";
+const CYCLE_EPOCH_MS = Date.UTC(2026,0,1);
+function daysSinceEpoch(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  return Math.round((Date.UTC(y,m-1,d) - CYCLE_EPOCH_MS) / 86400000);
+}
+// Chaque carte peut porter une date d'ajout ("added":"AAAA-M-J"). Une carte ajoutée n'entre dans le
+// roulement qu'au DÉBUT DU CYCLE SUIVANT (jamais en cours de cycle) : ainsi, ajouter des cartes ne
+// change ni la carte du jour, ni les réponses déjà passées affichées dans l'Archive. Les cartes
+// sans date ("added") existaient déjà au lancement et font partie du paquet depuis le début.
+function cardAddedIdx(c){ return c.added ? daysSinceEpoch(c.added) : -1e9; }
+function poolFor(gameKey, dayIdx){
+  if(gameKey==='altart') return WNC_ALT.filter(a=>cardAddedIdx(a) <= dayIdx && altBaseCard(a.n));
+  const base = CARDS.filter(c=>cardAddedIdx(c) <= dayIdx);
+  if(gameKey==='legend') return base.filter(c=>c.t==="Legend" && c.n.includes(" — "));
+  if(gameKey==='ability') return base.filter(c=>c.text && c.text.trim().length>0);
+  return base; // classic et art : toutes les cartes
+}
+const _cycleCache = {};
+const _cycleStarts = {};
+function cycleStartsFor(gameKey, dayIdx){
+  const s = _cycleStarts[gameKey] || (_cycleStarts[gameKey] = [0]);
+  while(true){
+    const last = s[s.length-1];
+    const n = poolFor(gameKey, last).length;
+    if(last + n > dayIdx) return s;
+    s.push(last + n);
+  }
+}
+function naturalCycleOrder(gameKey, pool, cycleNum){
+  return seededShuffle(pool, seededRng(gameKey+'-cycle-'+cycleNum));
+}
+function resolvedPick(gameKey, higherPriorityFns, dayIndex){
+  const s = cycleStartsFor(gameKey, dayIndex);
+  let cycleNum = s.length-1;
+  while(s[cycleNum] > dayIndex) cycleNum--;
+  const cycleStartDay = s[cycleNum];
+  const pool = poolFor(gameKey, cycleStartDay);
+  const n = pool.length;
+  const posInCycle = dayIndex - cycleStartDay;
+  const cacheKey = gameKey+'-'+cycleNum;
+  if(!_cycleCache[cacheKey]){
+    const natural = naturalCycleOrder(gameKey, pool, cycleNum);
+    const higherCardsPerPos = [];
+    for(let p=0;p<n;p++){
+      const d = cycleStartDay+p;
+      higherCardsPerPos.push(higherPriorityFns.map(fn=>fn(d).n));
+    }
+    const resolved = natural.slice();
+    for(let p=0;p<n;p++){
+      if(higherCardsPerPos[p].includes(resolved[p].n)){
+        for(let step=1; step<n; step++){
+          const q = (p+step)%n;
+          if(higherCardsPerPos[p].includes(resolved[q].n)) continue;
+          if(higherCardsPerPos[q].includes(resolved[p].n)) continue;
+          const tmp = resolved[p]; resolved[p]=resolved[q]; resolved[q]=tmp;
+          break;
+        }
+      }
+    }
+    _cycleCache[cacheKey] = resolved;
+  }
+  return _cycleCache[cacheKey][posInCycle];
+}
+function classicPickNew(dayIndex){ return resolvedPick('classic', [], dayIndex); }
+function legendPickNew(dayIndex){ return resolvedPick('legend', [classicPickNew], dayIndex); }
+function abilityPickNew(dayIndex){ return resolvedPick('ability', [classicPickNew, legendPickNew], dayIndex); }
+function artPickNew(dayIndex){ return resolvedPick('art', [classicPickNew, legendPickNew, abilityPickNew], dayIndex); }
+// Alt Art : même roulement sans répétition que les autres jeux ; la carte de base ne peut pas
+// non plus être la même, le même jour, que celle de Classic/Legend/Ability/Art.
+function altPickNew(dayIndex){ return resolvedPick('altart', [classicPickNew, legendPickNew, abilityPickNew, artPickNew], dayIndex); }
+function dailyAltFor(dateStr){ return altPickNew(daysSinceEpoch(dateStr)); }
+function dailyCardFor(gameKey, dateStr){
+  const d = daysSinceEpoch(dateStr);
+  const cutoverIdx = daysSinceEpoch(CUTOVER_DATE);
+  if(d < cutoverIdx){
+    // Ancien système (avant la bascule) : on utilise le paquet tel qu'il était ce jour-là.
+    const pool = poolFor(gameKey, d);
+    const suffix = gameKey==='classic' ? '' : '-'+gameKey;
+    return pool[seededIndex(dateStr+suffix, pool.length)];
+  }
+  if(gameKey==='classic') return classicPickNew(d);
+  if(gameKey==='legend') return legendPickNew(d);
+  if(gameKey==='ability') return abilityPickNew(d);
+  if(gameKey==='art') return artPickNew(d);
+}
+
+// Un mot-clé ({Go Solo}, {Attack}, Adrenaline...) ne compte comme "la carte a cette capacité" que
+// s'il démarre le texte ou une nouvelle clause (juste après ". " ou ") "). Une simple mention en
+// plein milieu de phrase (ex: "Rivals must pay +2 €$ to use {Go Solo}") ne compte pas — la carte
+// ne fait alors que RÉFÉRENCER la capacité, sans l'avoir elle-même.
+function hasOwnAbility(text, needle){
+  if(!text) return false;
+  let idx = text.indexOf(needle);
+  while(idx !== -1){
+    if(idx === 0) return true;
+    const prefix2 = text.slice(idx-2, idx);
+    if(prefix2 === '. ' || prefix2 === ') ') return true;
+    idx = text.indexOf(needle, idx+1);
+  }
+  return false;
+}
+function cardsLinkCategoryDefs(){
+  const defs = [];
+  const byType = {Legend:t('cl_cat_legends'), Unit:t('cl_cat_units'), Gear:t('cl_cat_gear'), Program:t('cl_cat_programs')};
+  Object.keys(byType).forEach(ty=>{
+    defs.push({ label: byType[ty], filter: c=>c.t===ty });
+  });
+  [1,2,3,4,5,6].forEach(n=>{
+    defs.push({ label: t('cl_cat_ram').replace('{n}', n), filter: c=>c.r===n });
+  });
+  [1,2,3,4,5,6,7,8,9].forEach(n=>{
+    defs.push({ label: t('cl_cat_cost').replace('{n}', n), filter: c=>c.c===n });
+  });
+  [0,1,2,3,4,5,6,7,8,9].forEach(n=>{
+    defs.push({ label: t('cl_cat_pwr').replace('{n}', n), filter: c=>c.p===n });
+  });
+  const factions = {};
+  CARDS.forEach(c=>c.f.forEach(f=>{ factions[f]=(factions[f]||0)+1; }));
+  const CORP_FACTIONS = ['Arasaka','Militech','Zetatech','Trauma Team'];
+  const GANG_FACTIONS = ['Maelstrom','Valentinos','Tyger Claws','Voodoo Boys','The Mox','6th Street','Raffen Shiv','Animal'];
+  const NOMAD_FACTIONS = ['Aldecaldos','Wraiths'];
+  Object.keys(factions).forEach(f=>{
+    if(factions[f] >= 4){
+      const key = CORP_FACTIONS.includes(f) ? 'cl_cat_corp'
+                : GANG_FACTIONS.includes(f) ? 'cl_cat_gang'
+                : NOMAD_FACTIONS.includes(f) ? 'cl_cat_nomad'
+                : 'cl_cat_faction';
+      defs.push({ label: t(key).replace('{f}', f), filter: c=>c.f.includes(f) });
+    }
+  });
+  ['Red','Yellow','Green','Blue'].forEach(col=>{
+    defs.push({ label: t('cl_cat_color').replace('{col}', t('color_'+col.toLowerCase())), filter: c=>c.col===col });
+  });
+  const kw = [
+    ['{Go Solo}', t('cl_cat_gosolo')], ['{Blocker}', t('cl_cat_blocker')], ['{Attack}', t('cl_cat_attack')],
+    ['{Play}', t('cl_cat_play')], ['{Quick}', t('cl_cat_quick')], ['{Adrenaline}', t('cl_cat_adrenaline')],
+    ['{Call}', t('cl_cat_call')], ['{Defeated}', t('cl_cat_defeated')], ['{Spend}', t('cl_cat_spend')],
+  ];
+  kw.forEach(([needle,label])=>{
+    defs.push({ label, filter: c=>c.text && hasOwnAbility(c.text, needle) });
+  });
+  defs.push({ label: t('cl_cat_dice'), filter: c=>c.text && /\bd(4|6|20)\b|Gig/i.test(c.text) });
+  defs.push({ label: t('cl_cat_noability'), filter: c=>!c.text || c.text.trim()==='' });
+  return defs;
+}
+
+function buildCardsLinkPuzzle(seedStr, avoidLabels){
+  avoidLabels = avoidLabels || [];
+  const rng = seededRng(seedStr);
+  const allDefs = cardsLinkCategoryDefs().map(d=>({ label:d.label, matches: CARDS.filter(d.filter) }));
+  let eligibleDefs = allDefs.filter(d=>d.matches.length>=4 && !avoidLabels.includes(d.label));
+  // Si trop de catégories récentes sont exclues pour qu'il en reste assez, on relâche la
+  // contrainte de variété plutôt que d'échouer à générer un puzzle.
+  if(eligibleDefs.length < 4) eligibleDefs = allDefs.filter(d=>d.matches.length>=4);
+  const shuffledDefs = seededShuffle(eligibleDefs, rng);
+  const used = new Set();
+  const groups = [];
+  for(const def of shuffledDefs){
+    if(groups.length>=4) break;
+    const avail = def.matches.filter(c=>!used.has(c.n));
+    if(avail.length < 4) continue;
+    const picked = seededShuffle(avail, rng).slice(0,4);
+    picked.forEach(c=>used.add(c.n));
+    groups.push({ label: def.label, cards: picked });
+  }
+  if(groups.length!==4) return null;
+  // Vérifie qu'aucune carte choisie ne correspond AUSSI à une autre des 4 catégories retenues
+  // aujourd'hui — sinon le joueur pourrait légitimement la classer ailleurs (ambiguïté).
+  const chosenLabels = groups.map(g=>g.label);
+  for(const g of groups){
+    for(const card of g.cards){
+      for(const otherLabel of chosenLabels){
+        if(otherLabel === g.label) continue;
+        const otherDef = allDefs.find(d=>d.label===otherLabel);
+        if(otherDef && otherDef.matches.some(m=>m.n===card.n)) return null;
+      }
+    }
+  }
+  return groups;
+}
+
+function daysAgoUTCString(n){
+  const d = new Date(); d.setUTCDate(d.getUTCDate()-n);
+  return d.getUTCFullYear()+"-"+(d.getUTCMonth()+1)+"-"+d.getUTCDate();
+}
+
+let cardsLinkGroups = [], cardsLinkCells = [], cardsLinkSelected = [], cardsLinkMistakes = 0, cardsLinkSolvedCount = 0, cardsLinkActive = false, cardsLinkSolveOrder = [], cardsLinkOriginalCells = [];
+function initCardsLink(){
+  const today = todayUTCString();
+  document.getElementById('cardsLinkDate').textContent = today + " UTC";
+  // Regarde les catégories utilisées les 4 jours précédents, pour éviter qu'une même catégorie
+  // (ex: une faction) ne revienne trop souvent d'un jour à l'autre.
+  const recentLabels = [];
+  for(let d=1; d<=4; d++){
+    const pastDate = daysAgoUTCString(d);
+    let pt=0, pastGroups=null;
+    while(!pastGroups && pt<250){ pastGroups = buildCardsLinkPuzzle(pastDate+"-cardslink-"+pt, []); pt++; }
+    if(pastGroups) recentLabels.push(...pastGroups.map(g=>g.label));
+  }
+  let seedTry = 0, groups = null;
+  while(!groups && seedTry < 250){ groups = buildCardsLinkPuzzle(today+"-cardslink-"+seedTry, recentLabels); seedTry++; }
+  cardsLinkGroups = groups || [];
+  cardsLinkMistakes = 0; cardsLinkSolvedCount = 0; cardsLinkSelected = [];
+  cardsLinkActive = true;
+  document.querySelector('.cardslink-controls').style.display = '';
+  document.querySelector('.cardslink-mistakes-row').style.display = '';
+  document.getElementById('cardsLinkSolvedGroups').innerHTML = '';
+  document.getElementById('cardsLinkBanner').className = 'banner'; document.getElementById('cardsLinkBanner').innerHTML = '';
+  const rng = seededRng(today+"-cardslink-order");
+  cardsLinkCells = seededShuffle(cardsLinkGroups.flatMap((g,gi)=>g.cards.map(c=>({ card:c, groupIndex:gi }))), rng);
+  cardsLinkOriginalCells = cardsLinkCells.slice();
+  cardsLinkSolveOrder = [];
+  renderCardsLinkDots();
+  renderCardsLinkGrid();
+  loadStats().then(s=>{
+    if(s.lastCardsLinkPlayed === today && (s.cardsLinkWon !== null && s.cardsLinkWon !== undefined)){
+      cardsLinkActive = false;
+      document.querySelector('.cardslink-controls').style.display = 'none';
+      document.querySelector('.cardslink-mistakes-row').style.display = 'none';
+      revealAllCardsLinkGroups();
+      showCardsLinkEndBanner(s.cardsLinkWon, s.lastCardsLinkReward||0, s.lastCardsLinkMistakes||0);
+    } else {
+      loadInProgress('cardslink', today).then(data=>{
+        if(!data) return;
+        cardsLinkMistakes = data.mistakes || 0;
+        (data.solveOrder||[]).forEach(gi=>{
+          cardsLinkSolveOrder.push(gi);
+          cardsLinkSolvedCount++;
+          document.getElementById('cardsLinkSolvedGroups').insertAdjacentHTML('beforeend', solvedBarHTML(cardsLinkGroups[gi]));
+          cardsLinkCells = cardsLinkCells.filter(c=>c.groupIndex!==gi);
+        });
+        renderCardsLinkDots();
+        renderCardsLinkGrid();
+      });
+    }
+  });
+}
+function renderCardsLinkDots(){
+  let html = '';
+  for(let i=0;i<4;i++){ html += '<span class="dot'+(i<cardsLinkMistakes?' used':'')+'">●</span> '; }
+  document.getElementById('cardsLinkDots').innerHTML = html;
+}
+function renderCardsLinkGrid(){
+  const grid = document.getElementById('cardsLinkGrid');
+  grid.innerHTML = '';
+  cardsLinkCells.forEach((cell)=>{
+    const div = document.createElement('div');
+    div.className = 'cardslink-cell';
+    div.dataset.name = cell.card.n;
+    const url = cardThumbUrl(cell.card);
+    const preload = new Image();
+    preload.onload = ()=>{ div.style.backgroundImage = "url('"+url+"')"; };
+    preload.onerror = ()=>{ div.innerHTML = '<div class="fallback">'+cell.card.n+'</div>'; };
+    preload.src = url;
+    div.addEventListener('click', ()=>cardsLinkToggle(cell.card.n, div));
+    grid.appendChild(div);
+  });
+}
+function cardsLinkToggle(name, el){
+  if(!cardsLinkActive) return;
+  const idx = cardsLinkSelected.indexOf(name);
+  if(idx>-1){ cardsLinkSelected.splice(idx,1); el.classList.remove('selected'); return; }
+  if(cardsLinkSelected.length>=4) return;
+  cardsLinkSelected.push(name); el.classList.add('selected');
+}
+document.getElementById('cardsLinkDeselectBtn').addEventListener('click', ()=>{
+  cardsLinkSelected = [];
+  document.querySelectorAll('.cardslink-cell.selected').forEach(el=>el.classList.remove('selected'));
+});
+document.getElementById('cardsLinkShuffleBtn').addEventListener('click', ()=>{
+  cardsLinkCells = seededShuffle(cardsLinkCells, Math.random);
+  const sel = cardsLinkSelected.slice();
+  renderCardsLinkGrid();
+  sel.forEach(name=>{
+    const el = document.querySelector('.cardslink-cell[data-name="'+CSS.escape(name)+'"]');
+    if(el) el.classList.add('selected');
+  });
+});
+function revealAllCardsLinkGroups(){
+  const box = document.getElementById('cardsLinkSolvedGroups');
+  box.innerHTML = cardsLinkGroups.map(g=>solvedBarHTML(g)).join('');
+  document.getElementById('cardsLinkGrid').innerHTML = '';
+}
+function solvedBarHTML(g){
+  return '<div class="cardslink-solved-bar"><span class="label">'+g.label+'</span><span class="thumbs">'+
+    g.cards.map(c=>'<img src="'+cardThumbUrl(c)+'" alt="" data-hide-on-error="1">').join('')+
+    '</span></div>';
+}
+function showCardsLinkEndBanner(won, reward, mistakes){
+  const banner = document.getElementById('cardsLinkBanner');
+  if(won){
+    banner.className = 'banner win';
+    banner.innerHTML = t('cardslink_win')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', reward)+'</span></span>'+shareButtonHTML('shareCardsLink');
+  } else {
+    banner.className = 'banner fail';
+    banner.innerHTML = t('cardslink_lose')+'<span class="sub"><span class="rw">'+t('reward_earn').replace('{n}', 0)+'</span></span>'+shareButtonHTML('shareCardsLink');
+  }
+}
+document.getElementById('cardsLinkSubmitBtn').addEventListener('click', ()=>{
+  if(!cardsLinkActive || cardsLinkSelected.length!==4) return;
+  const groupIndex = cardsLinkCells.find(c=>c.card.n===cardsLinkSelected[0]).groupIndex;
+  const allSameGroup = cardsLinkSelected.every(name=>{
+    const cell = cardsLinkCells.find(c=>c.card.n===name);
+    return cell && cell.groupIndex === groupIndex;
+  });
+  const selectedEls = cardsLinkSelected.map(name=>document.querySelector('.cardslink-cell[data-name="'+CSS.escape(name)+'"]'));
+  if(allSameGroup){
+    selectedEls.forEach(el=>el && el.classList.add('flash-correct'));
+    const group = cardsLinkGroups[groupIndex];
+    cardsLinkSolvedCount++;
+    cardsLinkSolveOrder.push(groupIndex);
+    setTimeout(()=>{
+      document.getElementById('cardsLinkSolvedGroups').insertAdjacentHTML('beforeend', solvedBarHTML(group));
+      cardsLinkCells = cardsLinkCells.filter(c=>c.groupIndex!==groupIndex);
+      cardsLinkSelected = [];
+      renderCardsLinkGrid();
+      if(cardsLinkSolvedCount===4) cardsLinkFinish(true);
+      else saveInProgress('cardslink', todayUTCString(), {mistakes: cardsLinkMistakes, solveOrder: cardsLinkSolveOrder});
+    },300);
+  } else {
+    selectedEls.forEach(el=>el && el.classList.add('flash-wrong'));
+    setTimeout(()=>selectedEls.forEach(el=>el && el.classList.remove('flash-wrong')),350);
+    cardsLinkMistakes++;
+    renderCardsLinkDots();
+    cardsLinkSelected = [];
+    document.querySelectorAll('.cardslink-cell.selected').forEach(el=>el.classList.remove('selected'));
+    if(cardsLinkMistakes>=4) cardsLinkFinish(false);
+    else saveInProgress('cardslink', todayUTCString(), {mistakes: cardsLinkMistakes, solveOrder: cardsLinkSolveOrder});
+  }
+});
+const CARDSLINK_REWARD_TABLE = [200,150,100,50]; // selon le nombre d'erreurs faites (0 à 3) en cas de victoire
+function cardsLinkFinish(won){
+  cardsLinkActive = false;
+  document.querySelector('.cardslink-controls').style.display = 'none';
+  document.querySelector('.cardslink-mistakes-row').style.display = 'none';
+  const today = todayUTCString();
+  if(!won) revealAllCardsLinkGroups();
+  const reward = won ? CARDSLINK_REWARD_TABLE[Math.min(cardsLinkMistakes,3)] : 0;
+  showCardsLinkEndBanner(won, reward, cardsLinkMistakes);
+  loadStats().then(s=>{
+    if(s.lastCardsLinkPlayed !== today){
+      s.lastCardsLinkPlayed = today;
+      s.cardsLinkWon = won;
+      s.lastCardsLinkReward = reward;
+      s.lastCardsLinkMistakes = cardsLinkMistakes;
+      s.cardsLinkPlayed = (s.cardsLinkPlayed||0)+1;
+      if(won) s.cardsLinkWins = (s.cardsLinkWins||0)+1;
+      if(won && cardsLinkMistakes===0) s.cardsLinkFlawlessCount = (s.cardsLinkFlawlessCount||0)+1;
+      s.eddies = s.eddies || {};
+      s.eddies.cardslink = (s.eddies.cardslink||0) + reward;
+      saveStats(s).then(refreshEddiesUI);
+    }
+  });
+}
+// ======================= ARCHIVE (mode entraînement, sans eddies ni stats) =======================
+function initArchive(){
+  const dateInput = document.getElementById('archiveDateInput');
+  const launch = '2026-08-01';
+  const y = new Date(); y.setUTCDate(y.getUTCDate()-1);
+  const yesterday = y.toISOString().slice(0,10);
+  dateInput.min = launch; dateInput.max = yesterday; dateInput.value = yesterday;
+  document.getElementById('archiveLoadBtn').addEventListener('click', loadArchivePuzzle);
+}
+function loadArchivePuzzle(){
+  const game = document.getElementById('archiveGameSelect').value;
+  const date = document.getElementById('archiveDateInput').value;
+  if(!date) return;
+  loadStats().then(s=>{ if(!s.hasUsedArchive){ s.hasUsedArchive = true; saveStats(s); } });
+  const oldSugg = document.getElementById('archiveSugg'); if(oldSugg) oldSugg.remove();
+  const area = document.getElementById('archiveArea');
+  area.innerHTML = '';
+  if(game==='classic') renderArchiveGuessGame(area, 'classic', date);
+  else if(game==='ability') renderArchiveGuessGame(area, 'ability', date);
+  else if(game==='legend') renderArchiveLegend(area, date);
+  else if(game==='sequence') renderArchiveSequence(area, date);
+  else if(game==='cardslink') renderArchiveCardsLink(area, date);
+}
+function renderArchiveGuessGame(area, mode, date){
+  const pool = mode==='ability' ? ABILITY_CARDS : CARDS;
+  const secret = dailyCardFor(mode==='ability' ? 'ability' : 'classic', date);
+  let guesses = [];
+  area.innerHTML =
+    (mode==='ability' ? '<div class="ability-quote">« '+secret.text+' »</div>' : '') +
+    '<div class="searchrow"><input class="guessInput" id="archiveInput" type="text" placeholder="'+t('classic_input_ph')+'" autocomplete="off"><div class="suggestions" id="archiveSugg"></div></div>'+
+    '<div class="gridwrap"><table class="guesses"><thead><tr><th style="text-align:left">'+t('col_card')+'</th><th>'+t('col_type')+'</th><th>'+t('col_faction')+'</th><th>'+t('col_color')+'</th><th>'+t('col_cost')+'</th><th>'+t('col_pwr')+'</th><th>'+t('col_ram')+'</th></tr></thead><tbody id="archiveBody"></tbody></table></div>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  const body = document.getElementById('archiveBody');
+  const input = document.getElementById('archiveInput');
+  const sugg = document.getElementById('archiveSugg');
+  const banner = document.getElementById('archiveBanner');
+  setupAutocomplete(input, sugg, (card)=>{
+    const {row, win} = renderRow(card, secret);
+    body.insertAdjacentHTML('beforeend', row);
+    guesses.push(card.n);
+    if(win){
+      input.disabled = true;
+      banner.className='banner win';
+      banner.innerHTML = t('archive_solved')+' '+secret.n+revealCardHTML(secret);
+    }
+  }, ()=>guesses);
+}
+function renderArchiveLegend(area, date){
+  const secret = dailyCardFor('legend', date);
+  const parts = splitLegend(secret);
+  area.innerHTML =
+    '<div class="legend-quote">« '+parts.sub+' »</div>'+
+    '<div style="display:flex;gap:8px;"><input class="guessInput" id="archiveLegendInput" type="text" placeholder="'+t('legend_input_ph')+'" style="flex:1;" autocomplete="off"><button class="bigbtn" id="archiveLegendSubmit">'+t('legend_submit')+'</button></div>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  document.getElementById('archiveLegendSubmit').addEventListener('click', ()=>{
+    const guess = document.getElementById('archiveLegendInput').value.trim();
+    const correct = stripAccents(guess.toLowerCase()) === stripAccents(parts.main.trim().toLowerCase());
+    const banner = document.getElementById('archiveBanner');
+    banner.className = correct ? 'banner win' : 'banner fail';
+    banner.innerHTML = (correct ? t('legend_win_prefix') : t('legend_lose_prefix'))+' '+parts.main+revealCardHTML(secret);
+    document.getElementById('archiveLegendInput').disabled = true;
+    document.getElementById('archiveLegendSubmit').disabled = true;
+  });
+}
+function renderArchiveSequence(area, date){
+  let puzzle=null, seedTry=0;
+  while(!puzzle && seedTry<5){ puzzle = buildSequencePuzzle(date+"-sequence-"+seedTry); seedTry++; }
+  if(!puzzle){ area.innerHTML = '<div class="hint">—</div>'; return; }
+  const rng = seededRng(date+"-sequence-order");
+  let order = seededShuffle(puzzle.cards.map((c,i)=>i), rng);
+  area.innerHTML =
+    '<div class="hint">'+t('sequence_instruction').replace('{attr}', '<span class="hl">'+sequenceAttrLabel(puzzle.attr)+'</span>')+'</div>'+
+    '<div class="sequence-list" id="archiveSeqList"></div>'+
+    '<button class="bigbtn" id="archiveSeqSubmit" style="margin-top:10px;">'+t('sequence_submit')+'</button>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  function render(){
+    const list = document.getElementById('archiveSeqList');
+    list.innerHTML = order.map((idx,pos)=>{
+      const card = puzzle.cards[idx];
+      return '<div class="sequence-row" id="archiveSeqRow-'+pos+'"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="sequence-name">'+card.n+'</div><div class="sequence-hint" id="archiveSeqHint-'+pos+'"></div><div class="sequence-arrows"><button data-p="'+pos+'" data-d="-1" '+(pos===0?'disabled':'')+'>▲</button><button data-p="'+pos+'" data-d="1" '+(pos===order.length-1?'disabled':'')+'>▼</button></div></div>';
+    }).join('');
+    list.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const p = parseInt(btn.dataset.p,10), d = parseInt(btn.dataset.d,10);
+        const target = p+d; if(target<0||target>=order.length) return;
+        [order[p],order[target]] = [order[target],order[p]];
+        render();
+      });
+    });
+  }
+  render();
+  document.getElementById('archiveSeqSubmit').addEventListener('click', ()=>{
+    const ok = order.every((idx,pos)=>idx===pos);
+    order.forEach((idx,pos)=>{
+      const row = document.getElementById('archiveSeqRow-'+pos);
+      const hint = document.getElementById('archiveSeqHint-'+pos);
+      const isCorrect = idx===pos;
+      row.classList.remove('correct-pos','wrong-pos');
+      row.classList.add(isCorrect ? 'correct-pos' : 'wrong-pos');
+      hint.textContent = isCorrect ? '=' : (idx < pos ? '+' : '-');
+    });
+    const banner = document.getElementById('archiveBanner');
+    if(ok){
+      banner.className = 'banner win';
+      const rows = puzzle.cards.map(card=>
+        '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'
+      ).join('');
+      banner.innerHTML = t('sequence_win')+'<div class="seq-compare seq-compare-single">'+rows+'</div>';
+    } else {
+      banner.className = 'banner fail';
+      const playerCol = order.map(idx=>puzzle.cards[idx]);
+      const correctCol = puzzle.cards;
+      const rows = playerCol.map((card,i)=>{
+        const correctCard = correctCol[i];
+        return '<div class="seq-compare-row">'+
+          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(card)+'\')"></div><div class="seq-compare-name">'+card.n+'</div></div>'+
+          '<div class="seq-compare-cell"><div class="sequence-thumb" style="background-image:url(\''+cardThumbUrl(correctCard)+'\')"></div><div class="seq-compare-name">'+correctCard.n+'</div></div>'+
+          '</div>';
+      }).join('');
+      banner.innerHTML = t('sequence_lose')+'<div class="seq-compare"><div class="seq-compare-header"><span>'+t('sequence_your_order')+'</span><span>'+t('sequence_correct_order')+'</span></div>'+rows+'</div>';
+    }
+  });
+}
+function renderArchiveCardsLink(area, date){
+  let groups=null, seedTry=0;
+  while(!groups && seedTry<250){ groups = buildCardsLinkPuzzle(date+"-cardslink-"+seedTry); seedTry++; }
+  if(!groups){ area.innerHTML = '<div class="hint">—</div>'; return; }
+  const rng = seededRng(date+"-cardslink-order");
+  let cells = seededShuffle(groups.flatMap((g,gi)=>g.cards.map(c=>({card:c, groupIndex:gi}))), rng);
+  let selected = [], solvedCount = 0;
+  area.innerHTML =
+    '<div id="archiveSolved"></div>'+
+    '<div class="cardslink-grid" id="archiveGrid"></div>'+
+    '<div class="cardslink-controls"><button class="bigbtn" id="archiveSubmitBtn">'+t('cardslink_submit')+'</button></div>'+
+    '<div class="banner" id="archiveBanner"></div>';
+  function renderGrid(){
+    const grid = document.getElementById('archiveGrid');
+    grid.innerHTML = '';
+    cells.forEach(cell=>{
+      const div = document.createElement('div');
+      div.className = 'cardslink-cell';
+      div.dataset.name = cell.card.n;
+      div.style.backgroundImage = "url('"+cardThumbUrl(cell.card)+"')";
+      div.addEventListener('click', ()=>{
+        const i = selected.indexOf(cell.card.n);
+        if(i>-1){ selected.splice(i,1); div.classList.remove('selected'); return; }
+        if(selected.length>=4) return;
+        selected.push(cell.card.n); div.classList.add('selected');
+      });
+      grid.appendChild(div);
+    });
+  }
+  renderGrid();
+  document.getElementById('archiveSubmitBtn').addEventListener('click', ()=>{
+    if(selected.length!==4) return;
+    const gi = cells.find(c=>c.card.n===selected[0]).groupIndex;
+    const ok = selected.every(name=>cells.find(c=>c.card.n===name).groupIndex===gi);
+    if(ok){
+      document.getElementById('archiveSolved').insertAdjacentHTML('beforeend', solvedBarHTML(groups[gi]));
+      cells = cells.filter(c=>c.groupIndex!==gi);
+      selected = [];
+      renderGrid();
+      solvedCount++;
+      if(solvedCount===4){
+        const banner = document.getElementById('archiveBanner');
+        banner.className = 'banner win';
+        banner.innerHTML = t('cardslink_win');
+      }
+    } else {
+      selected = [];
+      document.querySelectorAll('#archiveGrid .cardslink-cell.selected').forEach(el=>el.classList.remove('selected'));
+    }
+  });
+}
+
+// ======================= HOW TO PLAY (contextuel au jeu affiché) =======================
+const HOWTOPLAY_GRID_LEGEND_FR = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>Vert</b> : bonne valeur</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>Orange</b> : proche / faction partiellement bonne</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>Rouge</b> : faux (une flèche ↑/↓ indique si c\'est plus grand ou plus petit)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_EN = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>Green</b>: correct</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>Orange</b>: close / partial faction match</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>Red</b>: wrong (an ↑/↓ arrow shows higher or lower)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_ES = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>Verde</b>: correcto</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>Naranja</b>: cercano / facción parcialmente correcta</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>Rojo</b>: incorrecto (una flecha ↑/↓ indica si es más alto o más bajo)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_DE = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>Grün</b>: richtig</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>Orange</b>: nah dran / Fraktion teilweise richtig</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>Rot</b>: falsch (ein ↑/↓-Pfeil zeigt, ob höher oder niedriger)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_PT = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>Verde</b>: correto</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>Laranja</b>: próximo / facção parcialmente correta</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>Vermelho</b>: errado (uma seta ↑/↓ indica se é maior ou menor)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_IT = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>Verde</b>: corretto</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>Arancione</b>: vicino / fazione parzialmente corretta</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>Rosso</b>: sbagliato (una freccia ↑/↓ indica se è più alto o più basso)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_PL = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>Zielony</b>: poprawnie</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>Pomarańczowy</b>: blisko / częściowo poprawna frakcja</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>Czerwony</b>: źle (strzałka ↑/↓ pokazuje, czy wyżej czy niżej)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_KO = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>초록</b>: 정답</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>주황</b>: 근접 / 진영 부분 일치</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>빨강</b>: 오답 (↑/↓ 화살표는 더 높은지 낮은지를 나타냅니다)</div></div>';
+const HOWTOPLAY_GRID_LEGEND_ZH = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>绿色</b>: 正确</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>橙色</b>: 接近/阵营部分正确</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>红色</b>: 错误（↑/↓ 箭头表示更高或更低）</div></div>';
+const HOWTOPLAY_GRID_LEGEND_JA = '<div class="howtoplay-legend"><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-match"></span><b>緑</b>: 正解</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-partial"></span><b>オレンジ</b>: 近い／派閥が部分的に正解</div><div class="howtoplay-legend-line"><span class="howtoplay-swatch howtoplay-miss"></span><b>赤</b>: 不正解（↑/↓の矢印はより高いか低いかを示します）</div></div>';
+
+const HOWTOPLAY_CONTENT = {
+  fr: {
+    classic: { title:"Classic", body:"<p>Devine la carte du jour en comparant <b>Type, Faction, Couleur, Coût, Puissance et RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_FR+"<ul><li>Une nouvelle carte chaque jour à 00:00 UTC, la même pour tout le monde</li><li>Nombre d'essais illimité</li><li>Ta progression est sauvegardée automatiquement</li></ul>" },
+    legend: { title:"Legend", body:"<p>Une citation d'une Legend s'affiche — devine son <b>nom complet</b>.</p><ul><li>Un seul essai par jour</li><li>Une nouvelle Legend chaque jour à 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Le texte de règles d'une carte s'affiche (sans son nom) — devine de quelle carte il s'agit, en comparant <b>Type, Faction, Couleur, Coût, Puissance et RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_FR },
+    art: { title:"Art", body:"<p>L'illustration d'une carte se dévoile progressivement (moins floutée à chaque essai) — devine la carte avant qu'elle soit entièrement révélée.</p><ul><li>5 essais maximum</li><li>Plus tu trouves tôt, plus tu gagnes d'eddies</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Le même jeu qu'Art, mais avec les <b>illustrations alternatives</b> des cartes : chaque jour, l'une des {n} illustrations alternatives (promos, versions bêta et impressions spéciales) s'affiche floutée et sans son nom — devine de quelle carte il s'agit.</p><ul><li>5 essais maximum</li><li>Le flou s'estompe à chaque essai raté, la couleur apparaît dès le 3e essai</li><li>Plus tu trouves tôt, plus tu gagnes d'eddies</li><li>Les alt arts trouvées se débloquent dans Collection → WNC Alt</li></ul>" },
+    endless: { title:"Endless", body:"<p>Le même jeu que Classic (comparaison d'attributs), mais en illimité — enchaîne autant de cartes aléatoires que tu veux, à ton rythme.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 secondes pour deviner un maximum de cartes d'affilée. Chaque bonne réponse relance immédiatement une nouvelle carte.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Une comparaison entre deux cartes s'affiche (ex: coût, puissance...) — réponds <b>Vrai ou Faux</b> le plus vite possible, en 40 secondes chrono.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cartes, 4 groupes de 4 cartes ayant un point commun (type, faction, couleur, mot-clé...) à découvrir.</p><ul><li>4 erreurs maximum</li><li>Sélectionne 4 cartes puis valide pour tester un groupe</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 cartes s'affichent dans le désordre — remets-les dans le <b>bon ordre croissant</b> selon l'attribut demandé (coût, puissance ou RAM).</p>" },
+  },
+  en: {
+    classic: { title:"Classic", body:"<p>Guess today's card by comparing <b>Type, Faction, Color, Cost, Power, and RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_EN+"<ul><li>A new card every day at 00:00 UTC, same for everyone</li><li>Unlimited guesses</li><li>Your progress is saved automatically</li></ul>" },
+    legend: { title:"Legend", body:"<p>A quote from a Legend is shown — guess their <b>full name</b>.</p><ul><li>Only one guess per day</li><li>A new Legend every day at 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>A card's rules text is shown (without its name) — guess which card it is, comparing <b>Type, Faction, Color, Cost, Power, and RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_EN },
+    art: { title:"Art", body:"<p>A card's artwork is revealed a little more with each guess — guess the card before it's fully revealed.</p><ul><li>5 guesses max</li><li>The earlier you guess, the more eddies you earn</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Same game as Art, but with the cards' <b>alternate artworks</b>: each day, one of the {n} alternate illustrations (promos, beta versions and special prints) is shown blurred and without its name — guess which card it is.</p><ul><li>5 guesses max</li><li>The blur fades with each wrong guess, color appears from the 3rd try</li><li>The earlier you guess, the more eddies you earn</li><li>Alt arts you find are unlocked in Collection → WNC Alt</li></ul>" },
+    endless: { title:"Endless", body:"<p>Same game as Classic (attribute comparison), but unlimited — guess as many random cards as you like, at your own pace.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 seconds to guess as many cards in a row as possible. Every correct guess instantly starts a new card.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>A comparison between two cards is shown (e.g. cost, power...) — answer <b>True or False</b> as fast as you can, with a 40-second timer.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cards, 4 groups of 4 cards sharing something in common (type, faction, color, keyword...) to uncover.</p><ul><li>4 mistakes max</li><li>Select 4 cards then submit to test a group</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 cards are shown out of order — put them back in the <b>correct ascending order</b> for the requested attribute (cost, power, or RAM).</p>" },
+  },
+  es: {
+    classic: { title:"Classic", body:"<p>Adivina la carta de hoy comparando <b>Tipo, Facción, Color, Coste, Poder y RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_ES+"<ul><li>Una carta nueva cada día a las 00:00 UTC, la misma para todos</li><li>Intentos ilimitados</li><li>Tu progreso se guarda automáticamente</li></ul>" },
+    legend: { title:"Legend", body:"<p>Se muestra una cita de una Legend — adivina su <b>nombre completo</b>.</p><ul><li>Solo un intento por día</li><li>Una nueva Legend cada día a las 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Se muestra el texto de reglas de una carta (sin su nombre) — adivina de qué carta se trata, comparando <b>Tipo, Facción, Color, Coste, Poder y RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_ES+"" },
+    art: { title:"Art", body:"<p>La ilustración de una carta se revela un poco más con cada intento — adivina la carta antes de que se revele por completo.</p><ul><li>5 intentos máximo</li><li>Cuanto antes aciertes, más eddies ganas</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>El mismo juego que Art, pero con las <b>ilustraciones alternativas</b> de las cartas: cada día se muestra una de las {n} ilustraciones alternativas (promos, versiones beta e impresiones especiales), borrosa y sin su nombre — adivina de qué carta se trata.</p><ul><li>5 intentos máximo</li><li>El desenfoque se reduce con cada intento fallido y el color aparece desde el 3.er intento</li><li>Cuanto antes aciertes, más eddies ganas</li><li>Las alt arts acertadas se desbloquean en Colección → WNC Alt</li></ul>" },
+    endless: { title:"Endless", body:"<p>El mismo juego que Classic (comparación de atributos), pero ilimitado — adivina tantas cartas aleatorias como quieras, a tu ritmo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 segundos para adivinar tantas cartas seguidas como puedas. Cada acierto inicia inmediatamente una nueva carta.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Se muestra una comparación entre dos cartas (p. ej. coste, poder...) — responde <b>Verdadero o Falso</b> lo más rápido posible, con un cronómetro de 40 segundos.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cartas, 4 grupos de 4 cartas que comparten algo en común (tipo, facción, color, palabra clave...) por descubrir.</p><ul><li>4 errores máximo</li><li>Selecciona 4 cartas y confirma para probar un grupo</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>Se muestran 5 cartas desordenadas — vuelve a ponerlas en el <b>orden ascendente correcto</b> según el atributo solicitado (coste, poder o RAM).</p>" },
+  },
+  de: {
+    classic: { title:"Classic", body:"<p>Errate die heutige Karte, indem du <b>Typ, Fraktion, Farbe, Kosten, Stärke und RAM</b> vergleichst.</p>"+HOWTOPLAY_GRID_LEGEND_DE+"<ul><li>Jeden Tag um 00:00 UTC eine neue Karte, für alle gleich</li><li>Unbegrenzte Versuche</li><li>Dein Fortschritt wird automatisch gespeichert</li></ul>" },
+    legend: { title:"Legend", body:"<p>Ein Zitat einer Legend wird gezeigt — errate ihren <b>vollständigen Namen</b>.</p><ul><li>Nur ein Versuch pro Tag</li><li>Jeden Tag um 00:00 UTC eine neue Legend</li></ul>" },
+    ability: { title:"Ability", body:"<p>Der Regeltext einer Karte wird gezeigt (ohne ihren Namen) — errate, um welche Karte es sich handelt, indem du <b>Typ, Fraktion, Farbe, Kosten, Stärke und RAM</b> vergleichst.</p>"+HOWTOPLAY_GRID_LEGEND_DE+"" },
+    art: { title:"Art", body:"<p>Das Artwork einer Karte wird mit jedem Versuch etwas mehr enthüllt — errate die Karte, bevor sie vollständig sichtbar ist.</p><ul><li>Maximal 5 Versuche</li><li>Je früher du errätst, desto mehr Eddies verdienst du</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Das gleiche Spiel wie Art, aber mit den <b>alternativen Illustrationen</b> der Karten: Jeden Tag wird eine von {n} alternativen Illustrationen (Promos, Beta-Versionen und Sonderdrucke) unscharf und ohne Namen gezeigt — errate, um welche Karte es sich handelt.</p><ul><li>Maximal 5 Versuche</li><li>Die Unschärfe nimmt mit jedem falschen Versuch ab, ab dem 3. Versuch erscheint die Farbe</li><li>Je früher du errätst, desto mehr Eddies verdienst du</li><li>Erratene Alt Arts werden unter Sammlung → WNC Alt freigeschaltet</li></ul>" },
+    endless: { title:"Endless", body:"<p>Das gleiche Spiel wie Classic (Attributvergleich), aber unbegrenzt — errate so viele zufällige Karten, wie du möchtest, in deinem eigenen Tempo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 Sekunden, um so viele Karten hintereinander wie möglich zu erraten. Jede richtige Antwort startet sofort eine neue Karte.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Ein Vergleich zwischen zwei Karten wird gezeigt (z. B. Kosten, Stärke...) — antworte so schnell wie möglich mit <b>Wahr oder Falsch</b>, mit einem 40-Sekunden-Timer.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 Karten, 4 Gruppen von je 4 Karten mit einer Gemeinsamkeit (Typ, Fraktion, Farbe, Schlüsselwort...) zu entdecken.</p><ul><li>Maximal 4 Fehler</li><li>Wähle 4 Karten aus und bestätige, um eine Gruppe zu testen</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 Karten werden ungeordnet gezeigt — bringe sie in die <b>richtige aufsteigende Reihenfolge</b> für das gewünschte Attribut (Kosten, Stärke oder RAM).</p>" },
+  },
+  pt: {
+    classic: { title:"Classic", body:"<p>Adivinhe a carta de hoje comparando <b>Tipo, Facção, Cor, Custo, Poder e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PT+"<ul><li>Uma nova carta todo dia às 00:00 UTC, a mesma para todos</li><li>Tentativas ilimitadas</li><li>Seu progresso é salvo automaticamente</li></ul>" },
+    legend: { title:"Legend", body:"<p>Uma citação de uma Legend é exibida — adivinhe o <b>nome completo</b> dela.</p><ul><li>Apenas uma tentativa por dia</li><li>Uma nova Legend todo dia às 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>O texto de regras de uma carta é exibido (sem o nome dela) — adivinhe de qual carta se trata, comparando <b>Tipo, Facção, Cor, Custo, Poder e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PT+"" },
+    art: { title:"Art", body:"<p>A ilustração de uma carta é revelada um pouco mais a cada tentativa — adivinhe a carta antes que ela seja totalmente revelada.</p><ul><li>5 tentativas no máximo</li><li>Quanto mais cedo você acertar, mais eddies ganha</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>O mesmo jogo que o Art, mas com as <b>ilustrações alternativas</b> das cartas: todo dia, uma das {n} ilustrações alternativas (promos, versões beta e impressões especiais) é exibida desfocada e sem o nome — adivinhe de qual carta se trata.</p><ul><li>5 tentativas no máximo</li><li>O desfoque diminui a cada tentativa errada e a cor aparece a partir da 3ª tentativa</li><li>Quanto mais cedo você acertar, mais eddies ganha</li><li>As alt arts acertadas são desbloqueadas em Coleção → WNC Alt</li></ul>" },
+    endless: { title:"Endless", body:"<p>O mesmo jogo que o Classic (comparação de atributos), mas ilimitado — adivinhe quantas cartas aleatórias quiser, no seu ritmo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 segundos para adivinhar o máximo de cartas seguidas possível. Cada acerto inicia imediatamente uma nova carta.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Uma comparação entre duas cartas é exibida (ex: custo, poder...) — responda <b>Verdadeiro ou Falso</b> o mais rápido possível, com cronômetro de 40 segundos.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 cartas, 4 grupos de 4 cartas com algo em comum (tipo, facção, cor, palavra-chave...) para descobrir.</p><ul><li>4 erros no máximo</li><li>Selecione 4 cartas e confirme para testar um grupo</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 cartas são exibidas fora de ordem — coloque-as na <b>ordem crescente correta</b> de acordo com o atributo pedido (custo, poder ou RAM).</p>" },
+  },
+  it: {
+    classic: { title:"Classic", body:"<p>Indovina la carta di oggi confrontando <b>Tipo, Fazione, Colore, Costo, Potenza e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_IT+"<ul><li>Una nuova carta ogni giorno alle 00:00 UTC, uguale per tutti</li><li>Tentativi illimitati</li><li>I tuoi progressi vengono salvati automaticamente</li></ul>" },
+    legend: { title:"Legend", body:"<p>Viene mostrata una citazione di una Legend — indovina il suo <b>nome completo</b>.</p><ul><li>Un solo tentativo al giorno</li><li>Una nuova Legend ogni giorno alle 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Viene mostrato il testo delle regole di una carta (senza il nome) — indovina di quale carta si tratta, confrontando <b>Tipo, Fazione, Colore, Costo, Potenza e RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_IT+"" },
+    art: { title:"Art", body:"<p>L'illustrazione di una carta viene rivelata un po' di più a ogni tentativo — indovina la carta prima che sia completamente svelata.</p><ul><li>Massimo 5 tentativi</li><li>Prima indovini, più eddies guadagni</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Lo stesso gioco di Art, ma con le <b>illustrazioni alternative</b> delle carte: ogni giorno viene mostrata una delle {n} illustrazioni alternative (promo, versioni beta e stampe speciali), sfocata e senza nome — indovina di quale carta si tratta.</p><ul><li>Massimo 5 tentativi</li><li>La sfocatura si riduce a ogni tentativo sbagliato e il colore appare dal 3° tentativo</li><li>Prima indovini, più eddies guadagni</li><li>Le alt art indovinate si sbloccano in Collezione → WNC Alt</li></ul>" },
+    endless: { title:"Endless", body:"<p>Lo stesso gioco di Classic (confronto attributi), ma illimitato — indovina tutte le carte casuali che vuoi, al tuo ritmo.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 secondi per indovinare il maggior numero possibile di carte di fila. Ogni risposta corretta avvia immediatamente una nuova carta.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Viene mostrato un confronto tra due carte (es. costo, potenza...) — rispondi <b>Vero o Falso</b> il più velocemente possibile, con un timer di 40 secondi.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 carte, 4 gruppi di 4 carte che condividono qualcosa in comune (tipo, fazione, colore, parola chiave...) da scoprire.</p><ul><li>Massimo 4 errori</li><li>Seleziona 4 carte e conferma per testare un gruppo</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>5 carte vengono mostrate in disordine — rimettile nell'<b>ordine crescente corretto</b> in base all'attributo richiesto (costo, potenza o RAM).</p>" },
+  },
+  pl: {
+    classic: { title:"Classic", body:"<p>Odgadnij dzisiejszą kartę, porównując <b>Typ, Frakcję, Kolor, Koszt, Moc i RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PL+"<ul><li>Nowa karta każdego dnia o 00:00 UTC, taka sama dla wszystkich</li><li>Nieograniczona liczba prób</li><li>Twój postęp jest zapisywany automatycznie</li></ul>" },
+    legend: { title:"Legend", body:"<p>Wyświetlany jest cytat Legend — odgadnij jej <b>pełne imię</b>.</p><ul><li>Tylko jedna próba dziennie</li><li>Nowa Legend każdego dnia o 00:00 UTC</li></ul>" },
+    ability: { title:"Ability", body:"<p>Wyświetlany jest tekst zasad karty (bez jej nazwy) — odgadnij, o którą kartę chodzi, porównując <b>Typ, Frakcję, Kolor, Koszt, Moc i RAM</b>.</p>"+HOWTOPLAY_GRID_LEGEND_PL+"" },
+    art: { title:"Art", body:"<p>Ilustracja karty jest odkrywana coraz bardziej z każdą próbą — odgadnij kartę, zanim zostanie w pełni odsłonięta.</p><ul><li>Maksymalnie 5 prób</li><li>Im wcześniej odgadniesz, tym więcej eddies zdobędziesz</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Ta sama gra co Art, ale z <b>alternatywnymi ilustracjami</b> kart: każdego dnia wyświetlana jest jedna z {n} alternatywnych ilustracji (promo, wersje beta i druki specjalne), rozmyta i bez nazwy — odgadnij, o którą kartę chodzi.</p><ul><li>Maksymalnie 5 prób</li><li>Rozmycie zmniejsza się po każdej błędnej próbie, a kolor pojawia się od 3. próby</li><li>Im wcześniej odgadniesz, tym więcej eddies zdobędziesz</li><li>Odgadnięte alt arty odblokowują się w Kolekcji → WNC Alt</li></ul>" },
+    endless: { title:"Endless", body:"<p>Ta sama gra co Classic (porównywanie atrybutów), ale bez limitu — odgaduj dowolną liczbę losowych kart we własnym tempie.</p>" },
+    blitz: { title:"Blitz", body:"<p>77 sekund na odgadnięcie jak największej liczby kart z rzędu. Każda poprawna odpowiedź od razu uruchamia nową kartę.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>Wyświetlane jest porównanie dwóch kart (np. koszt, moc...) — odpowiedz <b>Prawda lub Fałsz</b> najszybciej jak potrafisz, z 40-sekundowym limitem czasu.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16 kart, 4 grupy po 4 karty mające coś wspólnego (typ, frakcja, kolor, słowo kluczowe...) do odkrycia.</p><ul><li>Maksymalnie 4 błędy</li><li>Wybierz 4 karty, a następnie zatwierdź, aby przetestować grupę</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>Wyświetlanych jest 5 kart w losowej kolejności — ułóż je w <b>poprawnej rosnącej kolejności</b> według żądanego atrybutu (koszt, moc lub RAM).</p>" },
+  },
+  ko: {
+    classic: { title:"Classic", body:"<p>타입, 진영, 색상, 비용, 파워, RAM을 비교하여 오늘의 카드를 맞혀보세요.</p>"+HOWTOPLAY_GRID_LEGEND_KO+"<ul><li>매일 00:00 UTC에 새로운 카드, 모두 동일</li><li>무제한 시도</li><li>진행 상황이 자동으로 저장됩니다</li></ul>" },
+    legend: { title:"Legend", body:"<p>Legend의 명언이 표시됩니다 — <b>전체 이름</b>을 맞혀보세요.</p><ul><li>하루에 한 번만 시도 가능</li><li>매일 00:00 UTC에 새로운 Legend</li></ul>" },
+    ability: { title:"Ability", body:"<p>카드의 규칙 텍스트가 표시됩니다(이름 없이) — 타입, 진영, 색상, 비용, 파워, RAM을 비교하여 어떤 카드인지 맞혀보세요.</p>"+HOWTOPLAY_GRID_LEGEND_KO+"" },
+    art: { title:"Art", body:"<p>카드의 일러스트가 시도할 때마다 조금씩 더 드러납니다 — 완전히 공개되기 전에 카드를 맞혀보세요.</p><ul><li>최대 5회 시도</li><li>일찍 맞힐수록 더 많은 eddies를 획득합니다</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Art와 같은 게임이지만 카드의 <b>대체 일러스트</b>로 진행합니다. 매일 {n}개의 대체 일러스트(프로모, 베타 버전, 특별 인쇄본) 중 하나가 흐릿하게, 이름 없이 표시됩니다 — 어떤 카드인지 맞혀보세요.</p><ul><li>최대 5회 시도</li><li>오답을 낼 때마다 흐림이 옅어지고, 3번째 시도부터 색상이 나타납니다</li><li>일찍 맞힐수록 더 많은 eddies를 획득합니다</li><li>맞힌 Alt Art는 컬렉션 → WNC Alt에서 잠금 해제됩니다</li></ul>" },
+    endless: { title:"Endless", body:"<p>Classic과 동일한 게임(속성 비교)이지만 무제한입니다 — 원하는 만큼 무작위 카드를 자신의 속도로 맞혀보세요.</p>" },
+    blitz: { title:"Blitz", body:"<p>77초 안에 최대한 많은 카드를 연속으로 맞혀보세요. 정답을 맞힐 때마다 즉시 새 카드가 시작됩니다.</p>" },
+    chrome: { title:"Chrome Check", body:"<p>두 카드 간의 비교(예: 비용, 파워...)가 표시됩니다 — 40초 타이머 안에 최대한 빠르게 <b>참 또는 거짓</b>으로 답하세요.</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16장의 카드, 공통점(타입, 진영, 색상, 키워드...)이 있는 4장씩 4개 그룹을 찾아보세요.</p><ul><li>최대 4번의 실수</li><li>카드 4장을 선택한 후 제출하여 그룹을 테스트하세요</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>순서가 뒤섞인 5장의 카드가 표시됩니다 — 요청된 속성(비용, 파워, RAM)에 따라 <b>올바른 오름차순</b>으로 정렬하세요.</p>" },
+  },
+  zh: {
+    classic: { title:"Classic", body:"<p>通过比较<b>类型、阵营、颜色、费用、力量和RAM</b>来猜测今天的卡牌。</p>"+HOWTOPLAY_GRID_LEGEND_ZH+"<ul><li>每天00:00 UTC推出新卡牌，所有人相同</li><li>无限次尝试</li><li>你的进度会自动保存</li></ul>" },
+    legend: { title:"Legend", body:"<p>会显示一句传奇（Legend）的台词——猜出她/他的<b>全名</b>。</p><ul><li>每天只能尝试一次</li><li>每天00:00 UTC推出新的Legend</li></ul>" },
+    ability: { title:"Ability", body:"<p>会显示一张卡牌的规则文本（不含名称）——通过比较<b>类型、阵营、颜色、费用、力量和RAM</b>来猜出是哪张卡牌。</p>"+HOWTOPLAY_GRID_LEGEND_ZH+"" },
+    art: { title:"Art", body:"<p>卡牌插图会随着每次尝试逐渐显现——在完全显现之前猜出卡牌。</p><ul><li>最多5次尝试</li><li>猜得越早，获得的eddies越多</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>与 Art 相同的玩法，但使用卡牌的<b>备用插画</b>：每天会显示 {n} 张备用插画（宣传卡、测试版和特别印刷版）之一，画面模糊且不含名称——猜出是哪张卡牌。</p><ul><li>最多5次尝试</li><li>每次猜错模糊程度都会减弱，从第3次尝试起会显示颜色</li><li>猜得越早，获得的eddies越多</li><li>猜中的 Alt Art 会在 收藏 → WNC Alt 中解锁</li></ul>" },
+    endless: { title:"Endless", body:"<p>与Classic相同的游戏（属性比较），但无限制——按自己的节奏猜测任意数量的随机卡牌。</p>" },
+    blitz: { title:"Blitz", body:"<p>77秒内尽可能连续猜中更多卡牌。每次答对会立即开始一张新卡牌。</p>" },
+    chrome: { title:"Chrome Check", body:"<p>会显示两张卡牌之间的比较（例如费用、力量等）——在40秒计时内尽快回答<b>对或错</b>。</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16张卡牌，需要找出4组各4张有共同点（类型、阵营、颜色、关键词等）的卡牌。</p><ul><li>最多4次错误</li><li>选择4张卡牌后提交以测试该组</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>会显示5张顺序打乱的卡牌——根据要求的属性（费用、力量或RAM）将它们重新排列为<b>正确的升序</b>。</p>" },
+  },
+  ja: {
+    classic: { title:"Classic", body:"<p>タイプ、派閥、色、コスト、パワー、RAMを比較して今日のカードを当てよう。</p>"+HOWTOPLAY_GRID_LEGEND_JA+"<ul><li>毎日00:00 UTCに新しいカード、みんな共通</li><li>試行回数無制限</li><li>進行状況は自動的に保存されます</li></ul>" },
+    legend: { title:"Legend", body:"<p>Legendの名言が表示されます — <b>フルネーム</b>を当てよう。</p><ul><li>1日1回のみ挑戦可能</li><li>毎日00:00 UTCに新しいLegend</li></ul>" },
+    ability: { title:"Ability", body:"<p>カードのルールテキストが表示されます（名前なし）— タイプ、派閥、色、コスト、パワー、RAMを比較してどのカードか当てよう。</p>"+HOWTOPLAY_GRID_LEGEND_JA+"" },
+    art: { title:"Art", body:"<p>カードのイラストが試行するたびに少しずつ明らかになります — 完全に表示される前にカードを当てよう。</p><ul><li>最大5回まで挑戦可能</li><li>早く当てるほど、多くのeddiesを獲得できます</li></ul>" },
+    altart: { title:"Alt Art", body:"<p>Artと同じゲームですが、カードの<b>別バージョンのイラスト</b>を使います。毎日、{n}枚の別イラスト（プロモ、ベータ版、特別印刷）のうち1枚が、ぼかされ名前なしで表示されます — どのカードか当てよう。</p><ul><li>最大5回まで挑戦可能</li><li>間違えるたびにぼかしが薄れ、3回目の試行から色が表示されます</li><li>早く当てるほど、多くのeddiesを獲得できます</li><li>正解したAlt Artは コレクション → WNC Alt で解放されます</li></ul>" },
+    endless: { title:"Endless", body:"<p>Classicと同じゲーム（属性比較）ですが、無制限です — 好きなだけランダムなカードを自分のペースで当てよう。</p>" },
+    blitz: { title:"Blitz", body:"<p>77秒以内にできるだけ多くのカードを連続で当てよう。正解するとすぐに新しいカードが始まります。</p>" },
+    chrome: { title:"Chrome Check", body:"<p>2枚のカードの比較（例：コスト、パワーなど）が表示されます — 40秒のタイマー内でできるだけ早く<b>正しいか間違っているか</b>を答えよう。</p>" },
+    cardslink: { title:"Cards Link", body:"<p>16枚のカード、共通点（タイプ、派閥、色、キーワードなど）を持つ4枚ずつ4グループを見つけよう。</p><ul><li>最大4回まで間違い可能</li><li>4枚のカードを選んで送信し、グループをテストしよう</li></ul>" },
+    sequence: { title:"Sequence", body:"<p>順序が入れ替わった5枚のカードが表示されます — 指定された属性（コスト、パワー、RAM）に従って<b>正しい昇順</b>に並べ替えよう。</p>" },
+  },
+};
+const HOWTOPLAY_FALLBACK_FR = "<p>Choomdle propose 9 façons différentes de deviner les cartes du Cyberpunk TCG : Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link et Sequence.</p><p>Ouvre ce guide depuis l'un de ces jeux pour voir ses règles précises.</p>";
+const HOWTOPLAY_FALLBACK_EN = "<p>Choomdle offers 9 different ways to guess Cyberpunk TCG cards: Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link, and Sequence.</p><p>Open this guide from one of those games to see its exact rules.</p>";
+const HOWTOPLAY_FALLBACK_ES = "<p>Choomdle ofrece 9 formas diferentes de adivinar cartas del Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link y Sequence.</p><p>Abre esta guía desde uno de esos juegos para ver sus reglas exactas.</p>";
+const HOWTOPLAY_FALLBACK_DE = "<p>Choomdle bietet 9 verschiedene Möglichkeiten, Cyberpunk-TCG-Karten zu erraten: Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link und Sequence.</p><p>Öffne diese Anleitung aus einem dieser Spiele, um die genauen Regeln zu sehen.</p>";
+const HOWTOPLAY_FALLBACK_PT = "<p>Choomdle oferece 9 formas diferentes de adivinhar cartas do Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link e Sequence.</p><p>Abra este guia a partir de um desses jogos para ver as regras exatas.</p>";
+const HOWTOPLAY_FALLBACK_IT = "<p>Choomdle offre 9 modi diversi per indovinare le carte del Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link e Sequence.</p><p>Apri questa guida da uno di quei giochi per vedere le sue regole esatte.</p>";
+const HOWTOPLAY_FALLBACK_PL = "<p>Choomdle oferuje 9 różnych sposobów odgadywania kart Cyberpunk TCG: Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link i Sequence.</p><p>Otwórz ten przewodnik z jednej z tych gier, aby zobaczyć jej dokładne zasady.</p>";
+const HOWTOPLAY_FALLBACK_KO = "<p>Choomdle은 Cyberpunk TCG 카드를 맞히는 9가지 다른 방법을 제공합니다: Classic, Legend, Ability, Art, Endless, Blitz, Alt Art, Cards Link, Sequence.</p><p>정확한 규칙을 보려면 해당 게임에서 이 가이드를 열어보세요.</p>";
+const HOWTOPLAY_FALLBACK_ZH = "<p>Choomdle提供9种不同的方式来猜测Cyberpunk TCG卡牌：Classic、Legend、Ability、Art、Endless、Blitz、Alt Art、Cards Link和Sequence。</p><p>从其中一个游戏打开此指南以查看其确切规则。</p>";
+const HOWTOPLAY_FALLBACK_JA = "<p>Choomdleは、Cyberpunk TCGのカードを当てる9つの異なる方法を提供しています：Classic、Legend、Ability、Art、Endless、Blitz、Alt Art、Cards Link、Sequence。</p><p>正確なルールを見るには、それらのゲームのいずれかからこのガイドを開いてください。</p>";
+function showHowToPlay(){
+  const lang = HOWTOPLAY_CONTENT[currentLang] ? currentLang : 'en';
+  const dict = HOWTOPLAY_CONTENT[lang];
+  const entry = dict[currentActivePanel];
+  document.getElementById('howToPlayTitle').textContent = entry ? entry.title : 'Choomdle';
+  const fallbacks = { fr:HOWTOPLAY_FALLBACK_FR, en:HOWTOPLAY_FALLBACK_EN, es:HOWTOPLAY_FALLBACK_ES, de:HOWTOPLAY_FALLBACK_DE, pt:HOWTOPLAY_FALLBACK_PT, it:HOWTOPLAY_FALLBACK_IT, pl:HOWTOPLAY_FALLBACK_PL, ko:HOWTOPLAY_FALLBACK_KO, zh:HOWTOPLAY_FALLBACK_ZH, ja:HOWTOPLAY_FALLBACK_JA };
+  document.getElementById('howToPlayBody').innerHTML = entry ? entry.body.replace('{n}', (typeof WNC_ALT!=='undefined'?WNC_ALT.length:80)) : (fallbacks[lang] || HOWTOPLAY_FALLBACK_EN);
+  document.getElementById('howToPlayOverlay').style.display = 'flex';
+}
+function closeHowToPlay(){ document.getElementById('howToPlayOverlay').style.display = 'none'; }
+const howToPlayBtnEl = document.getElementById('howToPlayBtn');
+if(howToPlayBtnEl) howToPlayBtnEl.addEventListener('click', showHowToPlay);
+// Délégation sur document plutôt que sur les éléments eux-mêmes : le bouton "✕" et le fond du
+// popup sont définis plus loin dans le HTML (après ce bloc de script), donc getElementById
+// échouerait silencieusement ici. En écoutant sur document (toujours disponible), le clic est
+// détecté correctement une fois la page entièrement chargée, quel que soit l'ordre du HTML.
+document.addEventListener('click', (e)=>{
+  if(!e.target) return;
+  if(e.target.id === 'howToPlayClose' || e.target.id === 'howToPlayOverlay') closeHowToPlay();
+});
+
+// ======================= POPUPS GLITCH (pitch invité / bienvenue) =======================
+function showGlitchPopup(kind){
+  const overlay = document.getElementById('glitchPopupOverlay');
+  const title = document.getElementById('glitchPopupTitle');
+  const body = document.getElementById('glitchPopupBody');
+  const actions = document.getElementById('glitchPopupActions');
+  actions.innerHTML = '';
+  if(kind === 'guestPitch'){
+    title.textContent = t('popup_guest_title');
+    body.innerHTML =
+      '<p>'+t('popup_guest_line1')+'</p>'+
+      '<p>'+t('popup_guest_line2')+'</p>'+
+      '<p class="glitchpopup-free">'+t('popup_guest_line3')+'</p>';
+    const createBtn = document.createElement('button');
+    createBtn.className = 'bigbtn'; createBtn.textContent = t('popup_guest_cta');
+    createBtn.onclick = ()=>{
+      closeGlitchPopup();
+      document.getElementById('legendProfileMenu').style.display = 'block';
+      const email = document.getElementById('emailInput'); if(email) email.focus();
+    };
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'share-btn'; closeBtn.textContent = t('popup_close');
+    closeBtn.onclick = closeGlitchPopup;
+    actions.appendChild(createBtn); actions.appendChild(closeBtn);
+  } else if(kind === 'welcomeNew'){
+    title.textContent = t('popup_welcome_new_title');
+    body.innerHTML = '<p>'+t('popup_welcome_new_line')+'</p>';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'bigbtn'; okBtn.textContent = t('popup_close');
+    okBtn.onclick = closeGlitchPopup;
+    actions.appendChild(okBtn);
+  } else if(kind === 'welcomeBack'){
+    title.textContent = t('popup_welcome_back_title');
+    body.innerHTML = '<p>'+t('popup_welcome_back_line')+'</p>';
+    const okBtn = document.createElement('button');
+    okBtn.className = 'bigbtn'; okBtn.textContent = t('popup_close');
+    okBtn.onclick = closeGlitchPopup;
+    actions.appendChild(okBtn);
+  }
+  overlay.style.display = 'flex';
+  const box = document.getElementById('glitchPopupBox');
+  box.classList.remove('glitchpopup-shake');
+  void box.offsetWidth; // force le redémarrage de l'animation même si le popup était déjà affiché
+  box.classList.add('glitchpopup-shake');
+}
+function closeGlitchPopup(){
+  document.getElementById('glitchPopupOverlay').style.display = 'none';
+}
+let guestPitchPopupShown = false;
+let guestPitchTimer = null;
+const ALL_PANELS = ['classic','legend','blitz','endless','ability','art','altart','cardslink','chrome','sequence','breach','community','communityArchive','stats','collection','achievements','archive','feedback'];
+let currentActivePanel = 'classic';
+function showPanel(name){
+  if(name==='chrome' && !FEATURES.chromeCheck) name = 'classic';
+  currentActivePanel = name;
+  ALL_PANELS.forEach(p=>{
+    const el = document.getElementById('panel-'+p);
+    if(el) el.style.display = (p===name) ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.panel===name));
+  document.querySelectorAll('.fbtn[data-panel]').forEach(b=>b.classList.toggle('active', b.dataset.panel===name));
+  if(name==='community') renderCommunity();
+  if(name==='communityArchive'){
+    const input = document.getElementById('communityArchiveMonthInput');
+    if(input && !input.value){
+      const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()-1);
+      input.value = d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,'0');
+      loadCommunityArchiveMonth(d.getUTCFullYear()+"-"+(d.getUTCMonth()+1));
+    }
+  }
+  if(name==='stats') renderStatsPanel();
+  if(name==='collection') renderCollection();
+  if(name==='achievements') renderAchievements();
+  if(name==='feedback') checkAdminFeedbackView();
+}
+document.querySelectorAll('.tab[data-panel], .fbtn[data-panel]').forEach(btn=>{
+  btn.addEventListener('click', ()=>showPanel(btn.dataset.panel));
+});
+
+// ======================= FEATURES (toutes actives) =======================
+// chromeCheck:false = jeu Chrome Check désactivé (onglet masqué, retiré de Community/Stats). Le code et les données
+// des joueurs sont conservés : repasser à true suffit pour le réactiver.
+const FEATURES = { i18n:true, accounts:true, community:true, personalStats:true, feedback:true, chromeCheck:false };
+function applyFeatureFlags(){
+  // tout est true par défaut désormais ; repasse un flag à false ci-dessus pour le recacher.
+  if(!FEATURES.i18n) document.getElementById('langSelectWrap').classList.add('ff-hidden');
+  if(!FEATURES.accounts) document.getElementById('legendProfile').classList.add('ff-hidden');
+  if(!FEATURES.community) document.querySelector('.fbtn[data-panel="community"]').classList.add('ff-hidden');
+  if(!FEATURES.personalStats) document.querySelector('.fbtn[data-panel="stats"]').classList.add('ff-hidden');
+  if(!FEATURES.feedback) document.querySelector('.fbtn[data-panel="feedback"]').classList.add('ff-hidden');
+  if(!FEATURES.chromeCheck){ const tb = document.querySelector('.tab[data-panel="chrome"]'); if(tb) tb.classList.add('ff-hidden'); }
+}
+
+// ======================= INIT =======================
+initLangSelect();
+// Langue déduite de l'URL (/fr, /es, ...) si présente et reconnue. Sinon, on utilise la langue
+// mémorisée d'une visite précédente (localStorage) si elle existe, sinon l'anglais par défaut —
+// et dans les deux cas, l'URL visible est mise à jour pour refléter la vraie langue utilisée
+// (juste l'adresse affichée, via replaceState : aucune vraie redirection HTTP, donc aucun risque
+// de boucle comme on a pu en avoir avec les redirections serveur).
+(function(){
+  const seg = window.location.pathname.replace(/^\/+|\/+$/g, '');
+  let lang;
+  if(LANG_LABELS[seg]){
+    lang = seg;
+  } else {
+    let remembered = null;
+    try{ remembered = localStorage.getItem('choomdle:lang'); }catch(e){}
+    lang = (remembered && LANG_LABELS[remembered]) ? remembered : "en";
+    try{ window.history.replaceState({}, document.title, '/'+lang); }catch(e){}
+  }
+  applyLanguage(lang);
+  const btn = document.getElementById('langSelectBtn');
+  if(btn) btn.textContent = lang.toUpperCase() + ' ▾';
+  document.querySelectorAll('#langSelectList button').forEach(b=>b.classList.toggle('active', b.dataset.code===lang));
+  // Canonique auto-référencée selon la langue de l'URL (bonne pratique SEO avec hreflang)
+  const canonicalUrl = "https://choomdle.com/" + lang;
+  const canonicalTag = document.querySelector('link[rel="canonical"]');
+  if(canonicalTag) canonicalTag.href = canonicalUrl;
+  const ogUrlTag = document.querySelector('meta[property="og:url"]');
+  if(ogUrlTag) ogUrlTag.setAttribute('content', canonicalUrl);
+})();
+initAccount();
+initFeedback();
+// IMPORTANT : on attend que la session Supabase soit résolue AVANT de lancer les modes
+// à verrou journalier (Classic/Legend/Ability/Art). Sans ça, le verrou se basait sur un
+// état "non connecté" temporaire à chaque rechargement de page et se réinitialisait à tort.
+(async function(){
+  await initSupabaseAuth();
+  initClassic();
+  initLegend();
+  initAbility();
+  initArt();
+  initAltArt();
+  initCardsLink();
+  initSequence();
+  initArchive();
+  updateEngagementStats();
+  rolloverMonthYearIfNeeded();
+  refreshEddiesUI();
+})();
+applyFeatureFlags();
+
+// ======================= PROTECTION CONTRE LES ESSAIS D'UN AUTRE JOUR =======================
+// Deux cas peuvent laisser un onglet affiché avec les essais/la carte de la veille au lieu du
+// jour courant :
+// 1) Le navigateur restaure la page depuis son "bfcache" (retour arrière/onglet resté ouvert
+//    puis "rafraîchi") : tout le JS reste figé tel qu'il était, sans jamais revérifier la date.
+//    On force alors un vrai rechargement réseau.
+// 2) L'onglet reste simplement ouvert sans être rechargé pendant que minuit UTC passe : on
+//    revérifie la date à chaque fois que l'onglet redevient visible/actif, et on relance les
+//    jeux quotidiens si le jour a changé, sans attendre un rechargement manuel.
+window.addEventListener('pageshow', function(event){
+  if(event.persisted){ location.reload(); }
+});
+let lastKnownDailyDate = todayUTCString();
+function recheckDailyDateRollover(){
+  const now = todayUTCString();
+  if(now !== lastKnownDailyDate){
+    lastKnownDailyDate = now;
+    initClassic(); initLegend(); initAbility(); initArt(); initAltArt(); initCardsLink(); initSequence();
+  }
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'visible') recheckDailyDateRollover(); });
+window.addEventListener('focus', recheckDailyDateRollover);
+// Enregistrement du service worker (PWA) — n'échoue jamais silencieusement le reste du site
+// si indisponible (ex: navigateur trop ancien).
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('/sw.js').catch(()=>{}); });
+}
+
+// ======================= NOTIFICATIONS PUSH (rappel quotidien) =======================
+// Clé PUBLIQUE uniquement — la clé privée reste côté serveur (Supabase Edge Function), jamais
+// exposée ici. Sans risque à afficher dans le code source.
+const VAPID_PUBLIC_KEY = "BNt5Zwq2bZTfkPMW2LQzyyjNRMqy9PhO_ibOjY_eY194PJahcsmEZRvIIzP7PbD1ZNqbJsGaImUB73dC0Wwv88c";
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function enableNotifications(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    alert(t('notif_unsupported')); return;
+  }
+  try{
+    const permission = await Notification.requestPermission();
+    if(permission !== 'granted'){ alert(t('notif_denied')); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    if(supabaseReady && currentSession){
+      await supabaseClient.from('push_subscriptions').upsert({
+        user_id: currentSession.user.id,
+        endpoint: sub.endpoint,
+        p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')))),
+        auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')))),
+        lang: currentLang
+      }, { onConflict: 'endpoint' });
+    }
+    alert(t('notif_enabled'));
+  }catch(e){ alert(t('notif_error')); }
+}
+document.getElementById('menuNotifications').addEventListener('click', enableNotifications);
