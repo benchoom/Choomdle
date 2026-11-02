@@ -1,0 +1,4 @@
+Contact: mailto:contact@makevo.fr
+Expires: 2027-11-02T00:00:00.000Z
+Preferred-Languages: fr, en
+Canonical: https://choomdle.com/.well-known/security.txt
