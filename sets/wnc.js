@@ -28,7 +28,7 @@ const WNC_CARDS = [
 {n:"Dying Night — V's Pistol",t:"Gear",f:["Merc","Weapon"],c:2,p:2,r:2,num:128,col:"Blue",text:"(Equip to a friendly Unit or face-up Legend.) {Attack} Decrease a Gig by up to 2. At the end of your turn, if this Unit is named \"V\", ready 2 Eddies."},
 {n:"El Sombrerón — La Venganza Lenta",t:"Unit",f:["Ganger","Valentinos"],c:5,p:4,r:4,num:9,col:"Red",text:"{Attack} You may pay 2 €$. If you do, this Unit gains power equal to a friendly max Gig this turn."},
 {n:"Emergency Atlus",t:"Unit",f:["Trauma Team","Vehicle","Zetatech"],c:3,p:4,r:1,num:77,col:"Green",text:"\"Grab the policyholder, leave the rest for the city meatwagon.\""},
-{n:"Evelyn Parker — Beautiful Enigma",t:"Legend",f:["Doll"],c:null,p:null,r:2,num:107,col:"Blue",text:"When a friendly CORPO or GANGER Unit steals 1 or more Gigs, ready 1 Eddie. 1 €$, {Spend} A rival Unit must attack next turn if it can."},
+{n:"Evelyn Parker — Beautiful Enigma",t:"Legend",f:["Doll"],c:null,p:0,r:2,num:107,col:"Blue",text:"When a friendly CORPO or GANGER Unit steals 1 or more Gigs, ready 1 Eddie. 1 €$, {Spend} A rival Unit must attack next turn if it can."},
 {n:"Evelyn Parker — Scheming Siren",t:"Unit",f:["Doll"],c:2,p:0,r:3,num:113,col:"Blue",text:"{Attack} Draw 1. Then, if you have more ★ (Street Cred) than a Rival, discard 1. (Units with power 0 don't steal Gigs.)"},
 {n:"Field Operator",t:"Unit",f:["Arasaka","Corpo","Techie"],c:3,p:2,r:2,num:78,col:"Green",text:"{Play} If your ★ (Street Cred) is an even number, draw 1."},
 {n:"Floor It",t:"Program",f:["Merc","Quickhack"],c:1,p:null,r:2,num:132,col:"Blue",text:"{Quick} Give a rival Unit -1 power this turn. Draw 1."},
