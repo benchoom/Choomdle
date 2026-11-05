@@ -1,8 +1,29 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "com.choomdle.twa",
-        "sha256_cert_fingerprints": ["CC:8C:A4:0B:DC:A3:46:FE:22:72:26:B2:C7:8F:05:C9:24:AD:C7:05:4B:F3:C2:AA:52:8C:C3:2F:59:68:F9:8D"]
-      }
-    }]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.choomdle.twa",
+      "sha256_cert_fingerprints": [
+        "CC:8C:A4:0B:DC:A3:46:FE:22:72:26:B2:C7:8F:05:C9:24:AD:C7:05:4B:F3:C2:AA:52:8C:C3:2F:59:68:F9:8D"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.choomdle.myapp",
+      "sha256_cert_fingerprints": [
+        "CC:8C:A4:0B:DC:A3:46:FE:22:72:26:B2:C7:8F:05:C9:24:AD:C7:05:4B:F3:C2:AA:52:8C:C3:2F:59:68:F9:8D",
+        "62:B0:19:39:23:68:88:A5:2B:3D:02:5E:14:B2:D8:83:06:B4:4B:31:B6:8D:12:61:5C:06:DA:1A:E3:75:FD:FB",
+        "3D:F7:C1:B8:F0:5B:DF:6B:24:6A:9B:CD:04:27:43:63:5C:01:B6:39:6F:4B:03:B5:D9:42:20:8A:F9:4D:00:41"
+      ]
+    }
+  }
+]
